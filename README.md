@@ -1,38 +1,225 @@
 # wilanis
 
-Applications as trees of JSON documents. A compiler judges the tree, a stateless engine runs it, and an
-AI agent can write every document under rules strict enough that what comes out is secure, easy to change,
-and reliable.
+Build backend services without writing the glue code. You describe routes, contracts and data flows in
+JSON files; a checker proves the description holds together before anything runs; a small runtime runs
+it. An AI agent can write the files too, and the checker keeps it honest.
 
-You do not write handler code. You write shapes, ports, bindings, graphs and triggers; `wilanis check`
-tells you what is wrong with the file, the rule and the fix; `wilanis serve` runs it.
+## The problem it solves
+
+Most backend services are the same job over and over: accept a request, validate it, call a database or
+another API, decide what the answer means, shape a response. In Express, Fastify, NestJS or their
+equivalents, every one of those steps is a function you write by hand. Then you write tests that mock
+`fetch`, and the mocks drift from reality. When the API you call adds a field, you edit a handler, a type,
+a validator and a test, and hope you found them all.
+
+The business rules are a small part of that code. The rest is plumbing, and the plumbing is where the
+bugs live, because it is written fresh in every project and tested in none of them properly.
+
+## What wilanis does instead
+
+You do not write the plumbing. You write files that say what should happen, and the runtime does it.
+
+A route is one file. This one is from the example project, `example/`, a small REST service in front of
+a public API, shown without its `$schema` line and description:
+
+```json
+{
+  "label": "GET /monitor/{id}",
+  "kind": "@http/http.trigger-kind.json",
+  "settings": {
+    "route": "/monitor/{id}",
+    "method": "GET",
+    "produces": "application/json",
+    "access": { "open": true },
+    "response": { "refusals": { "missing": 404, "upstream": 502 } }
+  },
+  "in": "@monitor/edge/IdRequest.shape.json",
+  "out": "@monitor/edge/EntryView.shape.json",
+  "fire": {
+    "run": "@monitor/domain/monitor.port.json#get",
+    "in": { "id": "{{request.params.id}}" }
+  }
+}
+```
+
+Read it top to bottom: a GET on `/monitor/{id}`, open to anyone, answering JSON. It takes an `IdRequest`
+and answers an `EntryView`; both are shapes declared in their own files. It runs the `get` operation of
+the `monitor` port with the id from the URL. If the operation refuses with reason `missing`, the client
+gets a 404; with `upstream`, a 502.
+
+The route does not say *how* `get` is done. That is a separate file, a graph, which fetches the row and
+decides what the upstream's answer means. Three of its five nodes:
+
+```json
+{
+  "label": "Get a row",
+  "in": "@monitor/domain/EntryRef.shape.json",
+  "out": { "type": "@monitor/domain/Entry.shape.json", "from": ["row", "missing", "failed"] },
+  "nodes": [
+    {
+      "id": "asked",
+      "type": "@wilanis/node/run.schema.json",
+      "run": "@http/http.port.json#request",
+      "in": {
+        "connection": "@connections/monitor-api.connection.json",
+        "method": "GET",
+        "path": "/monitor/{{in.id}}",
+        "produces": "application/json",
+        "returns": "@monitor/edge/EntryRow.shape.json"
+      }
+    },
+    {
+      "id": "route",
+      "type": "@wilanis/node/switch.schema.json",
+      "in": { "status": "{{asked.status}}", "body": "{{asked.body}}" },
+      "rules": [
+        { "when": "status == 404", "to": "missing" },
+        { "when": "status == 200 && has(body)", "to": "row" }
+      ],
+      "else": "failed"
+    },
+    {
+      "id": "missing",
+      "type": "@wilanis/node/run.schema.json",
+      "run": "@std/outcome.port.json#refuse",
+      "in": { "reason": "missing", "message": "no entry {{in.id}}", "type": "@monitor/domain/Entry.shape.json" }
+    }
+  ]
+}
+```
+
+One request, one decision, one declared outcome per branch. A 404 from the API is not an exception here;
+it is a case you named. Anything you did not name goes to `failed`, and the checker will not accept a
+switch without an `else`.
+
+### The checker reads it before you run it
+
+`wilanis check` loads every file and verifies that they fit together: every reference points at a file
+that exists, every operation you call exists on its port, every value you pass fits the type the operation
+accepts, every graph's output fits what its caller expects, every effect a feature reaches is one it is
+allowed to reach. Rename an operation in the port and forget the route, and you get this:
+
+```
+R001  @features/monitor/edge/get-entry.trigger.json#fire/run
+    port '@monitor/domain/monitor.port.json' has no operation 'fetch' (operations: listAll, listByMethod, get, ...)
+    → wilanis ls port
+
+1 refusal(s)
+```
+
+The file, the path inside it, what is wrong, and the command that shows you the fix. This is what a
+compiler does for typed code, applied to the whole service including the wiring between its parts.
+
+### Every branch runs before you deploy
+
+`wilanis rehearse` runs every route with the outside world stubbed. For every `switch`, it works out
+which inputs reach each rule and runs that branch too, so a code path you never tested by hand is
+exercised anyway:
+
+```
+features/monitor/data/get-row  switch 'route'  3/3 branches
+  ok  when status == 404               refused on purpose at 'missing' as missing: "no entry golf"
+  ok  when status == 200 && has(body)  answered from 'row'
+  ok  anything else                    refused on purpose at 'failed' as upstream: "the monitor API answered 500"
+
+every branch settled -- 17 branch(es), 7 decision(s), 7 graph(s).
+```
+
+A rule that no input can satisfy is reported as `NEVER RUN`: dead logic, or a hole in your routing,
+found without writing a test. `wilanis fuzz` records runs as scenarios and `wilanis regress` replays them
+and diffs the results, so a change that alters behaviour shows up as a diff, not a surprise.
+
+### See the whole thing drawn
+
+`wilanis-view` serves every file as a page and draws every graph. This is the `Get a row` graph from
+above: the input on the left, the request, the decision on its status, the three outcomes, and the output
+they converge on. Every box is a node in the file and every wire is a `{{reference}}`. The panel on the
+right says who reaches this graph and what it uses; double-clicking a node opens what it runs.
+
+![The get-row graph in wilanis-view](docs/viewer-get-row.png)
+
+## Why this is worth switching for
+
+**There is almost no code, so there is almost nothing to test.** The example service has six routes, a
+CLI command, batch deletion and a rate-limited upstream connection. It is about forty JSON files and zero
+lines of JavaScript or TypeScript. The code that exists is generic and small: the engine that runs graphs
+is a few hundred lines, the standard library of pure operations is one file under forty lines, the HTTP
+plugin a few hundred more. None of it knows anything about your business. It is tested once, here, and you
+never touch it.
+
+**Small code has few reasons to change.** Code changes because the world changes: a new field, a new
+route, a partner API that now returns 410 instead of 404. In wilanis every one of those is an edit to a
+JSON file, and the checker judges the edit before it runs. The runtime changes only when a new *kind* of
+thing becomes possible, which is rare. Fewer changes to code means fewer regressions in code.
+
+**The tests you would have written are already written.** You do not mock `fetch` and hand-craft a 404.
+`rehearse` derives the 404 case from your own switch rule and runs it. When you add a rule, its branch is
+covered the moment you save.
+
+**Your service is readable by someone who did not write it.** `wilanis map` prints how a request flows
+from route to port to graph to upstream. `wilanis-view` draws every graph as boxes and arrows in the
+browser. A new team member, or an auditor, reads the service without reading code.
+
+**It is built for an AI agent to write.** The files are JSON on purpose. JSON gives structure and
+strictness: every file has a schema, every key is either allowed or refused, and there is no syntax for a
+model to get creative with. A JSON file cannot open a socket or read the disk; it can only point at other
+files, and it can only call effects its feature explicitly allows. So an agent's mistakes are the checker's
+refusals, each with a hint pointing at the fix. The agent reads the refusal, edits, checks again. In
+practice a small, cheap model does this correctly and fast, because the loop is tight and every step is
+verified. `wilanis init` writes a `CLAUDE.md` into your project that tells the agent the rules.
+
+## Try it
+
+Run the example, which talks to a public test API and needs no key:
+
+```
+git clone https://github.com/rfontes1987/wilanis-js && cd wilanis-js
+npm install && npm run build
+npx wilanis check example          # is the tree consistent?
+npx wilanis rehearse example       # run every branch of every route, world stubbed
+npx wilanis map example            # how does a request flow?
+npx wilanis-view example           # draw it, on http://127.0.0.1:4400/
+npx wilanis serve example          # serve it for real on :8080
+```
+
+Start your own project:
 
 ```
 mkdir board && cd board
 npm init -y && npm install @wilanis/runtime @wilanis/plugin-http
-npx wilanis new project board .      # project.json and package.json
-npx wilanis init .                   # CLAUDE.md and hooks for an agent working in this tree
+npx wilanis new project board .    # project.json and package.json
+npx wilanis init .                 # CLAUDE.md and hooks for an agent working in this tree
 npx wilanis check .
 ```
 
-## Three principles
+## The words, in one paragraph each
 
-**DRY.** Every fact is written once and referenced by path. A shape is declared in one file and named as
-`@shapes/Task.shape.json` everywhere else. A port is the single statement of what its operations accept
-and return; bindings and graphs are judged against it, never re-declare it. Which codec handles which
-content type is one table in `project.json`. Nothing is inferred and restated: result types are declared,
-and the checker verifies the wiring fits.
+**Shape.** A type: named fields with types, required unless said otherwise. Shapes have a layer: `edge`
+shapes are what the outside world sends and expects; `core` shapes are yours. The misspelled field a
+partner API returns lives in an edge shape and never reaches your domain.
 
-**Orthogonality.** The toolchain is six packages with one-way dependencies (below). Inside a tree, the
-layers do not leak: triggers speak edge shapes, domain graphs speak core shapes and domain ports, bindings
-and data graphs translate between them and are the only place effects happen. Every effectful operation a
-feature reaches is allow-listed in its `feature.json`. Plugins sit behind one contract; the compiler never
-knows what HTTP is.
+**Port.** A contract: a set of operations, each with what it accepts and what it returns. A plugin grants
+ports (`@http/http.port.json` has `request`); your feature declares its own (`monitor.port.json` has
+`get`, `record`, `remove`). The domain talks to a port and never knows what is behind it.
 
-**Discoverability.** Every document opens with a `$schema` URL an editor or an agent can fetch. Every
-reference is a path from the root or through a declared alias, so `wilanis ls`, `describe` and `map`
-answer what exists, what a contract says, and how a request flows. Every refusal carries a code, the file,
-the location and the direction of the fix.
+**Binding.** How a port is met: for each operation, the graph that does it. Swap the binding and the same
+domain runs against a different store, a fake, or a queue.
+
+**Graph.** A data flow: nodes that run an operation, route on a condition (`switch`) or fan out over a
+list (`map`). A node runs when its inputs are ready; independent nodes run concurrently. Values move by
+reference: `{{asked.body}}` is the body of the node called `asked`.
+
+**Trigger.** An entry point: an HTTP route, a CLI command, whatever a plugin offers. It names the port
+operation to fire and where its inputs come from. A trigger never names a graph.
+
+**Feature.** A directory with three subdirectories, and the directory is the layer: `edge/` holds
+triggers, edge shapes and resolvers; `domain/` holds the port, core shapes and business graphs; `data/`
+holds the binding and the graphs that reach the world. `feature.json` lists the effects the feature may
+use.
+
+**Plugin.** An npm package exposing a `PluginModule`: the ports, trigger kinds and codecs it grants, each
+as a JSON file you can open, and a handler function per operation. `@std` and `@cli` ship with the
+runtime; `@http` is `@wilanis/plugin-http`. A project names its plugins in `project.json`.
 
 ## Packages
 
@@ -43,12 +230,14 @@ the location and the direction of the fix.
 | `@wilanis/compiler` | `checkTree` judges a loaded tree; `Compiler` lowers graphs to engine specs | core, engine |
 | `@wilanis/runtime` | Embedder, gates (`rehearse`, `fuzz`, `regress`), discovery, serve, plugin packages, the `wilanis` CLI. Ships `@std` and `@cli` | core, engine, compiler |
 | `@wilanis/plugin-http` | The `@http` plugin: routes with JWT access, outbound requests, connections, body codecs | core, engine, jose |
-| `@wilanis/view` | The `wilanis-view` viewer: every graph drawn as a canvas of nodes, typed ports and edges, callers one click away. A read-only tool over a loaded tree; it grants nothing and runs nothing | core, compiler, runtime |
+| `@wilanis/view` | The `wilanis-view` viewer: every graph drawn as a canvas of nodes, typed ports and edges, callers one click away. Read-only; it grants nothing and runs nothing | core, compiler, runtime |
 
 A project installs `@wilanis/runtime` and the plugin packages it uses. Nothing else. `@wilanis/view` is a
-development tool, installed by a reader who wants to see the tree drawn.
+development tool for whoever wants to see the tree drawn.
 
-## The model in one page
+## Reference: the model in one page
+
+Skip this on a first read. It is the compact statement of the rules the checker enforces.
 
 - **Documents.** One JSON file each. The `$schema` names the kind: `https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json`, or the alias `@wilanis/graph.schema.json`.
 - **References are paths.** `@features/tasks/tasks.port.json`; `project.json` declares aliases (`@tasks` → `@features/tasks`); plugins are alias roots (`@std`, `@http`); an operation is `path#operation`.
@@ -65,7 +254,7 @@ development tool, installed by a reader who wants to see the tree drawn.
 - **Effects are explicit.** `http.request` answers status, headers, body. Whether 404 is a failure is a `switch`'s decision: the body is judged against `returns` only on a 2xx, so an error body reaches the switch. A node fails only on the unexpected.
 - **Engine.** Stateless, clockless; runs all ready nodes concurrently; `blocked` + `needs` when input is missing; any node's value can be pre-supplied (replay); nested reports for binding graphs; secret redaction.
 
-## project.json: plugins and hooks
+### project.json: plugins and hooks
 
 ```json
 "plugins": [
@@ -86,11 +275,8 @@ A plugin package exports its `PluginModule` as the default export. Two hooks on 
   plugin's settings (secrets substituted), the registry, the scope and the environment. Open connections,
   warm caches, register parsers here. It may hand back a teardown, run when the runtime stops. `serve`
   and a real `run` call it; the stubbed gates (`rehearse`, `fuzz`, `regress`, `run --seed`) do not.
-- **Every branch, not just the one a seed found.** `rehearse` reads each `switch` rule, solves the inputs
-  that make it true while the rules before it are false, and runs that branch. So the gate does not depend
-  on the seed: a rule no inputs can reach is reported `NEVER RUN` -- a dead rule, or a hole in the routing.
 
-## Schemas
+### Schemas
 
 The schemas live in `packages/core/schemas/` and are published from the `schemas-v1` branch of this
 repository, so every document can name its schema by URL and an editor can fetch it:
@@ -102,28 +288,6 @@ https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/cor
 The branch name carries the schema major version. A breaking change to a schema goes to `schemas-v2`;
 documents written against v1 keep validating. Node types are documents of their own under `node/`, listed
 in `graph.schema.json`.
-
-## The example
-
-`example/` is a monitor of observed HTTP calls and a complete consumer project: it installs
-`@wilanis/runtime` and `@wilanis/plugin-http` from `package.json` and contains nothing but JSON. Its
-routes are http triggers, each firing one operation of `@monitor/domain/monitor.port.json`; a trigger never
-names a graph. `monitor-rest.binding.json` meets the port: six operations with a data graph each, a declared
-request to a public REST API (mockapi.io) and a `switch` on `status` that decides what the answer means (the
-rows, the declared refusal `no entry {id}` when the API answers 404, or a failure for anything else); four
-with a domain graph that composes those (`list` routes on whether a method filter is present, `removeMany`
-maps `remove` over a list of ids). A cli trigger prints a digest through the same port. The API needs no
-key, so the example reads no secret and `serve` runs with no environment.
-
-```
-npm install && npm run build
-npx wilanis check example
-npx wilanis rehearse example
-npx wilanis map example
-npx wilanis describe @http/http.port.json example
-npx wilanis-view example              # the viewer, on http://127.0.0.1:4400/
-npm test
-```
 
 ## Developing this repository
 
