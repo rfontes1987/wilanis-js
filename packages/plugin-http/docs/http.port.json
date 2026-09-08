@@ -1,0 +1,81 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "description": "Outbound HTTP. request knows what HTTP knows: method, path, headers, body in; status, headers, body out. It executes and reports -- whether 404 is a failure is the caller's business, decided by a switch on status. It fails only on the unexpected: network, timeout, a body the codec cannot decode, or a 2xx body that does not conform to the declared type.",
+  "operations": {
+    "request": {
+      "description": "Send one request against a connection. The connection, method, content types and result type are static, declared where the statement is written; path, headers and body may read what any value may.",
+      "accepts": {
+        "connection": {
+          "type": "string",
+          "static": true,
+          "description": "an http connection document path"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS"
+          ],
+          "static": true
+        },
+        "path": {
+          "type": "string",
+          "description": "path under the connection's baseUrl, query string included; e.g. \"/tasks/{{in.id}}\""
+        },
+        "headers": {
+          "type": {
+            "fields": {},
+            "open": "string"
+          },
+          "required": false,
+          "description": "added to the connection's"
+        },
+        "body": {
+          "type": "unknown",
+          "required": false,
+          "description": "the request body, encoded by the consumes codec"
+        },
+        "consumes": {
+          "type": "string",
+          "required": false,
+          "static": true,
+          "description": "content type of the body sent; must be in the plugin's codecs table. Default application/json"
+        },
+        "produces": {
+          "type": "string",
+          "required": false,
+          "static": true,
+          "description": "content type expected back; must be in the codecs table. Absent: the answer's own content-type decides"
+        },
+        "returns": {
+          "type": "type",
+          "binds": "$Body",
+          "required": false,
+          "description": "the type the decoded body must have when the status is 2xx. Any other status forwards the body as the codec decoded it, so a switch on status can still route it. Absent: unknown, forward it whole"
+        }
+      },
+      "returns": {
+        "fields": {
+          "status": {
+            "type": "number"
+          },
+          "headers": {
+            "type": {
+              "fields": {},
+              "open": "string"
+            }
+          },
+          "body": {
+            "type": "$Body",
+            "required": false
+          }
+        }
+      }
+    }
+  }
+}

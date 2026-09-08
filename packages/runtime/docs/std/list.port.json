@@ -1,0 +1,71 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "description": "Lists. Like [].concat: the result type is declared in type.",
+  "operations": {
+    "concat": {
+      "description": "a followed by b.",
+      "accepts": {
+        "a": {
+          "type": "$T"
+        },
+        "b": {
+          "type": "$T"
+        },
+        "type": {
+          "type": "type",
+          "binds": "$T",
+          "description": "the list type, e.g. @shapes/Task.shape.json[]"
+        }
+      },
+      "returns": "$T",
+      "pure": true
+    },
+    "first": {
+      "description": "The first element; fails on an empty list (guard with a switch on len(list) > 0).",
+      "accepts": {
+        "list": {
+          "type": "$T[]"
+        },
+        "type": {
+          "type": "type",
+          "binds": "$T",
+          "description": "the element type"
+        }
+      },
+      "returns": "$T",
+      "pure": true
+    },
+    "count": {
+      "description": "How many elements.",
+      "accepts": {
+        "list": {
+          "type": "unknown[]"
+        }
+      },
+      "returns": "number",
+      "pure": true
+    },
+    "slice": {
+      "description": "Elements from index from (inclusive) to index to (exclusive, default the end).",
+      "accepts": {
+        "list": {
+          "type": "$T"
+        },
+        "type": {
+          "type": "type",
+          "binds": "$T",
+          "description": "the list type"
+        },
+        "from": {
+          "type": "number"
+        },
+        "to": {
+          "type": "number",
+          "required": false
+        }
+      },
+      "returns": "$T",
+      "pure": true
+    }
+  }
+}

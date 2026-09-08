@@ -495,7 +495,7 @@ export function describe(load: LoadResult, ref: string): string {
   const { path } = splitOp(ref.includes('#') ? ref : `${ref}#`);
   const doc = scope.any(path || ref);
   if (!doc) return `no document at '${ref}'`;
-  const lines = [`${doc.kind}  ${doc.path}`, doc.doc.description, ''];
+  const lines = [`${doc.kind}  ${doc.path}`, ...(doc.file ? [`file  ${doc.file}`] : []), doc.doc.description, ''];
   const showType = (t: unknown) => { try { return show(scope.types.spec(t as string)); } catch { return JSON.stringify(t); } };
   if (doc.kind === 'port') {
     for (const [name, op] of Object.entries((doc.doc as PortDoc).operations)) {

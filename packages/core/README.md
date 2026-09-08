@@ -11,7 +11,7 @@ The wilanis document language.
 - `validate.ts`: Ajv validation of one document against its kind.
 - `load.ts`: loading a tree into a `Registry` with aliases and plugin roots.
 - `scope.ts`: the semantic view over a registry that the compiler, runtime and plugins share.
-- `plugin.ts`: the `PluginModule` contract a plugin package fulfils, including the `check` and `postLoad` hooks.
+- `plugin.ts`: the `PluginModule` contract a plugin package fulfils: the directory of documents it ships, its handlers, and the `check` and `postLoad` hooks.
 
 Nothing here executes anything. Depends on `@wilanis/engine` for the handler and report types, and on Ajv.
 

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/plugin.schema.json",
+  "description": "Pure operations on data, text and lists. Safe in any layer.",
+  "grants": {
+    "ports": [
+      "@std/data.port.json",
+      "@std/text.port.json",
+      "@std/list.port.json",
+      "@std/flow.port.json"
+    ]
+  }
+}

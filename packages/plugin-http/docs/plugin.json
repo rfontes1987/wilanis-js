@@ -1,0 +1,66 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/plugin.schema.json",
+  "description": "HTTP out, HTTP connections, HTTP triggers, body codecs. Settings say which codec handles which content type.",
+  "settings": {
+    "fields": {
+      "port": {
+        "type": "number",
+        "required": false,
+        "description": "listen port, default 8080"
+      },
+      "codecs": {
+        "type": {
+          "fields": {},
+          "open": "string"
+        },
+        "description": "content type -> codec document path, e.g. \"application/json\": \"@http/codecs/json.codec.json\""
+      },
+      "jwt": {
+        "type": {
+          "fields": {
+            "jwksUrl": {
+              "type": "string",
+              "required": false
+            },
+            "secret": {
+              "type": "string",
+              "required": false,
+              "secret": true
+            },
+            "issuer": {
+              "type": "string",
+              "required": false
+            },
+            "audience": {
+              "type": "string",
+              "required": false
+            },
+            "rolesClaim": {
+              "type": "string",
+              "required": false,
+              "description": "claim holding the role(s); default role"
+            }
+          }
+        },
+        "required": false
+      }
+    }
+  },
+  "grants": {
+    "ports": [
+      "@http/http.port.json"
+    ],
+    "triggerKinds": [
+      "@http/http.trigger-kind.json"
+    ],
+    "connectionKinds": [
+      "@http/http.connection-kind.json"
+    ],
+    "codecs": [
+      "@http/codecs/json.codec.json",
+      "@http/codecs/text.codec.json",
+      "@http/codecs/form.codec.json",
+      "@http/codecs/multipart.codec.json"
+    ]
+  }
+}

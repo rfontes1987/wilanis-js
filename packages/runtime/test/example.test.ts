@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { cpSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadTree, schemaRef, schemaUrl, type PluginModule } from '@wilanis/core';
 import { checkTree } from '@wilanis/compiler';
 import http from '@wilanis/plugin-http';
-import { BUILTIN_PLUGINS, loadProject, rehearse, serve } from '../src/index.js';
+import { BUILTIN_PLUGINS, describe as describeDoc, loadProject, rehearse, serve } from '../src/index.js';
 
 const EXAMPLE = fileURLToPath(new URL('../../../example', import.meta.url));
 const PLUGINS = { ...BUILTIN_PLUGINS, '@http': http };
 const codes = (root: string) => checkTree(loadTree(root, PLUGINS)).items.map(r => r.code);
+
+/** A plugin's docs directory, written from name -> document. */
+function docsDir(docs: Record<string, unknown>): string {
+  const dir = mkdtempSync(join(tmpdir(), 'wilanis-docs-'));
+  for (const [name, doc] of Object.entries(docs)) writeFileSync(join(dir, name), JSON.stringify(doc));
+  return dir;
+}
 
 /** Copy the example, apply an edit to one file, answer the refusal codes. */
 function sabotage(file: string, edit: (doc: any) => void): string[] {
@@ -74,11 +81,27 @@ describe('plugin packages and hooks', () => {
     expect(await codesOf('../evil.js')).toContain('D006');
     expect(await codesOf('@wilanis/no-such-plugin')).toContain('D006');
   });
+  it('every document a plugin ships is a file a reader can open, and describe says where', () => {
+    const l = loadTree(EXAMPLE, PLUGINS);
+    for (const f of l.registry.files.filter(f => f.native)) {
+      expect(f.file, f.path).toBeDefined();
+      expect(existsSync(f.file!), f.path).toBe(true);
+      expect(JSON.parse(readFileSync(f.file!, 'utf8'))).toEqual(f.doc);
+    }
+    expect(describeDoc(l, '@http/http.port.json')).toContain(`file  ${l.registry.get('port', '@http/http.port.json')!.file}`);
+    expect(l.registry.get('graph', '@features/monitor/graphs/get-row.graph.json')!.file).toBe(join(EXAMPLE, 'features/monitor/graphs/get-row.graph.json'));
+  });
+  it('D006 when a plugin ships no plugin.json', () => {
+    const fake: PluginModule = { root: '@fake', docs: docsDir({ 'fake.port.json': { $schema: schemaRef('port'), description: 'a port', operations: { op: { description: 'x' } } } }), handlers: {} };
+    const dir = project([{ use: '@std' }, { use: '@fake' }]);
+    expect(loadTree(dir, { ...BUILTIN_PLUGINS, '@fake': fake }).refusals.items.map(r => r.code)).toContain('D006');
+    rmSync(dir, { recursive: true, force: true });
+  });
   it('postLoad runs once after load with the plugin settings; its teardown runs on stop', async () => {
     const calls: string[] = [];
     const fake: PluginModule = {
       root: '@fake',
-      docs: { '@fake/plugin.json': { $schema: schemaRef('plugin'), description: 'a plugin with a postLoad hook', settings: { fields: { greeting: { type: 'string' } } }, grants: {} } },
+      docs: docsDir({ 'plugin.json': { $schema: schemaRef('plugin'), description: 'a plugin with a postLoad hook', settings: { fields: { greeting: { type: 'string' } } }, grants: {} } }),
       handlers: {},
       postLoad: async ({ settings, root }) => { calls.push(`up:${settings.greeting}:${typeof root}`); return async () => { calls.push('down'); }; },
     };

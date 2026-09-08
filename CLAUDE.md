@@ -9,8 +9,8 @@ before changing anything; it says where things live and which direction dependen
 packages/engine/       @wilanis/engine     spec.ts kernel.ts                       depends on nothing
 packages/core/         @wilanis/core       model types expr scope load validate plugin, schemas/   → engine
 packages/compiler/     @wilanis/compiler   checker.ts compiler.ts                  → core, engine
-packages/runtime/      @wilanis/runtime    embed tools serve project cli, plugins/{std,cli-trigger}, bin/, templates/   → core, engine, compiler
-packages/plugin-http/  @wilanis/plugin-http  index.ts codecs.ts                    → core, engine
+packages/runtime/      @wilanis/runtime    embed tools serve project cli, plugins/{std,cli-trigger}, docs/{std,cli}, bin/, templates/   → core, engine, compiler
+packages/plugin-http/  @wilanis/plugin-http  index.ts codecs.ts, docs/             → core, engine
 example/               a consumer project: JSON documents + package.json
 ```
 
@@ -58,9 +58,11 @@ core needs a build before its effect shows in a runtime test; `npm test` does th
 - **A schema change.** Compatible: edit in place. Breaking: the base URL in `model.ts` and every `$id`
   move to `schemas-v2`, and the old branch stays.
 - **A new plugin.** A new package under `packages/`, depending on core and engine only, exporting its
-  `PluginModule` as default: `root`, `docs` (with `${root}/plugin.json`), `handlers`, and optionally
-  `triggers`, `codecs`, `check`, `postLoad`. A project names it in `plugins[].from`. Plugins that carry an
-  external dependency are always their own package.
+  `PluginModule` as default: `root`, `docs` (the directory of the JSON documents it ships, with
+  `plugin.json`; listed in the package's `files`), `handlers`, and optionally `triggers`, `codecs`, `check`,
+  `postLoad`. Every port, kind, codec or shape a plugin grants is a file under `docs/`, never an object in
+  code: what the DSL names, a reader can open. A project names the plugin in `plugins[].from`. Plugins that
+  carry an external dependency are always their own package.
 - **A new CLI command.** `packages/runtime/src/cli.ts` dispatches; the work goes in `tools.ts` or
   `serve.ts` so it is callable without the CLI.
 - **The project template.** `packages/runtime/templates/` is what `wilanis init` writes into a consumer

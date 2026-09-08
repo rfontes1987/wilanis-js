@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger-kind.schema.json",
+  "description": "Fired from the command line: wilanis run <trigger path> [--flag=value ...] [args...]. The context hands flags (as strings), args and cwd; the trigger's input mapping picks what the graph gets. The answer is printed as JSON.",
+  "settings": {
+    "fields": {
+      "command": {
+        "type": "string",
+        "required": false,
+        "description": "a memorable alias for the trigger"
+      }
+    }
+  },
+  "context": {
+    "fields": {
+      "flags": {
+        "type": {
+          "fields": {},
+          "open": "string"
+        }
+      },
+      "args": {
+        "type": "string[]"
+      },
+      "cwd": {
+        "type": "string"
+      }
+    }
+  }
+}

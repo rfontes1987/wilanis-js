@@ -1,5 +1,6 @@
 /**
- * Loads a tree: every *.json under the root plus the native documents of the plugins the project names.
+ * Loads a tree: every *.json under the root plus the documents of the plugins the project names, read from
+ * each plugin's docs directory.
  * Judges each file against its kind schema, canonicalises paths (@root, project aliases, plugin roots),
  * and answers a Registry the checker and compiler share.
  */
@@ -84,7 +85,7 @@ export function loadTree(root: string, available: Record<string, PluginModule>):
     let parsed: unknown;
     try { parsed = JSON.parse(readFileSync(abs, 'utf8')); }
     catch (e) { refusals.add({ code: 'D000', file, message: `not JSON: ${(e as Error).message}` }); continue; }
-    if (file === 'project.json') { if (project) registry.add({ doc: project, kind: 'project', path: '@project.json', name: project.name }); continue; }
+    if (file === 'project.json') { if (project) registry.add({ doc: project, kind: 'project', path: '@project.json', name: project.name, file: abs }); continue; }
     const v = validateDocument(parsed, file);
     if (v.refusals.length) { v.refusals.forEach(r => refusals.add(r)); continue; }
     const kind = v.kind!;
@@ -93,15 +94,22 @@ export function loadTree(root: string, available: Record<string, PluginModule>):
     if (kind === 'project') { refusals.add({ code: 'D003', file, message: 'the project document is project.json at the root' }); continue; }
     if (kind === 'feature' && file !== `features/${feature}/feature.json`) { refusals.add({ code: 'D003', file, message: 'a feature lives at features/<name>/feature.json' }); continue; }
     if (['plugin', 'trigger-kind', 'connection-kind', 'codec'].includes(kind)) { refusals.add({ code: 'D004', file, message: `${kind} documents are shipped by plugins, never authored in a tree` }); continue; }
-    registry.add({ doc, kind, path: `@${file}`, name: kind === 'feature' ? feature! : stem(file), feature });
+    registry.add({ doc, kind, path: `@${file}`, name: kind === 'feature' ? feature! : stem(file), feature, file: abs });
   }
 
   for (const mod of plugins) {
-    for (const [path, doc] of Object.entries(mod.docs)) {
-      const v = validateDocument(doc, path);
+    let docs: string[];
+    try { docs = walk(mod.docs); } catch (e) { refusals.add({ code: 'D006', file: 'project.json', message: `plugin '${mod.root}' has no documents at ${mod.docs}: ${(e as Error).message}` }); continue; }
+    if (!docs.some(f => relative(mod.docs, f) === 'plugin.json')) refusals.add({ code: 'D006', file: 'project.json', message: `plugin '${mod.root}' ships no plugin.json in ${mod.docs}` });
+    for (const abs of docs) {
+      const path = `${mod.root}/${relative(mod.docs, abs).split(sep).join('/')}`;
+      let parsed: unknown;
+      try { parsed = JSON.parse(readFileSync(abs, 'utf8')); }
+      catch (e) { refusals.add({ code: 'D000', file: path, message: `not JSON: ${(e as Error).message}` }); continue; }
+      const v = validateDocument(parsed, path);
       v.refusals.forEach(r => refusals.add(r));
       if (v.refusals.length) continue;
-      registry.add({ doc, kind: v.kind!, path, name: stem(path), native: mod.root } as Loaded);
+      registry.add({ doc: parsed as AnyDoc, kind: v.kind!, path, name: stem(path), native: mod.root, file: abs } as Loaded);
     }
   }
   return { registry, refusals, root, plugins, resolve };

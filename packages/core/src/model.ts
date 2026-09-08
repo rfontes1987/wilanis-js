@@ -116,6 +116,8 @@ export interface Loaded<T extends AnyDoc = AnyDoc> {
   feature?: string;
   /** The plugin alias that shipped it, if native. */
   native?: string;
+  /** Where it is on disk, so a reader can open it: under the tree, or under the plugin's package. */
+  file?: string;
 }
 
 /** One reason the tree is refused: the file, the rule, and the direction of the fix. */

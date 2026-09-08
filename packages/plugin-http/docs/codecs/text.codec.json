@@ -1,0 +1,5 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/codec.schema.json",
+  "description": "Raw text (plain text, XML, CSV...): the body is one string.",
+  "yields": "string"
+}

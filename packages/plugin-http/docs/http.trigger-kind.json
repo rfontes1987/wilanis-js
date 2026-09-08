@@ -1,0 +1,143 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger-kind.schema.json",
+  "description": "A route. The body is decoded by the consumes codec into request.body (typed by settings.body); query, route placeholders (request.params, each one required), headers and the principal are in the context too. The trigger's input mapping picks what the graph gets; access is checked before the graph runs; the answer is encoded by the produces codec with the status the response block chooses.",
+  "settings": {
+    "fields": {
+      "route": {
+        "type": "string",
+        "binds": "$Params",
+        "description": "e.g. /tasks or /tasks/{id}; each {name} is a required request.params.name"
+      },
+      "method": {
+        "type": "string",
+        "enum": [
+          "GET",
+          "POST",
+          "PUT",
+          "PATCH",
+          "DELETE",
+          "HEAD",
+          "OPTIONS"
+        ]
+      },
+      "consumes": {
+        "type": "string",
+        "required": false,
+        "description": "the body's content type; must be in the plugin's codecs table"
+      },
+      "produces": {
+        "type": "string",
+        "required": false,
+        "description": "the answer's content type; must be in the codecs table. Default application/json"
+      },
+      "body": {
+        "type": "type",
+        "binds": "$Body",
+        "required": false,
+        "description": "the edge type of the decoded body (request.body); declaring it means a body is expected, so a request without one is a 400. Absent: the body is the trigger's in"
+      },
+      "access": {
+        "type": {
+          "fields": {
+            "open": {
+              "type": "boolean",
+              "required": false,
+              "description": "true: no token needed"
+            },
+            "roles": {
+              "type": "string[]",
+              "required": false,
+              "description": "the principal must hold one of these"
+            }
+          }
+        },
+        "required": false,
+        "description": "absent: a valid token is required, any role"
+      },
+      "response": {
+        "type": {
+          "fields": {
+            "status": {
+              "type": {
+                "fields": {
+                  "from": {
+                    "type": "string",
+                    "required": false,
+                    "description": "a path into the answer whose value picks the status"
+                  },
+                  "map": {
+                    "type": {
+                      "fields": {},
+                      "open": "number"
+                    },
+                    "required": false
+                  },
+                  "default": {
+                    "type": "number",
+                    "required": false
+                  }
+                }
+              },
+              "required": false
+            }
+          }
+        },
+        "required": false
+      }
+    }
+  },
+  "context": {
+    "fields": {
+      "method": {
+        "type": "string"
+      },
+      "path": {
+        "type": "string"
+      },
+      "headers": {
+        "type": {
+          "fields": {},
+          "open": "string"
+        },
+        "description": "lower-cased names"
+      },
+      "query": {
+        "type": {
+          "fields": {},
+          "open": "string"
+        }
+      },
+      "params": {
+        "type": "$Params",
+        "description": "the route's placeholders, each a string the route guarantees"
+      },
+      "body": {
+        "type": "$Body",
+        "description": "present whenever settings.body is declared"
+      },
+      "principal": {
+        "type": {
+          "fields": {
+            "subject": {
+              "type": "string"
+            },
+            "roles": {
+              "type": "string[]"
+            },
+            "claims": {
+              "type": {
+                "fields": {},
+                "open": true
+              }
+            },
+            "token": {
+              "type": "string",
+              "secret": true
+            }
+          }
+        },
+        "required": false
+      }
+    }
+  }
+}

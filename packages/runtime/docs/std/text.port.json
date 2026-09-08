@@ -1,0 +1,64 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "description": "Strings: templating, splitting, joining, replacing.",
+  "operations": {
+    "format": {
+      "description": "Fill a template: {path.to.value} placeholders read into values.",
+      "accepts": {
+        "values": {
+          "type": {
+            "fields": {},
+            "open": true
+          }
+        },
+        "template": {
+          "type": "string"
+        }
+      },
+      "returns": "string",
+      "pure": true
+    },
+    "split": {
+      "description": "Split text on a separator.",
+      "accepts": {
+        "text": {
+          "type": "string"
+        },
+        "separator": {
+          "type": "string"
+        }
+      },
+      "returns": "string[]",
+      "pure": true
+    },
+    "join": {
+      "description": "Join parts with a separator.",
+      "accepts": {
+        "parts": {
+          "type": "string[]"
+        },
+        "separator": {
+          "type": "string"
+        }
+      },
+      "returns": "string",
+      "pure": true
+    },
+    "replace": {
+      "description": "Replace every occurrence of find with with.",
+      "accepts": {
+        "text": {
+          "type": "string"
+        },
+        "find": {
+          "type": "string"
+        },
+        "with": {
+          "type": "string"
+        }
+      },
+      "returns": "string",
+      "pure": true
+    }
+  }
+}

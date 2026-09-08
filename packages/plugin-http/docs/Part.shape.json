@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "layer": "edge",
+  "description": "One uploaded file part of a multipart body.",
+  "fields": {
+    "filename": {
+      "type": "string"
+    },
+    "contentType": {
+      "type": "string"
+    },
+    "size": {
+      "type": "number"
+    },
+    "content": {
+      "type": "string",
+      "description": "base64"
+    }
+  }
+}

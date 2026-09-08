@@ -1,6 +1,7 @@
 /**
- * What a plugin is to the toolchain: an alias root (@http), its documents by path (its manifest at
- * @http/plugin.json, ports, trigger kinds, connection kinds, codecs), the handlers behind its native
+ * What a plugin is to the toolchain: an alias root (@http), the directory of documents it ships (its manifest
+ * plugin.json, ports, trigger kinds, connection kinds, codecs, shapes -- JSON files a reader can open, the way
+ * a library ships headers), the handlers behind its native
  * operations, the runtimes behind its trigger kinds, the codecs behind its content types, and two hooks:
  * `check` for its own rules, `postLoad` for work that happens once the tree is loaded and judged.
  *
@@ -8,7 +9,7 @@
  * `plugins[].from` and the runtime imports it. @std and @cli are built into the runtime and need no `from`.
  */
 import type { Handler, Report } from '@wilanis/engine';
-import type { AnyDoc, Registry, TriggerDoc } from './model.js';
+import type { Registry, TriggerDoc } from './model.js';
 import type { Scope } from './scope.js';
 import type { Type } from './types.js';
 
@@ -66,8 +67,12 @@ export interface PostLoadContext {
 export interface PluginModule {
   /** The alias root, e.g. '@http'. */
   root: string;
-  /** Every document this plugin ships, by canonical path. Must include `${root}/plugin.json`. */
-  docs: Record<string, AnyDoc>;
+  /**
+   * The directory of the documents this plugin ships. Every *.json under it is loaded as `${root}/<relative path>`
+   * and judged like any tree document; it must hold plugin.json. Absolute, so a package points it at itself:
+   * fileURLToPath(new URL('../docs', import.meta.url)).
+   */
+  docs: string;
   /** 'path#operation' -> handler */
   handlers: Record<string, Handler>;
   /** trigger-kind path -> runtime */

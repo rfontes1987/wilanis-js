@@ -55,7 +55,10 @@ triggers) are built in. Any other plugin is an npm package named by `from`, inst
 ```
 
 `from` is a package name, never a path. `wilanis ls port`, `ls trigger-kind`, `ls connection-kind` and
-`ls codec` show what the installed plugins provide; `wilanis describe <path>` lays out any of them.
+`ls codec` show what the installed plugins provide; `wilanis describe <path>` lays out any of them and says
+which file it is. Every document a plugin grants is a JSON file in its package (`@http/http.port.json` is
+`node_modules/@wilanis/plugin-http/docs/http.port.json`; `@std` and `@cli` live under the runtime's `docs/`),
+so anything the DSL names can be opened and read like a header file.
 
 ## Rules you will meet
 

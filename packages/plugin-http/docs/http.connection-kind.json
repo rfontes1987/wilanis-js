@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/connection-kind.schema.json",
+  "description": "An HTTP base URL with headers every request carries. A PostgREST or Supabase REST endpoint is one: baseUrl to /rest/v1, apikey reading {{secrets.*}}.",
+  "settings": {
+    "fields": {
+      "baseUrl": {
+        "type": "string"
+      },
+      "headers": {
+        "type": {
+          "fields": {},
+          "open": "string"
+        },
+        "required": false
+      },
+      "timeoutMs": {
+        "type": "number",
+        "required": false
+      }
+    }
+  }
+}

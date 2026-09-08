@@ -4,85 +4,19 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
-import { schemaRef, type AnyDoc, type ConnectionKindDoc, type PluginDoc, type PortDoc, type TriggerDoc, type TriggerKindDoc } from '@wilanis/core';
+import { fileURLToPath } from 'node:url';
+import type { TriggerDoc } from '@wilanis/core';
 import type { PluginModule, TriggerRuntime, Codecs } from '@wilanis/core';
 import type { Report } from '@wilanis/engine';
 import type { Type } from '@wilanis/core';
 import { readPath } from '@wilanis/engine';
 import type { PluginCheckContext } from '@wilanis/core';
-import { form, formCodec, json, jsonCodec, multipart, multipartCodec, partShape, text, textCodec } from './codecs.js';
+import { form, json, multipart, text } from './codecs.js';
 
-const OPEN_STRING = { fields: {}, open: 'string' } as const;
-const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const ROOT = '@http';
 const P = (f: string) => `${ROOT}/${f}`;
-
-export const httpPort: PortDoc = {
-  $schema: schemaRef('port'),
-  description: 'Outbound HTTP. request knows what HTTP knows: method, path, headers, body in; status, headers, body out. It executes and reports -- whether 404 is a failure is the caller\'s business, decided by a switch on status. It fails only on the unexpected: network, timeout, a body the codec cannot decode, or a 2xx body that does not conform to the declared type.',
-  operations: {
-    request: {
-      description: 'Send one request against a connection. The connection, method, content types and result type are static, declared where the statement is written; path, headers and body may read what any value may.',
-      accepts: {
-        connection: { type: 'string', static: true, description: 'an http connection document path' },
-        method: { type: 'string', enum: METHODS, static: true },
-        path: { type: 'string', description: 'path under the connection\'s baseUrl, query string included; e.g. "/tasks/{{in.id}}"' },
-        headers: { type: OPEN_STRING, required: false, description: 'added to the connection\'s' },
-        body: { type: 'unknown', required: false, description: 'the request body, encoded by the consumes codec' },
-        consumes: { type: 'string', required: false, static: true, description: 'content type of the body sent; must be in the plugin\'s codecs table. Default application/json' },
-        produces: { type: 'string', required: false, static: true, description: 'content type expected back; must be in the codecs table. Absent: the answer\'s own content-type decides' },
-        returns: { type: 'type', binds: '$Body', required: false, description: 'the type the decoded body must have when the status is 2xx. Any other status forwards the body as the codec decoded it, so a switch on status can still route it. Absent: unknown, forward it whole' },
-      },
-      returns: { fields: { status: { type: 'number' }, headers: { type: OPEN_STRING }, body: { type: '$Body', required: false } } },
-    },
-  },
-};
-
-export const httpConnectionKind: ConnectionKindDoc = {
-  $schema: schemaRef('connection-kind'),
-  description: 'An HTTP base URL with headers every request carries. A PostgREST or Supabase REST endpoint is one: baseUrl to /rest/v1, apikey reading {{secrets.*}}.',
-  settings: { fields: { baseUrl: { type: 'string' }, headers: { type: OPEN_STRING, required: false }, timeoutMs: { type: 'number', required: false } } },
-};
-
-export const httpTriggerKind: TriggerKindDoc = {
-  $schema: schemaRef('trigger-kind'),
-  description: 'A route. The body is decoded by the consumes codec into request.body (typed by settings.body); query, route placeholders (request.params, each one required), headers and the principal are in the context too. The trigger\'s input mapping picks what the graph gets; access is checked before the graph runs; the answer is encoded by the produces codec with the status the response block chooses.',
-  settings: {
-    fields: {
-      route: { type: 'string', binds: '$Params', description: 'e.g. /tasks or /tasks/{id}; each {name} is a required request.params.name' },
-      method: { type: 'string', enum: METHODS },
-      consumes: { type: 'string', required: false, description: 'the body\'s content type; must be in the plugin\'s codecs table' },
-      produces: { type: 'string', required: false, description: 'the answer\'s content type; must be in the codecs table. Default application/json' },
-      body: { type: 'type', binds: '$Body', required: false, description: 'the edge type of the decoded body (request.body); declaring it means a body is expected, so a request without one is a 400. Absent: the body is the trigger\'s in' },
-      access: { type: { fields: { open: { type: 'boolean', required: false, description: 'true: no token needed' }, roles: { type: 'string[]', required: false, description: 'the principal must hold one of these' } } }, required: false, description: 'absent: a valid token is required, any role' },
-      response: { type: { fields: { status: { type: { fields: { from: { type: 'string', required: false, description: 'a path into the answer whose value picks the status' }, map: { type: { fields: {}, open: 'number' }, required: false }, default: { type: 'number', required: false } } }, required: false } } }, required: false },
-    },
-  },
-  context: {
-    fields: {
-      method: { type: 'string' },
-      path: { type: 'string' },
-      headers: { type: OPEN_STRING, description: 'lower-cased names' },
-      query: { type: OPEN_STRING },
-      params: { type: '$Params', description: 'the route\'s placeholders, each a string the route guarantees' },
-      body: { type: '$Body', description: 'present whenever settings.body is declared' },
-      principal: { type: { fields: { subject: { type: 'string' }, roles: { type: 'string[]' }, claims: { type: { fields: {}, open: true } }, token: { type: 'string', secret: true } } }, required: false },
-    },
-  },
-};
-
-export const manifest: PluginDoc = {
-  $schema: schemaRef('plugin'),
-  description: 'HTTP out, HTTP connections, HTTP triggers, body codecs. Settings say which codec handles which content type.',
-  settings: {
-    fields: {
-      port: { type: 'number', required: false, description: 'listen port, default 8080' },
-      codecs: { type: { fields: {}, open: 'string' }, description: 'content type -> codec document path, e.g. "application/json": "@http/codecs/json.codec.json"' },
-      jwt: { type: { fields: { jwksUrl: { type: 'string', required: false }, secret: { type: 'string', required: false, secret: true }, issuer: { type: 'string', required: false }, audience: { type: 'string', required: false }, rolesClaim: { type: 'string', required: false, description: 'claim holding the role(s); default role' } } }, required: false },
-    },
-  },
-  grants: { ports: [P('http.port.json')], triggerKinds: [P('http.trigger-kind.json')], connectionKinds: [P('http.connection-kind.json')], codecs: [P('codecs/json.codec.json'), P('codecs/text.codec.json'), P('codecs/form.codec.json'), P('codecs/multipart.codec.json')] },
-};
+/** The documents this plugin ships, as files: docs/ next to dist/ in the package. */
+const DOCS = fileURLToPath(new URL('../docs', import.meta.url));
 
 // ---- http.port.json#request -------------------------------------------------------------------------
 
@@ -260,11 +194,7 @@ function check({ scope, settings, refuse }: PluginCheckContext) {
 
 export const http: PluginModule = {
   root: ROOT,
-  docs: {
-    [P('plugin.json')]: manifest, [P('http.port.json')]: httpPort, [P('http.connection-kind.json')]: httpConnectionKind, [P('http.trigger-kind.json')]: httpTriggerKind,
-    [P('codecs/json.codec.json')]: jsonCodec, [P('codecs/text.codec.json')]: textCodec, [P('codecs/form.codec.json')]: formCodec, [P('codecs/multipart.codec.json')]: multipartCodec,
-    [P('Part.shape.json')]: partShape,
-  } as Record<string, AnyDoc>,
+  docs: DOCS,
   handlers: { [`${P('http.port.json')}#request`]: request as unknown as PluginModule['handlers'][string] },
   triggers: { [P('http.trigger-kind.json')]: runtime },
   codecs: { [P('codecs/json.codec.json')]: json, [P('codecs/text.codec.json')]: text, [P('codecs/form.codec.json')]: form, [P('codecs/multipart.codec.json')]: multipart },

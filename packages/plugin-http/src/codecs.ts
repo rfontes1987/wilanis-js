@@ -2,20 +2,8 @@
  * The body codecs @http ships. Which content type each handles is the project's decision, written in the
  * plugin's settings table; the codec only knows how to turn bytes into a value of the declared type and back.
  */
-import { schemaRef, type CodecDoc, type ShapeDoc } from '@wilanis/core';
 import type { Codec } from '@wilanis/core';
 import { conforms, type Type } from '@wilanis/core';
-
-export const jsonCodec: CodecDoc = { $schema: schemaRef('codec'), description: 'JSON: an object, a list, or a scalar, judged against the declared type.', yields: 'declared' };
-export const textCodec: CodecDoc = { $schema: schemaRef('codec'), description: 'Raw text (plain text, XML, CSV...): the body is one string.', yields: 'string' };
-export const formCodec: CodecDoc = { $schema: schemaRef('codec'), description: 'application/x-www-form-urlencoded: fields as strings, coerced toward the declared shape.', yields: 'declared' };
-export const multipartCodec: CodecDoc = { $schema: schemaRef('codec'), description: 'multipart/form-data: text fields as strings, file fields as @http/Part.shape.json (name, contentType, size, content as base64).', yields: 'declared' };
-
-export const partShape: ShapeDoc = {
-  $schema: schemaRef('shape'), layer: 'edge',
-  description: 'One uploaded file part of a multipart body.',
-  fields: { filename: { type: 'string' }, contentType: { type: 'string' }, size: { type: 'number' }, content: { type: 'string', description: 'base64' } },
-};
 
 function judge(v: unknown, declared: Type | undefined) {
   if (declared) { const bad = conforms(v, declared); if (bad) throw new Error(`body does not conform: ${bad}`); }

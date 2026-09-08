@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/plugin.schema.json",
+  "description": "Command-line triggers.",
+  "grants": {
+    "triggerKinds": [
+      "@cli/cli.trigger-kind.json"
+    ]
+  }
+}

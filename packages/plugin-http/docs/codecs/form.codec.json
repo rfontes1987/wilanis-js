@@ -1,0 +1,5 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/codec.schema.json",
+  "description": "application/x-www-form-urlencoded: fields as strings, coerced toward the declared shape.",
+  "yields": "declared"
+}
