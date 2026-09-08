@@ -8,10 +8,36 @@
  * A plugin package exports its PluginModule as the default export; project.json names the package in
  * `plugins[].from` and the runtime imports it. @std and @cli are built into the runtime and need no `from`.
  */
+import type { Readable } from 'node:stream';
 import type { Handler, Report } from '@wilanis/engine';
 import type { Registry, TriggerDoc } from './model.js';
 import type { Scope } from './scope.js';
-import type { Type } from './types.js';
+import type { BlobHandle, Type } from './types.js';
+
+/**
+ * The blob registry: where the bytes of a `blob` value live, so that a file is held once, on disk, and never
+ * as a value. A codec streams an uploaded body in and answers the handle; an operation streams a handle out
+ * to read it, or streams bytes in to answer a new one; a codec streams the answer to the caller. The engine
+ * only ever carries handles. The runtime owns the one store of a tree.
+ */
+export interface BlobStore {
+  /** Store what the source yields, as it yields it; answers the handle a graph carries once the source has ended. */
+  put(source: Readable | Buffer | string, meta: { contentType: string; filename?: string }): Promise<BlobHandle>;
+  /** The bytes behind a handle, as a stream. Fails when the handle names nothing this store holds. */
+  open(handle: BlobHandle): Readable;
+  /** Forget a handle and its bytes. */
+  drop(handle: BlobHandle): Promise<void>;
+  /** A scope of this store: what is put through it is dropped by `release`, so a run's blobs end with the run. */
+  scope(): BlobScope;
+}
+export interface BlobScope extends BlobStore { release(): Promise<void> }
+
+/** The whole of a stream, for a codec that needs the body entire (JSON, text, a form). A blob codec never calls this. */
+export async function readAll(source: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const c of source) chunks.push(typeof c === 'string' ? Buffer.from(c) : (c as Buffer));
+  return Buffer.concat(chunks);
+}
 
 export interface FireArgs {
   trigger: TriggerDoc;
@@ -19,6 +45,8 @@ export interface FireArgs {
   input: unknown;
   /** The context this kind hands: what resolvers read as request.* */
   request: Record<string, unknown>;
+  /** The blob scope of this run: what the graph stores through it is released when the kind has answered. */
+  blobs?: BlobStore;
 }
 
 export interface TriggerRuntime {
@@ -31,15 +59,29 @@ export interface TriggerRuntime {
     inputFor: (t: TriggerDoc, request: Record<string, unknown>) => { input: unknown } | { error: string };
     /** content type -> codec, from this plugin's settings table. */
     codecs: Codecs;
+    /** The tree's blob registry; a kind opens a scope per run and releases it once it has answered. */
+    blobs: BlobStore;
   }): Promise<() => Promise<void>>;
   /** Encode a report the way this kind would answer, for `wilanis run` and rehearsal. */
   encode?(trigger: TriggerDoc, report: Report): unknown;
 }
 
-/** A body codec: bytes <-> value, judged against a declared type when the codec yields `declared`. */
+/**
+ * A body codec: a body stream <-> a value, judged against a declared type when the codec yields `declared`.
+ * A codec that yields `blob` streams the body into the registry and answers the handle, and streams a
+ * handle's bytes back out; every other codec reads the body whole and ignores the store.
+ */
+export interface Encoded {
+  /** The answer's bytes: a stream (a blob, read from the registry) or a buffer (a value, encoded). */
+  body: Readable | Buffer;
+  contentType: string;
+  /** The stream's length when known, so the caller can say so up front. */
+  length?: number;
+  headers?: Record<string, string>;
+}
 export interface Codec {
-  decode(bytes: Buffer, contentType: string, declared: Type | undefined): unknown;
-  encode(value: unknown, declared: Type | undefined): { bytes: Buffer; contentType: string };
+  decode(body: Readable, contentType: string, declared: Type | undefined, blobs: BlobStore): unknown | Promise<unknown>;
+  encode(value: unknown, declared: Type | undefined, blobs: BlobStore): Encoded | Promise<Encoded>;
 }
 /** content type -> codec, as the plugin's settings table declares it. */
 export type Codecs = Record<string, Codec>;

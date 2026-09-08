@@ -61,6 +61,52 @@
         "additionalProperties": false
       }
     },
+    "blobs": {
+      "description": "The blob registry: where uploaded and generated files are kept while a run uses them. Files never pass through the engine; a graph holds a handle and the registry holds the bytes.",
+      "type": "object",
+      "properties": {
+        "dir": {
+          "description": "The directory the registry writes to, relative to the project root or absolute. Absent: a directory under the system temp dir.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "startup": {
+      "description": "What runs once when the tree is served, in this order, after every plugin's postLoad and before any trigger kind starts. Each entry names a domain port operation; the active profile's binding decides how it is met, so a connection can be real in one profile and a fake in another. This is where a pool is opened, a queue declared, a topic subscribed: the work is declared here rather than hidden in a plugin's code, so a reader sees at the root what happens before the first request. An entry takes no request -- nothing has been received yet -- so the operation it names must not read request.*. wilanis serve runs these; wilanis check, rehearse and run do not.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "label": {
+            "description": "A short human name for this step, shown wherever a reader sees it instead of the operation path.",
+            "type": "string",
+            "minLength": 1
+          },
+          "run": {
+            "description": "The domain port operation this step fires, as path#operation. Never a graph: the step says what it wants done, and the port's binding decides how.",
+            "$ref": "common.schema.json#/$defs/opRef"
+          },
+          "in": {
+            "description": "Every value the operation takes, written as literals. A startup step runs before anything is received, so only const and {{secrets.*}} may appear here -- never {{request.*}}.",
+            "$ref": "common.schema.json#/$defs/values"
+          },
+          "required": {
+            "description": "Whether serving may proceed when this step refuses. true (the default): serve stops and exits nonzero, so a tree whose database is unreachable never opens its port. false: the refusal is logged, the remaining steps run, and the trigger kinds start anyway.",
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "run"
+        ],
+        "additionalProperties": false
+      }
+    },
     "secrets": {
       "type": "object",
       "propertyNames": {

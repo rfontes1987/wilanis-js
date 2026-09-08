@@ -72,19 +72,27 @@ export interface ResolverRead { read: string; label?: string; description?: stri
 /** The resolvers a feature reads from the request, in one edge document a data graph or a binding names. */
 export interface ResolversDoc extends Envelope { resolvers: Record<string, ResolverRead> }
 
+/** One step of the project's startup: the domain port operation it fires, the values it takes, and whether serving may proceed when it refuses. */
+export interface StartupStep { run: string; in?: Values; required?: boolean; label?: string; description?: string }
+
 export interface ProjectDoc extends Envelope {
   name: string;
   aliases?: Record<string, string>;
   /** use: the alias root; from: the npm package that ships it (absent for the runtime's builtins @std and @cli). */
   plugins: { use: string; from?: string; settings?: Record<string, unknown> }[];
   secrets?: Record<string, string>;
+  /** What runs once when the tree is served, in order, after every plugin's postLoad and before any trigger kind starts: `required` (the default) stops serve when the step refuses. */
+  startup?: StartupStep[];
   profiles?: Record<string, { description?: string; bindings: Record<string, string> }>;
+  /** The blob registry's directory; absent: under the system temp dir. */
+  blobs?: { dir?: string };
 }
 export interface PluginDoc extends Envelope {
   settings?: InlineObject;
   grants: { ports?: string[]; triggerKinds?: string[]; connectionKinds?: string[]; codecs?: string[] };
 }
-export interface Operation { description: string; accepts?: Fields; returns?: TypeSpec; pure?: boolean }
+/** `refuses`: running it ends the graph on purpose; its static `reason` input names the outcome, and a trigger kind maps that word to how it answers. */
+export interface Operation { description: string; accepts?: Fields; returns?: TypeSpec; pure?: boolean; refuses?: boolean }
 export interface PortDoc extends Envelope { operations: Record<string, Operation> }
 export interface BindingOp { graph?: string; run?: string; in?: Values; description?: string }
 /** How a domain port is met. `resolvers` names the resolvers document whose reads a delegation may use. */
@@ -108,7 +116,8 @@ export interface GraphDoc extends Envelope {
 /** What a trigger fires: one run node. The node type is implicit -- trigger.schema.json declares it. */
 export interface FireNode { description?: string; label?: string; run: string; in?: Values }
 export interface TriggerDoc extends Envelope { kind: string; settings: Record<string, unknown>; in?: TypeRef; out?: TypeRef; fire: FireNode }
-export interface TriggerKindDoc extends Envelope { settings: InlineObject; context: InlineObject }
+/** `refusals`: the dotted settings path holding the map from a refusal's reason to how this kind answers it; every reason a trigger can reach must be a key there (T005). */
+export interface TriggerKindDoc extends Envelope { settings: InlineObject; context: InlineObject; refusals?: string }
 export interface ConnectionKindDoc extends Envelope { settings: InlineObject }
 export interface ConnectionDoc extends Envelope { kind: string; settings: Record<string, unknown> }
 export interface CodecDoc extends Envelope { yields: 'declared' | TypeRef }

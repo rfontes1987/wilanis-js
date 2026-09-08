@@ -112,7 +112,7 @@ describe('graph', () => {
   });
   it("in, out.type and constants: in is a type reference; out.from is a node or a list of nodes; a constant has type and value", () => {
     expect(refused(doc('graph', { in: { fields: {} } }))).toEqual([at('in', 'must be string')]);
-    expect(refused(doc('graph', { in: 'object' }))).toEqual([at('in', 'A type: string, number, boolean, unknown, or the path of a shape')]);
+    expect(refused(doc('graph', { in: 'object' }))).toEqual([at('in', 'A type: string, number, boolean, blob')]);
     expect(refused(doc('graph', { out: { type: 'string', from: 3 } }))).toEqual([at('out/from', 'must be string or array')]);
     expect(refused(doc('graph', { out: { type: 'string', from: [] } }))).toEqual([at('out/from', 'fewer than 1 items')]);
     expect(refused(doc('graph', { out: { type: 'string' } }))).toEqual([at('out', "missing 'from'")]);
@@ -136,7 +136,7 @@ describe('shape and the type grammar', () => {
     expect(refused(doc('shape', { layer: 'middle' }))).toEqual([at('layer', '"edge", "core"')]);
   });
   it('a field type is a type reference or an inline object; the refusal quotes the grammar', () => {
-    expect(refused(doc('shape', { fields: { a: { type: 'object' } } }))).toEqual([at('fields/a/type', 'A type: string, number, boolean, unknown, or the path of a shape')]);
+    expect(refused(doc('shape', { fields: { a: { type: 'object' } } }))).toEqual([at('fields/a/type', 'A type: string, number, boolean, blob')]);
     expect(refused(doc('shape', { fields: { a: { type: 'Task' } } }))).toEqual([at('fields/a/type', 'A type:')]);
     expect(refused(doc('shape', { fields: { a: { type: 3 } } }))).toEqual([at('fields/a/type', 'must be string or object')]);
     expect(refused(doc('shape', { fields: { a: { type: { open: true } } } }))).toEqual([at('fields/a/type', "missing 'fields'")]);
@@ -146,7 +146,7 @@ describe('shape and the type grammar', () => {
     expect(refused(doc('shape', { fields: { 'Bad Name': { type: 'string' } } }))).toEqual([at('fields', 'identifier')]);
   });
   it('the type grammar accepts every form it promises', () => {
-    for (const t of ['string', 'number[]', 'unknown', 'type', '$T', '$Body[]', '@shapes/Task.shape.json', '@features/f/shapes/Task.shape.json[][]']) expect(refused(doc('shape', { fields: { a: { type: t } } }))).toEqual([]);
+    for (const t of ['string', 'number[]', 'blob', 'blob[]', 'unknown', 'type', '$T', '$Body[]', '@shapes/Task.shape.json', '@features/f/shapes/Task.shape.json[][]']) expect(refused(doc('shape', { fields: { a: { type: t } } }))).toEqual([]);
   });
   it('open is a boolean or a type reference, shared with inline objects', () => {
     expect(refused(doc('shape', { open: 5 }))).toEqual([at('open', 'must be boolean or string')]);

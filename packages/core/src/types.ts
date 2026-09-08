@@ -8,6 +8,8 @@ export type Type =
   | { kind: 'string'; enum?: string[] }
   | { kind: 'number' }
   | { kind: 'boolean' }
+  /** A stored file. The value is a handle -- id, contentType, size, filename -- never the bytes; the blob registry holds those. */
+  | { kind: 'blob' }
   | { kind: 'unknown' }
   | { kind: 'list'; of: Type }
   | { kind: 'object'; name?: string; fields: Record<string, ObjField>; open: false | Type }
@@ -22,9 +24,14 @@ export const UNKNOWN: Type = { kind: 'unknown' };
 export const STRING: Type = { kind: 'string' };
 export const NUMBER: Type = { kind: 'number' };
 export const BOOLEAN: Type = { kind: 'boolean' };
+export const BLOB: Type = { kind: 'blob' };
 export const EMPTY_OBJECT: Type = { kind: 'object', fields: {}, open: false };
+/** What a blob value is on the wire and in a report: the handle. Reads into a blob (`{{in.file.filename}}`) see these fields. */
+export const BLOB_HANDLE: Type = { kind: 'object', name: 'blob', fields: { id: { type: STRING, required: true }, contentType: { type: STRING, required: true }, size: { type: NUMBER, required: true }, filename: { type: STRING, required: false } }, open: false };
+export interface BlobHandle { id: string; contentType: string; size: number; filename?: string }
+export const isBlobHandle = (v: unknown): v is BlobHandle => typeof v === 'object' && v !== null && !Array.isArray(v) && typeof (v as BlobHandle).id === 'string' && typeof (v as BlobHandle).contentType === 'string' && typeof (v as BlobHandle).size === 'number';
 
-const TYPE_REF = /^(string|number|boolean|unknown|type|\$[A-Z][A-Za-z0-9]*|@[A-Za-z0-9_.-]*(?:\/[A-Za-z0-9_.-]+)*\.json)((?:\[\])*)$/;
+const TYPE_REF = /^(string|number|boolean|blob|unknown|type|\$[A-Z][A-Za-z0-9]*|@[A-Za-z0-9_.-]*(?:\/[A-Za-z0-9_.-]+)*\.json)((?:\[\])*)$/;
 
 export class TypeError_ extends Error {}
 
@@ -41,6 +48,7 @@ export class TypeResolver {
       case 'string': t = STRING; break;
       case 'number': t = NUMBER; break;
       case 'boolean': t = BOOLEAN; break;
+      case 'blob': t = BLOB; break;
       case 'unknown': t = UNKNOWN; break;
       case 'type': t = { kind: 'type' }; break;
       default: t = m[1].startsWith('$') ? { kind: 'var', name: m[1] } : this.shape(m[1]);
@@ -158,7 +166,7 @@ export function assignable(from: Type, to: Type): string | null {
       }
       return null;
     }
-    case 'number': case 'boolean': return null;
+    case 'number': case 'boolean': case 'blob': return null;
     case 'list': return assignable((from as { kind: 'list'; of: Type }).of, to.of);
     case 'object': {
       const f = from as Extract<Type, { kind: 'object' }>;
@@ -194,7 +202,7 @@ export interface Read { type: Type; optional: boolean }
 export function typeAt(t: Type, path: string[]): Read | string {
   let cur: Read = { type: t, optional: false };
   for (const seg of path) {
-    const ty = cur.type;
+    const ty = cur.type.kind === 'blob' ? BLOB_HANDLE : cur.type;
     if (ty.kind === 'unknown' || ty.kind === 'var') return `cannot read '${seg}' inside ${show(ty)} -- forward it whole`;
     if (ty.kind === 'list') {
       if (!/^[0-9]+$/.test(seg)) return `'${seg}' is not an index into ${show(ty)}`;
@@ -246,6 +254,7 @@ export function conforms(v: unknown, t: Type, at = '$'): string | null {
       return null;
     case 'number': return typeof v === 'number' && Number.isFinite(v) ? null : `${at}: expected number`;
     case 'boolean': return typeof v === 'boolean' ? null : `${at}: expected boolean`;
+    case 'blob': return isBlobHandle(v) ? null : `${at}: expected a blob (the handle of a stored file: id, contentType, size)`;
     case 'list':
       if (!Array.isArray(v)) return `${at}: expected list`;
       for (let i = 0; i < v.length; i++) { const r = conforms(v[i], t.of, `${at}[${i}]`); if (r) return r; }
@@ -275,6 +284,7 @@ export function toJsonSchema(t: Type): Record<string, unknown> {
     case 'string': return t.enum ? { type: 'string', enum: t.enum } : { type: 'string' };
     case 'number': return { type: 'number' };
     case 'boolean': return { type: 'boolean' };
+    case 'blob': return toJsonSchema(BLOB_HANDLE);
     case 'list': return { type: 'array', items: toJsonSchema(t.of) };
     case 'object': {
       const properties: Record<string, unknown> = {};
@@ -309,6 +319,7 @@ export function generate(t: Type, r: Rng, depth = 0): unknown {
     case 'string': return t.enum ? r.pick(t.enum) : r.pick(WORDS) + (r.bool(0.3) ? String(r.int(0, 999)) : '');
     case 'number': return r.pick([0, 1, -1, 42, 3.5, 200, 200, 201, 404, 500, r.int(-1000, 1000)]);
     case 'boolean': return r.bool();
+    case 'blob': return { id: `blob-${r.int(1000, 9999)}`, contentType: r.pick(['text/csv', 'text/plain', 'application/octet-stream']), size: r.int(0, 65536), ...(r.bool() ? { filename: r.pick(WORDS.filter(Boolean)) + r.pick(['.csv', '.txt', '.bin']) } : {}) };
     case 'type': return 'unknown';
     case 'var':
     case 'unknown': return depth > 2 ? r.pick([null, 0, 'x', true]) : generate(r.pick([STRING, NUMBER, BOOLEAN, { kind: 'list', of: STRING }, { kind: 'object', fields: { k: { type: STRING, required: true } }, open: false }]), r, depth + 1);

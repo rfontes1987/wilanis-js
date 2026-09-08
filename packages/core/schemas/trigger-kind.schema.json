@@ -26,6 +26,11 @@
     },
     "context": {
       "$ref": "common.schema.json#/$defs/inlineObject"
+    },
+    "refusals": {
+      "description": "The dotted path, within a trigger's settings, of the map from a refusal's reason to how this kind answers it (e.g. response.refusals). Declared: every reason a trigger of this kind can reach must be a key of that map (T005), and every key must be a reason it can reach (T006). Absent: the kind answers every refusal one way.",
+      "type": "string",
+      "minLength": 1
     }
   },
   "required": [

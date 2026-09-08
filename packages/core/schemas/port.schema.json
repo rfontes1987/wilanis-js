@@ -43,6 +43,10 @@
           "pure": {
             "description": "True when running it changes nothing in the world. Native operations default to false.",
             "type": "boolean"
+          },
+          "refuses": {
+            "description": "True when running it ends the graph on purpose. Such an operation accepts a static `reason`: one word for the outcome (missing, conflict, upstream), which the trigger kind maps to how it answers. A rehearsal reports the node as refused on purpose.",
+            "type": "boolean"
           }
         },
         "required": [

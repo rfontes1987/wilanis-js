@@ -25,9 +25,9 @@
       "pattern": "^@[A-Za-z0-9_.-]*(/[A-Za-z0-9_.-]+)*\\.json#[a-z][A-Za-z0-9_]*$"
     },
     "typeRef": {
-      "description": "A type: string, number, boolean, unknown, or the path of a shape; any of them followed by [] for a list of it. Native contracts may also write type (a field whose value is a type reference) and $T variables bound by such fields. No bare object, no bare array.",
+      "description": "A type: string, number, boolean, blob (a stored file, carried as a handle: id, contentType, size, filename; never the bytes), unknown, or the path of a shape; any of them followed by [] for a list of it. Native contracts may also write type (a field whose value is a type reference) and $T variables bound by such fields. No bare object, no bare array.",
       "type": "string",
-      "pattern": "^(string|number|boolean|unknown|type|\\$[A-Z][A-Za-z0-9]*|@[A-Za-z0-9_.-]*(/[A-Za-z0-9_.-]+)*\\.json)(\\[\\])*$"
+      "pattern": "^(string|number|boolean|blob|unknown|type|\\$[A-Z][A-Za-z0-9]*|@[A-Za-z0-9_.-]*(/[A-Za-z0-9_.-]+)*\\.json)(\\[\\])*$"
     },
     "inlineObject": {
       "description": "An object type written in place. Legal in contracts and inside shapes; a graph's in/out and a trigger's in/out name a shape.",
