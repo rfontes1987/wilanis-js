@@ -11,6 +11,7 @@
  */
 import { Scope, expr, show, splitPath, substitute, hasVars, isRun, isSwitch, isMap, typeAt, TEMPLATE, WHOLE_TEMPLATE } from '@wilanis/core';
 import type { Kind, Layer, Loaded, LoadResult, GraphDoc, Operation, Refusal, Type, Values } from '@wilanis/core';
+import { SCHEMA_BASE, WILANIS } from '@wilanis/core';
 import { bindings, checkTree } from '@wilanis/compiler';
 
 export interface VPort {
@@ -170,6 +171,8 @@ export interface TreeIndex {
   project?: string;
   /** The project's aliases, so a page can canonicalise a reference written through one. */
   aliases: Record<string, string>;
+  /** Where the schemas are published, so a page can recognise a $schema written as a URL. */
+  schemaBase: string;
   docs: IndexEntry[];
   refusals: Refusal[];
 }
@@ -180,7 +183,49 @@ export function indexOf(load: LoadResult): TreeIndex {
   const docs = load.registry.files
     .slice().sort((a, b) => a.kind.localeCompare(b.kind) || a.path.localeCompare(b.path))
     .map(f => ({ path: f.path, kind: f.kind, name: f.name, label: labelOf(f), feature: f.feature, layer: f.layer, native: f.native, file: f.file, description: f.doc.description }));
-  return { root: load.root, project: load.registry.project?.doc.name, aliases: load.registry.project?.doc.aliases ?? {}, docs, refusals };
+  return { root: load.root, project: load.registry.project?.doc.name, aliases: load.registry.project?.doc.aliases ?? {}, schemaBase: SCHEMA_BASE, docs, refusals };
+}
+
+// ---- schemas --------------------------------------------------------------------------------------
+
+/** A schema's path inside core's schemas directory: a kind's, or a node type's under node/. */
+const SCHEMA_REL = /^(?:node\/)?[a-z-]+\.schema\.json$/;
+
+/**
+ * The schema a reference names, relative to core's schemas directory, in either form a document may write
+ * it: the alias (@wilanis/node/run.schema.json) or the published URL. Undefined for anything else.
+ */
+export function schemaRelOf(ref: unknown): string | undefined {
+  if (typeof ref !== 'string') return undefined;
+  for (const prefix of [`${WILANIS}/`, `${SCHEMA_BASE}/`]) {
+    if (ref.startsWith(prefix) && SCHEMA_REL.test(ref.slice(prefix.length))) return ref.slice(prefix.length);
+  }
+  return undefined;
+}
+
+/** One schema as a page: what it judges, where it is published, and the schema itself. */
+export interface SchemaView {
+  kind: 'schema';
+  /** The alias a document writes: @wilanis/graph.schema.json. */
+  path: string;
+  /** The path inside core's schemas directory: node/run.schema.json. */
+  rel: string;
+  /** The document kind this schema judges, when it is a kind's schema and not a node type's or a shared one. */
+  judges?: Kind;
+  label: string;
+  description: string;
+  /** Where the schema is published. */
+  url: string;
+  /** The file it was read from, when known. */
+  file?: string;
+  schema: unknown;
+}
+
+/** The view of one schema, read from core's schemas directory. */
+export function schemaViewOf(rel: string, schema: unknown, file?: string): SchemaView {
+  const s = (schema ?? {}) as { title?: string; description?: string };
+  const kind = rel.includes('/') || rel === 'common.schema.json' ? undefined : (rel.replace(/\.schema\.json$/, '') as Kind);
+  return { kind: 'schema', path: `${WILANIS}/${rel}`, rel, judges: kind, label: s.title ?? rel, description: s.description ?? '', url: `${SCHEMA_BASE}/${rel}`, file, schema };
 }
 
 /** The view of one document by path (an alias is accepted); undefined when there is no such document. */

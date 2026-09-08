@@ -132,6 +132,11 @@
   const canon = (ref) => { const m = /^(@[a-z][a-z0-9-]*)(\/.*)?$/.exec(String(ref)); if (!m || !state.index) return ref; const t = state.index.aliases[m[1]]; return t === undefined ? ref : t.replace(/\/$/, '') + (m[2] || ''); };
   const docAt = (path) => state.index && state.index.docs.find(d => d.path === canon(path));
   const isDocPath = (s) => !!docAt(s);
+  const SCHEMA_REL = /^(?:node\/)?[a-z-]+\.schema\.json$/;
+  /** The schema a string names, relative to core's schemas directory: from the alias (@wilanis/node/run.schema.json) or the published URL. */
+  const schemaRelOf = (s) => { for (const prefix of ['@wilanis/', state.index ? state.index.schemaBase + '/' : null]) { if (prefix && String(s).startsWith(prefix) && SCHEMA_REL.test(String(s).slice(prefix.length))) return String(s).slice(prefix.length); } return null; };
+  /** A $ref written inside a schema, resolved against the schema it sits in: ../common.schema.json from node/run.schema.json → common.schema.json. */
+  const schemaRefOf = (ref, base) => { const file = String(ref).split('#')[0]; if (!base || !file || file.startsWith('@') || /^https?:/.test(file)) return null; const segs = base.split('/').slice(0, -1); for (const seg of file.split('/')) { if (seg === '..') segs.pop(); else if (seg !== '.') segs.push(seg); } const rel = segs.join('/'); return SCHEMA_REL.test(rel) ? rel : null; };
   const stem = (path) => String(path).replace(/^.*\//, '').replace(/\.json$/, '').replace(/\.[a-z-]+$/, '');
   const readable = (id) => { const w = String(id).replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').trim(); return w ? w[0].toUpperCase() + w.slice(1) : id; };
   /** The label of a document by path: its own, or its file name made readable. */
@@ -161,7 +166,7 @@
     }
     if (state.current === path && state.view && state.view.path === path) { renderAll(); return; }
     state.current = path;
-    try { state.view = await api('/api/doc?path=' + encodeURIComponent(path)); state.fit = true; }
+    try { const rel = schemaRelOf(path); state.view = rel ? await api('/api/schema?path=' + encodeURIComponent(rel)) : await api('/api/doc?path=' + encodeURIComponent(path)); state.fit = true; }
     catch (e) { state.view = { error: e.message, path, refusals: (e.body && e.body.refusals) || [] }; }
     renderAll();
   }
@@ -171,7 +176,7 @@
       const idx = await api('/api/index');
       const changed = idx.version !== state.version;
       state.version = idx.version; state.index = idx;
-      if (changed && state.current) state.view = await api('/api/doc?path=' + encodeURIComponent(state.current)).catch(e => ({ error: e.message, path: state.current, refusals: [] }));
+      if (changed && state.current && !schemaRelOf(state.current)) state.view = await api('/api/doc?path=' + encodeURIComponent(state.current)).catch(e => ({ error: e.message, path: state.current, refusals: [] }));
       if (full || changed) renderAll();
       $('status').textContent = idx.project ? `${idx.docs.length} documents` + (idx.refusals.length ? ` / ${idx.refusals.length} refusal(s)` : '') : '';
     } catch (e) { $('status').textContent = 'server unreachable'; }
@@ -182,6 +187,9 @@
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function link(path, text, cls) { const a = el('a', cls || null, text == null ? labelFor(path) : text); a.href = '#' + canon(path); a.title = canon(path); return a; }
   const badge = (kind, text) => el('span', 'badge kind-' + kind, text == null ? (KIND_ONE[kind] || kind) : text);
+  /** A badge that opens the schema judging what it names: a document kind's, or a node type's. */
+  const schemaBadge = (kind, text, rel) => { const a = el('a', 'badge kind-' + kind, text == null ? (KIND_ONE[kind] || kind) : text); a.href = '#@wilanis/' + rel; a.title = 'the schema: @wilanis/' + rel; return a; };
+  const NODE_SCHEMA = { run: 'node/run.schema.json', map: 'node/map.schema.json', rule: 'node/switch.schema.json' };
   const frag = (...nodes) => { const f = document.createDocumentFragment(); for (const n of nodes) f.appendChild(typeof n === 'string' ? document.createTextNode(n) : n); return f; };
 
   // ---- sidebar --------------------------------------------------------------------------------------
@@ -223,7 +231,7 @@
     const layer = v && v.layer ? { edge: 'edge: speaks the world', domain: 'domain: the rules', data: 'data: translates and reaches out' }[v.layer] : null;
     $('role').hidden = !layer; if (layer) $('role').textContent = layer;
     const n = v && v.refusals ? v.refusals.length : 0; $('refusals').hidden = !n; $('refusals').textContent = `${n} refusal${n === 1 ? '' : 's'}`;
-    $('source').hidden = !(v && !v.error);
+    $('source').hidden = !(v && !v.error && v.kind !== 'schema');
   }
 
   function renderMain() {
@@ -231,13 +239,21 @@
     const v = state.view;
     if (!v) { main.appendChild(el('div', 'empty', 'Pick a document.')); return; }
     if (v.error) { main.appendChild(el('div', 'empty', v.error)); return; }
+    if (v.kind === 'schema') { renderSchemaPage(main, v); return; }
     if (state.source) { const page = el('div', 'page source'); const pre = el('pre'); renderJson(pre, v.doc); page.appendChild(pre); main.appendChild(page); return; }
     if (v.graph) { drawGraph(main, v.graph); return; }
     const page = el('div', 'page'); renderDocPage(page, v); main.appendChild(page);
   }
 
-  /** JSON with every string that names a document turned into a link. */
-  function renderJson(pre, doc) {
+  /** Where a string in a JSON document leads: a document of the tree, a schema (a $schema or a node type), or a $ref inside the schema at `base`. */
+  function hrefOf(raw, base) {
+    const target = raw.split('#')[0].replace(/(\[\])+$/, '');
+    if (target.startsWith('@') && isDocPath(target)) return '#' + canon(target);
+    const rel = schemaRelOf(target) || schemaRefOf(raw, base);
+    return rel ? '#@wilanis/' + rel : null;
+  }
+  /** JSON with every string that names a document or a schema turned into a link; `base` is the schema being shown, for its $refs. */
+  function renderJson(pre, doc, base) {
     const text = JSON.stringify(doc, null, 2);
     const re = /"(?:[^"\\]|\\.)*"(\s*:)?|-?\d+(?:\.\d+)?(?:e[+-]?\d+)?|true|false|null/g;
     let last = 0;
@@ -248,14 +264,25 @@
         if (m[1]) pre.appendChild(el('span', 'k', tok));
         else {
           const raw = JSON.parse(tok);
-          const target = typeof raw === 'string' ? raw.split('#')[0].replace(/(\[\])+$/, '') : '';
-          if (target.startsWith('@') && isDocPath(target)) { const a = el('a', null, tok); a.href = '#' + canon(target); pre.appendChild(a); }
+          const href = typeof raw === 'string' ? hrefOf(raw, base) : null;
+          if (href) { const a = el('a', null, tok); a.href = href; pre.appendChild(a); }
           else pre.appendChild(el('span', 's', tok));
         }
       } else pre.appendChild(el('span', 'n', tok));
       last = m.index + tok.length;
     }
     if (last < text.length) pre.appendChild(document.createTextNode(text.slice(last)));
+  }
+
+  // ---- schema pages -----------------------------------------------------------------------------------
+  /** A schema shown as itself: its title and description, where it is published, and the JSON with every $ref linked. */
+  function renderSchemaPage(main, v) {
+    const page = el('div', 'page source');
+    const h1 = el('h1', null, v.label); h1.appendChild(badge('schema', v.judges ? 'the schema of every ' + (KIND_ONE[v.judges] || v.judges) : v.rel.startsWith('node/') ? 'a node type' : 'shared definitions')); page.appendChild(h1);
+    page.appendChild(el('p', 'lead', v.description));
+    const where = el('div', 'file'); const a = el('a', null, v.url); a.href = v.url; a.target = '_blank'; a.rel = 'noopener'; where.appendChild(frag('published at ')); where.appendChild(a); page.appendChild(where);
+    if (v.file) page.appendChild(el('div', 'file', v.file));
+    const pre = el('pre'); renderJson(pre, v.schema, v.rel); page.appendChild(pre); main.appendChild(page);
   }
 
   // ---- document pages ---------------------------------------------------------------------------------
@@ -324,7 +351,7 @@
   const arrow = () => el('span', 'arrow', TO.trim());
 
   function renderDocPage(page, v) {
-    const h1 = el('h1', null, v.label); h1.appendChild(badge(v.kind)); if (v.kind === 'shape') h1.appendChild(badge(v.kind, v.doc.layer === 'edge' ? 'edge: the world’s shape' : 'core: ours')); page.appendChild(h1);
+    const h1 = el('h1', null, v.label); h1.appendChild(schemaBadge(v.kind, null, v.kind + '.schema.json')); if (v.kind === 'shape') h1.appendChild(badge(v.kind, v.doc.layer === 'edge' ? 'edge: the world’s shape' : 'core: ours')); page.appendChild(h1);
     page.appendChild(el('p', 'lead', v.description));
     if (v.file) page.appendChild(el('div', 'file', v.file));
     const d = v.doc;
@@ -458,6 +485,13 @@
     box.appendChild(el('h3', null, v.label));
     box.appendChild(el('p', null, v.description || ''));
     if (v.file) box.appendChild(el('div', 'file', v.file));
+    if (v.kind === 'schema') {
+      const judged = v.judges && state.index ? state.index.docs.filter(d => d.kind === v.judges) : [];
+      box.appendChild(el('h4', null, v.judges ? `judges (${judged.length})` : 'a building block'));
+      if (!v.judges) box.appendChild(el('p', null, v.rel.startsWith('node/') ? 'A node type. Every graph names it in the type of its nodes; graph.schema.json lists the three.' : 'Definitions the other schemas refer to; no document names it directly.'));
+      for (const d of judged) { const r = el('div', 'ref'); r.appendChild(badge(d.kind)); r.appendChild(document.createTextNode(' ')); r.appendChild(link(d.path, d.label)); box.appendChild(r); }
+      return;
+    }
     if (v.refusals.length) { box.appendChild(el('h4', null, 'refusals')); for (const r of v.refusals) box.appendChild(refusalEl(r)); }
     const callers = v.callers.filter(c => c.kind !== 'project' || v.kind !== 'feature');
     if (v.kind === 'trigger') { box.appendChild(el('h4', null, 'a way in')); box.appendChild(el('p', null, 'A trigger is where a run starts: nothing in the tree calls it.')); }
@@ -501,7 +535,7 @@
 
   function renderNodeDetails(box, n, v) {
     const color = nodeColors(v.graph).get(n.id);
-    const h = el('h3'); const sw = el('span', 'swatch'); sw.style.background = color; h.appendChild(sw); h.appendChild(document.createTextNode(n.label + ' ')); h.appendChild(badge(n.kind, { run: 'operation', map: 'for each', rule: 'rule', in: 'input', out: 'output', const: 'constants', request: 'request' }[n.kind])); box.appendChild(h);
+    const h = el('h3'); const sw = el('span', 'swatch'); sw.style.background = color; h.appendChild(sw); h.appendChild(document.createTextNode(n.label + ' ')); const kindText = { run: 'operation', map: 'for each', rule: 'rule', in: 'input', out: 'output', const: 'constants', request: 'request' }[n.kind]; h.appendChild(NODE_SCHEMA[n.kind] ? schemaBadge(n.kind, kindText, NODE_SCHEMA[n.kind]) : badge(n.kind, kindText)); box.appendChild(h);
     box.appendChild(el('div', 'id', n.decision ? n.id + '   ' + n.decision.when : n.id));
     if (n.opens) { const p = el('p'); p.appendChild(frag('Read through ')); p.appendChild(link(n.opens)); box.appendChild(p); }
     if (n.type) { const p = el('p'); p.appendChild(frag(n.kind === 'in' ? 'The graph takes ' : 'The graph answers ')); p.appendChild(typeLink(n.type)); box.appendChild(p); }

@@ -9,6 +9,10 @@ fields the graph answers, fed by its candidates in order. A node that runs a dom
 click it, or double-click the node, and the canvas becomes the graph that implements it. The browser's
 back button walks back.
 
+A document's kind badge, a node's kind in the details panel, and every `$schema`, node `type` or `$ref`
+in the source view open the schema that judges it, read from the installed `@wilanis/core` rather than
+fetched from the network, so the page shows the schema version the tree is actually judged against.
+
 Everything is named by its `label` (a document's, a node's, a resolver's), or by its file name made
 readable when none is written. Every other kind of document has a page of its own: a trigger as the chain
 it fires, a port as its operations and the bindings that meet them, a binding as how each operation is

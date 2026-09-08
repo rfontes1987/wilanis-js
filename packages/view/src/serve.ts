@@ -1,16 +1,18 @@
 /**
  * The viewer's HTTP server: the page at /, the document list at /api/index, one document's view at
- * /api/doc?path=..., and /api/version so the page can notice the tree changed and refetch. The tree is
+ * /api/doc?path=..., one schema at /api/schema?path=... (read from the installed @wilanis/core, so a node's
+ * type and a document's $schema open the schema that judges it), and /api/version so the page can notice
+ * the tree changed and refetch. The tree is
  * loaded on every request: a save in the editor shows on the next paint, and the server holds no state
  * that could go stale.
  */
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PluginModule } from '@wilanis/core';
 import { loadProject } from '@wilanis/runtime';
-import { indexOf, viewOf } from './model.js';
+import { indexOf, schemaRelOf, schemaViewOf, viewOf } from './model.js';
 
 export interface ServeViewOptions {
   port?: number;
@@ -23,6 +25,15 @@ export interface ServeViewOptions {
 export interface ViewServer { url: string; server: Server; close(): Promise<void> }
 
 const PAGE = fileURLToPath(new URL('../client/index.html', import.meta.url));
+
+/** The file of a schema in the installed @wilanis/core, or undefined when rel names none. */
+function schemaFile(rel: string): string | undefined {
+  if (schemaRelOf(`@wilanis/${rel}`) === undefined) return undefined;
+  try {
+    const file = fileURLToPath(import.meta.resolve(`@wilanis/core/schemas/${rel}`));
+    return existsSync(file) ? file : undefined;
+  } catch { return undefined; }
+}
 
 /** A fingerprint of every JSON file under root: paths and modification times. Changes when the tree does. */
 export function versionOf(root: string): string {
@@ -66,6 +77,12 @@ export async function serveView(root: string, opts: ServeViewOptions = {}): Prom
         const view = viewOf(load, path);
         if (!view) return json(res, 404, { error: `no document at '${path}'`, refusals: load.refusals.items });
         json(res, 200, view);
+      } else if (url.pathname === '/api/schema') {
+        const rel = url.searchParams.get('path');
+        if (!rel) return json(res, 400, { error: 'path is required' });
+        const file = schemaFile(rel);
+        if (!file) return json(res, 404, { error: `no schema at '${rel}'` });
+        json(res, 200, schemaViewOf(rel, JSON.parse(readFileSync(file, 'utf8')), file));
       } else json(res, 404, { error: 'not found' });
     } catch (e) {
       log(`error: ${(e as Error).stack ?? e}`);
