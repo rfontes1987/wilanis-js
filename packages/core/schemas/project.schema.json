@@ -18,7 +18,8 @@
     },
     "name": {
       "type": "string",
-      "pattern": "^[a-z][a-z0-9-]*$"
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "The project name: kebab-case."
     },
     "aliases": {
       "type": "object",
@@ -62,14 +63,16 @@
       },
       "additionalProperties": {
         "type": "string",
-        "pattern": "^[A-Z][A-Z0-9_]*$"
+        "pattern": "^[A-Z][A-Z0-9_]*$",
+        "description": "The environment variable that holds the secret: UPPER_CASE."
       }
     },
     "profiles": {
       "type": "object",
       "propertyNames": {
         "type": "string",
-        "pattern": "^[a-z][a-z0-9-]*$"
+        "pattern": "^[a-z][a-z0-9-]*$",
+        "description": "A profile name: kebab-case."
       },
       "additionalProperties": {
         "type": "object",
@@ -80,6 +83,8 @@
           "bindings": {
             "type": "object",
             "propertyNames": {
+              "description": "A domain port path (@...), bound to the binding document that meets it under this profile.",
+              "type": "string",
               "pattern": "^@"
             },
             "additionalProperties": {

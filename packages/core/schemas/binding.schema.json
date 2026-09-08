@@ -48,22 +48,24 @@
           {
             "required": [
               "graph"
-            ],
-            "properties": {
-              "run": false,
-              "in": false
-            }
+            ]
           },
           {
             "required": [
               "run"
-            ],
-            "properties": {
-              "graph": false
-            }
+            ]
           }
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "dependentSchemas": {
+          "graph": {
+            "description": "An operation bound to a graph is not delegated: no run, no in.",
+            "properties": {
+              "run": false,
+              "in": false
+            }
+          }
+        }
       }
     }
   },

@@ -20,7 +20,8 @@
       "type": "array",
       "items": {
         "type": "string",
-        "pattern": "^[a-z][a-z0-9-]*$"
+        "pattern": "^[a-z][a-z0-9-]*$",
+        "description": "The name of a feature folder this one may reference: kebab-case."
       },
       "uniqueItems": true
     },

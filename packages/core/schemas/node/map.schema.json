@@ -30,7 +30,8 @@
       },
       "additionalProperties": {
         "type": "string",
-        "pattern": "^([A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)*)?$"
+        "pattern": "^([A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)*)?$",
+        "description": "A dotted path within the element, or \"\" for the whole element."
       }
     },
     "onItemFailure": {
