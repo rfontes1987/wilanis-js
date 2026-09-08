@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/shape.schema.json",
+  "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
   "title": "shape",
   "description": "A named object type. layer says who may speak it: edge shapes are what the outside world imposes and only triggers and the data layer may name them; core shapes are the project's own. unknown is legal only in edge shapes.",
   "type": "object",
@@ -8,7 +8,7 @@
     "$schema": {
       "description": "The kind of this document: its published schema URL, or the alias @wilanis/shape.schema.json.",
       "enum": [
-        "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/shape.schema.json",
+        "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
         "@wilanis/shape.schema.json"
       ]
     },

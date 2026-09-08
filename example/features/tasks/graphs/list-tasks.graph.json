@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/graph.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
   "description": "Domain graph behind GET /tasks: filtered when a status is given, everything otherwise. The two branches reconverge at out.from.",
   "in": "@shapes/TaskFilter.shape.json",
   "out": { "type": "@shapes/Task.shape.json[]", "from": ["byStatus", "all"] },

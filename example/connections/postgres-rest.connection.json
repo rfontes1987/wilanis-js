@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/connection.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/connection.schema.json",
   "description": "The database's REST face (PostgREST / Supabase REST). Every request carries the service key.",
   "kind": "@http/http.connection-kind.json",
   "settings": { "baseUrl": "http://localhost:54321/rest/v1", "headers": { "apikey": "{{secrets.dbKey}}", "prefer": "return=representation" }, "timeoutMs": 10000 }

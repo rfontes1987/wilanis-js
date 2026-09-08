@@ -12,4 +12,4 @@ baked; secret paths are marked for redaction. `buildEnv` builds the environment 
 
 Depends on `@wilanis/core` and `@wilanis/engine`.
 
-Part of [wilanis](https://github.com/rfontes1987/wilanis). Apache-2.0.
+Part of [wilanis](https://github.com/rfontes1987/wilanis-js). Apache-2.0.

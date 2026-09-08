@@ -7,11 +7,11 @@
   "author": "Rafael Fontes <rfontes1987@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rfontes1987/wilanis.git",
+    "url": "git+https://github.com/rfontes1987/wilanis-js.git",
     "directory": "packages/engine"
   },
-  "homepage": "https://github.com/rfontes1987/wilanis/tree/main/packages/engine#readme",
-  "bugs": "https://github.com/rfontes1987/wilanis/issues",
+  "homepage": "https://github.com/rfontes1987/wilanis-js/tree/main/packages/engine#readme",
+  "bugs": "https://github.com/rfontes1987/wilanis-js/issues",
   "keywords": [
     "wilanis",
     "dataflow",

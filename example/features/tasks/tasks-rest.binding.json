@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/binding.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/binding.schema.json",
   "description": "tasks.port.json over the database's REST face: one data graph per operation, each a declared request plus the decision of what its status means.",
   "port": "@tasks/tasks.port.json",
   "operations": {

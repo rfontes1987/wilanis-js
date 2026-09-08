@@ -48,7 +48,7 @@ A project installs `@wilanis/runtime` and the plugin packages it uses. Nothing e
 
 ## The model in one page
 
-- **Documents.** One JSON file each. The `$schema` names the kind: `https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/graph.schema.json`, or the alias `@wilanis/graph.schema.json`.
+- **Documents.** One JSON file each. The `$schema` names the kind: `https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json`, or the alias `@wilanis/graph.schema.json`.
 - **References are paths.** `@features/tasks/tasks.port.json`; `project.json` declares aliases (`@tasks` → `@features/tasks`); plugins are alias roots (`@std`, `@http`); an operation is `path#operation`.
 - **Shapes** have a layer: `edge` (what the world imposes) or `core` (ours). `unknown` exists only in edge shapes and native contracts.
 - **Ports** are contracts. Granted by a plugin → native (the plugin implements it). In a feature → domain (a **binding** implements it, per operation: a data graph, or a delegation `run` + `params`).
@@ -87,7 +87,7 @@ The schemas live in `packages/core/schemas/` and are published from the `schemas
 repository, so every document can name its schema by URL and an editor can fetch it:
 
 ```
-https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/<kind>.schema.json
+https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/<kind>.schema.json
 ```
 
 The branch name carries the schema major version. A breaking change to a schema goes to `schemas-v2`;

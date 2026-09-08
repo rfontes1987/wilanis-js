@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
   "description": "POST /tasks → 201 with the created task. The body is the input.",
   "kind": "@http/http.trigger-kind.json",
   "settings": { "route": "/tasks", "method": "POST", "consumes": "application/json", "produces": "application/json", "response": { "status": { "default": 201 } } },

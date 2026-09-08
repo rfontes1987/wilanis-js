@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/feature.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/feature.schema.json",
   "description": "Tasks on the board: list them, create them, and a nightly digest.",
   "exports": ["@features/tasks/tasks.port.json", "@features/tasks/shapes/Task.shape.json"],
   "effects": ["@http/http.port.json#request"]

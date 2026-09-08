@@ -20,4 +20,4 @@ Which codec handles which content type is the project's explicit table. Triggers
 
 Depends on `@wilanis/core`, `@wilanis/engine` and `jose`.
 
-Part of [wilanis](https://github.com/rfontes1987/wilanis). Apache-2.0.
+Part of [wilanis](https://github.com/rfontes1987/wilanis-js). Apache-2.0.

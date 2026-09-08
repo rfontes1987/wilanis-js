@@ -18,7 +18,7 @@ export const WILANIS = '@wilanis';
  * Where the schemas are published, so editors and agents can fetch them. The branch name carries the
  * schema major version: a document written against schemas-v1 keeps validating for as long as v1 lives.
  */
-export const SCHEMA_BASE = 'https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas';
+export const SCHEMA_BASE = 'https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas';
 export const schemaRef = (kind: Kind) => `${WILANIS}/${kind}.schema.json`;
 export const schemaUrl = (kind: Kind) => `${SCHEMA_BASE}/${kind}.schema.json`;
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');

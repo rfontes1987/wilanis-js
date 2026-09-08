@@ -13,4 +13,4 @@ import { Kernel } from '@wilanis/engine';
 const report = await new Kernel(handlers).run(spec, { initial: { in: { x: 21 } } });
 ```
 
-Part of [wilanis](https://github.com/rfontes1987/wilanis). Apache-2.0.
+Part of [wilanis](https://github.com/rfontes1987/wilanis-js). Apache-2.0.

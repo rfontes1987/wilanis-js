@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/node/switch.schema.json",
+  "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/node/switch.schema.json",
   "title": "node/switch",
   "description": "Route to exactly one node. Rules are tried in order over this node's inputs; the first that holds names the node that runs, else the fallback. Every other candidate, and everything reachable only through it, is cancelled. Expressions: has(path), comparisons, && || !, len(x).",
   "type": "object",

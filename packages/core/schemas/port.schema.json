@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/port.schema.json",
+  "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
   "title": "port",
   "description": "A contract: named operations, each with what it accepts, what it returns, and the params fixed where it is called. A port a plugin grants is NATIVE (the plugin binds it); a port in a feature is a DOMAIN port (a binding binds it). Nodes run path#operation.",
   "type": "object",
@@ -8,7 +8,7 @@
     "$schema": {
       "description": "The kind of this document: its published schema URL, or the alias @wilanis/port.schema.json.",
       "enum": [
-        "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/port.schema.json",
+        "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
         "@wilanis/port.schema.json"
       ]
     },

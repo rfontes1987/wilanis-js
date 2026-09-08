@@ -1,2 +1,2 @@
-{ "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/shape.schema.json", "layer": "edge", "description": "GET /tasks?status=... as the front end sends it.",
+{ "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json", "layer": "edge", "description": "GET /tasks?status=... as the front end sends it.",
   "fields": { "status": { "type": "string", "enum": ["todo", "doing", "done"], "required": false } } }

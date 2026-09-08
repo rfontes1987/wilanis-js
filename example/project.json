@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/project.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/project.schema.json",
   "name": "board",
   "description": "A task board: the routes talk to a PostgREST-shaped database API. Plugins come from npm packages named by \"from\".",
   "aliases": {

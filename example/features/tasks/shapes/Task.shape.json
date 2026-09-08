@@ -1,2 +1,2 @@
-{ "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/shape.schema.json", "layer": "core", "description": "A task as the domain knows it.",
+{ "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json", "layer": "core", "description": "A task as the domain knows it.",
   "fields": { "id": { "type": "string" }, "title": { "type": "string" }, "status": { "type": "string", "enum": ["todo", "doing", "done"] }, "assignee": { "type": "string", "required": false, "description": "user id" } } }
