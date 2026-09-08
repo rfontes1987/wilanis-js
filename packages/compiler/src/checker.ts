@@ -1,14 +1,14 @@
 /**
  * wilanis check. Judges the whole tree statically so that nothing refuses at load. Rule families:
- *   D documents   R references   L layers/effects/visibility   G graphs   P params/resolvers
+ *   D documents   R references   L layers/effects/visibility   G graphs   P static fields/resolvers
  *   B bindings/profiles   T triggers   C connections/settings   S scenarios   X plugin-specific
  */
 import type { LoadResult } from '@wilanis/core';
 import {
   isMap, isRun, isSwitch, RefusalList, type BindingDoc, type Fields, type GraphDoc, type Loaded, type Node,
-  type Operation, type PortDoc, type Resolvers, type ShapeDoc, type Source, type TriggerDoc, type TypeSpec, type ConnectionDoc,
+  type Operation, type PortDoc, type Resolvers, type ShapeDoc, type TriggerDoc, type TypeSpec, type ConnectionDoc,
 } from '@wilanis/core';
-import { Scope, type OpHit } from '@wilanis/core';
+import { Scope, WHOLE_TEMPLATE, type OpHit } from '@wilanis/core';
 import { assignable, conforms, EMPTY_OBJECT, hasVars, show, STRING, substitute, typeAt, TypeError_, type Read, type Type } from '@wilanis/core';
 import { expr } from '@wilanis/core';
 
@@ -92,14 +92,14 @@ class Checker {
 
   /** Type a settings block where only {{secrets.key}} may appear. */
   private settingsRead(value: unknown, file: string, at: string, secrets: Record<string, string>): Read | undefined {
-    const r = this.s.paramRead(value, (root, path) => {
+    const r = this.s.valueRead(value, (root, path) => {
       if (root !== 'secrets') return `{{${[root, ...path].join('.')}}}: only {{secrets.<key>}} may appear in settings`;
       if (path.length !== 1) return `{{secrets.${path.join('.')}}}: a secret is one key`;
       if (!(path[0] in secrets)) return `secret '${path[0]}' is not declared in project.json secrets`;
       return { type: STRING, optional: false };
     });
     if (typeof r === 'string') { this.refuse('C001', file, r, at, 'declare the key under project.json → secrets'); return undefined; }
-    return r;
+    return r ?? undefined;
   }
 
   // ---- shapes, ports, connections -----------------------------------------------------------------
@@ -135,11 +135,10 @@ class Checker {
     for (const [name, op] of Object.entries(p.doc.operations)) {
       this.fieldsType(op.accepts, p.path, `operations/${name}/accepts`);
       this.type(op.returns, p.path, `operations/${name}/returns`);
-      this.fieldsType(op.params, p.path, `operations/${name}/params`);
       if (!p.native) {
         for (const [k, f] of Object.entries(op.accepts ?? {})) this.checkLayer(f.type, p, `operations/${name}/accepts/${k}`, 'core', `${name}.accepts.${k}`);
         if (op.returns) this.checkLayer(op.returns, p, `operations/${name}/returns`, 'core', `${name}.returns`);
-        if (op.params) this.refuse('L006', p.path, `domain operation '${name}' declares params -- params belong to native operations, fixed in bindings`, `operations/${name}/params`, 'make it an accepts field, or fix the value in the binding');
+        for (const [k, f] of Object.entries(op.accepts ?? {})) if (f.static) this.refuse('L006', p.path, `domain operation '${name}' marks '${k}' static -- static fields belong to native contracts; a binding fixes values`, `operations/${name}/accepts/${k}`, 'drop static, or fix the value in the binding');
       }
     }
   }
@@ -152,7 +151,7 @@ class Checker {
     if (settingsType && r) { const bad = assignable(r.type, settingsType); if (bad) this.refuse('C002', c.path, `settings: ${bad}`, 'settings', `wilanis describe ${c.doc.kind}`); }
   }
 
-  // ---- params and resolvers -----------------------------------------------------------------------
+  // ---- resolvers ----------------------------------------------------------------------------------
 
   /**
    * Check a resolvers block. Answers name -> returns type. `allowRequest`: whether {{request.*}} is legal
@@ -177,8 +176,7 @@ class Checker {
         if (root in resolvers) { const t = resolveType(root, [...stack, name]); return t ? typeAt(t, path) : `resolver '${root}' could not be typed`; }
         return `'${root}' is not a resolver here (resolvers: ${Object.keys(resolvers).join(', ')}); a resolver reads request.* and other resolvers`;
       };
-      this.checkFieldsValue(spec.in ?? {}, o.op.accepts, resolve, file, `resolvers/${name}/in`, `'${spec.run}' accepts`, true, from, null);
-      const subst = this.checkFieldsValue(spec.params ?? {}, o.op.params, resolve, file, `resolvers/${name}/params`, `'${spec.run}' params`, true, from, null);
+      const subst = this.checkInputs(spec.in ?? {}, o.op.accepts, this.reader(resolve, file), file, `resolvers/${name}/in`, `'${spec.run}'`, from, null);
       let ret = this.type(o.op.returns, o.port.path, 'returns') ?? EMPTY_OBJECT;
       if (hasVars(ret)) ret = substitute(ret, subst);
       types[name] = ret;
@@ -197,47 +195,61 @@ class Checker {
     return o;
   }
 
-  /** Judge a params-like literal against a Fields contract. Answers the variables bound by `type` params. */
-  checkFieldsValue(value: Record<string, unknown>, contract: Fields | undefined, resolve: (root: string, path: string[]) => Read | string, file: string, at: string, what: string, report: boolean, from: Loaded, layer: 'edge' | 'core' | null): Record<string, Type> {
-    const subst: Record<string, Type> = {};
-    const c = contract ?? {};
-    const refuse = (msg: string, where: string, hint?: string) => { if (report) this.refuse('P001', file, msg, where, hint); };
-    for (const k of Object.keys(value)) if (!(k in c)) refuse(`'${k}' is not in ${what} (${Object.keys(c).join(', ') || 'nothing'})`, `${at}/${k}`, 'wilanis describe <port>');
-    for (const [k, f] of Object.entries(c)) {
-      if (!(k in value)) { if (f.required !== false) refuse(`${what} requires '${k}'`, at); continue; }
-      const want = this.quiet(f.type);
-      if (!want) continue;
-      if (want.kind === 'type') {
-        const v = value[k];
-        if (typeof v !== 'string') { refuse(`'${k}' is a type reference, written as a string`, `${at}/${k}`); continue; }
-        const t = report ? this.type(v, file, `${at}/${k}`) : this.quiet(v);
-        if (!t) continue;
-        if (report) this.checkLayer(v, from, `${at}/${k}`, layer, `param '${k}'`);
-        if (f.binds) subst[f.binds] = t;
-        continue;
-      }
-      const got = this.s.paramRead(value[k], resolve);
-      if (typeof got === 'string') { refuse(`'${k}': ${got}`, `${at}/${k}`); continue; }
-      if (got.optional && f.required !== false) { refuse(`'${k}' may be missing at run time but ${what} requires it`, `${at}/${k}`, 'read a required path, or make the contract field optional'); continue; }
-      const bad = assignable(got.type, want);
-      if (bad) refuse(`'${k}': ${bad}`, `${at}/${k}`);
-    }
-    return subst;
-  }
+  // ---- inputs: one grammar, judged against accepts -----------------------------------------------
 
-  /** Judge wired inputs against an accepts contract, with the operation's type variables bound by `subst`. */
-  checkInputsAgainst(given: Record<string, Read | undefined>, accepts: Fields | undefined, file: string, at: string, what: string, subst: Record<string, Type> = {}) {
+  /**
+   * Judge the values given where an operation is called against what it accepts. Fields of type `type`
+   * and fields marked static must be literals: the checker reads them here, and binds the variables the
+   * type fields name. Every other value is typed by `read` in the caller's context. `extra` are inputs
+   * typed elsewhere (a map's bound element). Answers the bound variables.
+   */
+  checkInputs(given: Record<string, unknown>, accepts: Fields | undefined, read: (value: unknown, at: string) => Read | undefined, file: string, at: string, what: string, from: Loaded, layer: 'edge' | 'core' | null, extra: Record<string, Read> = {}): Record<string, Type> {
     const c = accepts ?? {};
-    for (const k of Object.keys(given)) if (!(k in c)) this.refuse('G006', file, `'${k}' is not an input of ${what} (inputs: ${Object.keys(c).join(', ') || 'none'})`, `${at}/${k}`, 'wilanis describe <port>');
+    for (const k of new Set([...Object.keys(given), ...Object.keys(extra)])) if (!(k in c)) this.refuse('G006', file, `'${k}' is not an input of ${what} (inputs: ${Object.keys(c).join(', ') || 'none'})`, `${at}/${k}`, 'wilanis describe <port>');
+    const subst: Record<string, Type> = {};
+    // type fields first: the rest may be typed through the variables they bind
     for (const [k, f] of Object.entries(c)) {
-      if (!(k in given)) { if (f.required !== false) this.refuse('G005', file, `${what} requires input '${k}'`, at); continue; }
-      const r = given[k]; if (!r) continue;
+      if (this.quiet(f.type)?.kind !== 'type') continue;
+      if (!(k in given)) { if (f.required !== false) this.refuse('G005', file, `${what} requires '${k}'`, at); continue; }
+      const v = given[k];
+      if (typeof v !== 'string' || !this.s.literal(v)) { this.refuse('P001', file, `'${k}' is a type reference, written as a literal string`, `${at}/${k}`, 'e.g. "@shapes/Task.shape.json[]"'); continue; }
+      const t = this.type(v, file, `${at}/${k}`);
+      if (!t) continue;
+      this.checkLayer(v, from, `${at}/${k}`, layer, `'${k}'`);
+      if (f.binds) subst[f.binds] = t;
+    }
+    for (const [k, f] of Object.entries(c)) {
+      if (this.quiet(f.type)?.kind === 'type') continue;
+      let r: Read | undefined;
+      if (k in extra) r = extra[k];
+      else if (k in given) {
+        if (f.static && !this.s.literal(given[k])) { this.refuse('P001', file, `'${k}' is static: write the value, not a read`, `${at}/${k}`, 'a static field is judged before anything runs'); continue; }
+        r = read(given[k], `${at}/${k}`);
+      } else { if (f.required !== false) this.refuse('G005', file, `${what} requires input '${k}'`, at); continue; }
+      if (!r) continue;
       let want = this.type(f.type, file, `${at}/${k}`); if (!want) continue;
       if (hasVars(want)) want = substitute(want, subst);
       if (r.optional && f.required !== false) { this.refuse('G004', file, `'${k}' may be missing at run time but ${what} requires it`, `${at}/${k}`, 'route around it with a switch on has(...), or make the contract field optional'); continue; }
       const bad = assignable(r.type, want);
       if (bad) this.refuse('G004', file, `'${k}': ${bad}`, `${at}/${k}`);
     }
+    return subst;
+  }
+
+  /** The variables an operation's type fields bind at a call site, quietly. */
+  private bindsOf(given: Record<string, unknown>, accepts: Fields | undefined): Record<string, Type> {
+    const subst: Record<string, Type> = {};
+    for (const [k, f] of Object.entries(accepts ?? {})) if (f.binds && f.type === 'type' && typeof given[k] === 'string') { const t = this.quiet(given[k] as string); if (t) subst[f.binds] = t; }
+    return subst;
+  }
+
+  /** A `read` whose templates `resolve` types; a read that cannot be typed is G003. */
+  private reader(resolve: (root: string, path: string[]) => Read | string | undefined, file: string): (value: unknown, at: string) => Read | undefined {
+    return (value, at) => {
+      const r = this.s.valueRead(value, resolve);
+      if (typeof r === 'string') { this.refuse('G003', file, r, at); return undefined; }
+      return r;
+    };
   }
 
   // ---- bindings -----------------------------------------------------------------------------------
@@ -277,20 +289,20 @@ class Checker {
         if (!o) continue;
         if (!o.port.native) { this.refuse('L002', b.path, `'${opName}' delegates to domain operation '${bop.run}' -- a binding speaks native ports only`, `${at}/run`); continue; }
         if (o.op.pure !== true && !effects.has(`${o.path}#${o.opName}`)) this.refuse('L003', b.path, `'${opName}' delegates to effectful '${o.path}#${o.opName}' which the feature does not allow`, `${at}/run`, `add "${o.path}#${o.opName}" to ${effectsAt}`);
-        let tAccepts = this.fieldsType(o.op.accepts, o.port.path, 'accepts');
         let tReturns = this.type(o.op.returns, o.port.path, 'returns');
         const resolve = (root: string, path: string[]): Read | string => {
           if (root in rtypes) return typeAt(rtypes[root], path);
           if (root === 'in') return accepts ? typeAt(accepts, path) : 'this operation accepts nothing';
           return `'${root}' is not in or a resolver of this binding (resolvers: ${Object.keys(rtypes).join(', ') || 'none'})`;
         };
-        const subst = this.checkFieldsValue(bop.params ?? {}, o.op.params, resolve, b.path, `${at}/params`, `'${bop.run}' params`, true, b, null);
-        if (tAccepts && hasVars(tAccepts)) tAccepts = substitute(tAccepts, subst);
+        // what the delegate gets: the statement's own values, and the caller's by name for the rest
+        const given: Record<string, unknown> = { ...(bop.in ?? {}) };
+        for (const k of Object.keys(o.op.accepts ?? {})) if (!(k in given) && op.accepts?.[k]) given[k] = `{{in.${k}}}`;
+        const subst = this.checkInputs(given, o.op.accepts, this.reader(resolve, b.path), b.path, `${at}/in`, `'${bop.run}'`, b, null);
         if (tReturns && hasVars(tReturns)) tReturns = substitute(tReturns, subst);
-        if (accepts && tAccepts) { const bad = assignable(accepts, tAccepts); if (bad) this.refuse('B005', b.path, `'${opName}' accepts → '${bop.run}' accepts: ${bad}`, `${at}/run`, 'a delegation passes inputs by name; otherwise bind a data graph'); }
         if (returns) {
           if (!tReturns) this.refuse('B005', b.path, `'${opName}' returns ${show(returns)} but '${bop.run}' returns nothing`, `${at}/run`);
-          else { const bad = assignable(tReturns, returns); if (bad) this.refuse('B005', b.path, `'${bop.run}' returns ${show(tReturns)} → '${opName}' returns ${show(returns)}: ${bad}`, `${at}/run`, 'declare the answer type in params, or bind a data graph that shapes it'); }
+          else { const bad = assignable(tReturns, returns); if (bad) this.refuse('B005', b.path, `'${bop.run}' returns ${show(tReturns)} → '${opName}' returns ${show(returns)}: ${bad}`, `${at}/run`, 'declare the answer type in in, or bind a data graph that shapes it'); }
         }
       }
     }
@@ -336,19 +348,13 @@ class Checker {
       if (role === 'data' && o.port.native && o.op.pure !== true && !effects.has(`${o.path}#${o.opName}`)) this.refuse('L003', file, `node '${n.id}' runs effectful '${o.path}#${o.opName}' which the feature does not allow`, `nodes/${n.id}`, `add "${o.path}#${o.opName}" to ${effectsAt}`);
     }
 
-    // sources and node output types (lazy: a node's output type may depend on its type params)
+    // reads and node output types (lazy: a node's output type may depend on its type fields)
     const readsIn = new Set<string>(), readsConst = new Set<string>(), readNodes = new Set<string>();
     const outTypes = new Map<string, Type | undefined>();
     const computing = new Set<string>();
     const present = new Map<string, Set<string>>(); // node -> source paths a routing switch proved present
     let reading: string | undefined;
     const narrowed = (src: string) => { const set = reading ? present.get(reading) : undefined; return Boolean(set && [...set].some(p => src === p || src.startsWith(p + '.'))); };
-
-    const paramResolve = (root: string, path: string[]): Read | string => {
-      if (root in rtypes) return typeAt(rtypes[root], path);
-      if (root === 'in') { if (!inType) return 'the graph declares no in'; readsIn.add(path[0] ?? '*'); return typeAt(inType, path); }
-      return `'${root}' is not in or a resolver of this graph (resolvers: ${Object.keys(rtypes).join(', ') || 'none'})`;
-    };
 
     const nodeOut = (id: string): Type | undefined => {
       if (outTypes.has(id)) return outTypes.get(id);
@@ -359,100 +365,67 @@ class Checker {
       if (computing.has(id)) return undefined;
       computing.add(id);
       let ret = this.quiet(o.op.returns) ?? EMPTY_OBJECT;
-      if (hasVars(ret)) ret = substitute(ret, this.checkFieldsValue(n.params ?? {}, o.op.params, paramResolve, file, `nodes/${id}/params`, '', false, g, layer));
+      if (hasVars(ret)) ret = substitute(ret, this.bindsOf(n.in ?? {}, o.op.accepts));
       computing.delete(id);
       const t: Type = isMap(n) ? { kind: 'list', of: ret } : ret;
       outTypes.set(id, t);
       return t;
     };
 
-    const sourceRead = (src: Source, at: string, report = true): Read | undefined => {
-      const refuse = (code: string, msg: string, where: string, hint?: string) => { if (report) this.refuse(code, file, msg, where, hint); };
-      if (typeof src === 'string') {
-        const [root, ...path] = src.split('.');
-        let base: Type | undefined;
-        if (root === 'in') {
-          if (!inType) { refuse('G003', `reads '${src}' but the graph declares no in`, at); return undefined; }
-          base = inType; readsIn.add(path[0] ?? '*');
-        } else if (root === 'const') {
-          if (!path.length || !constTypes[path[0]]) { refuse('G003', `unknown constant '${src}' (constants: ${Object.keys(constTypes).join(', ') || 'none'})`, at); return undefined; }
-          base = constTypes[path[0]]; readsConst.add(path[0]); path.shift();
-        } else if (root === 'request') {
-          refuse('G003', `graphs do not read request.* -- a resolver's in does`, at, 'declare a resolver and read {{name.path}} in params');
-          return undefined;
-        } else {
-          if (!nodes.has(root)) { refuse('G003', `unknown node '${root}' in source '${src}'`, at, `nodes: ${[...nodes.keys()].join(', ')}`); return undefined; }
-          readNodes.add(root);
-          base = nodeOut(root);
-          if (!base) return undefined;
-        }
-        const r = typeAt(base, path);
-        if (typeof r === 'string') { refuse('G003', `'${src}': ${r}`, at); return undefined; }
-        return r.optional && narrowed(src) ? { type: r.type, optional: false } : r;
+    /** Type one root a value reads: the input, a constant, a resolver, or a node. */
+    const rootRead = (root: string, path: string[]): Read | string | undefined => {
+      if (root === 'in') {
+        if (!inType) return `reads in.${path.join('.')} but the graph declares no in`;
+        readsIn.add(path[0] ?? '*');
+        return typeAt(inType, path);
       }
-      if (Array.isArray(src)) {
-        const reads = src.map((s, i) => sourceRead(s, `${at}/${i}`, report));
-        if (reads.some(r => !r)) return undefined;
-        const first = reads[0] as Read | undefined;
-        if (!first) return { type: { kind: 'list', of: { kind: 'unknown' } }, optional: false };
-        for (const [i, r] of reads.entries()) { const bad = assignable(r!.type, first.type); if (bad) refuse('G004', `list element ${i} is ${show(r!.type)}, element 0 is ${show(first.type)}`, `${at}/${i}`, 'a list holds one type'); }
-        return { type: { kind: 'list', of: first.type }, optional: false };
+      if (root === 'const') {
+        if (!path.length || !constTypes[path[0]]) return `unknown constant 'const.${path.join('.')}' (constants: ${Object.keys(constTypes).join(', ') || 'none'})`;
+        readsConst.add(path[0]);
+        return typeAt(constTypes[path[0]], path.slice(1));
       }
-      const fields: Record<string, { type: Type; required: boolean }> = {};
-      for (const [k, s] of Object.entries(src)) {
-        const r = sourceRead(s, `${at}/${k}`, report);
-        if (!r) return undefined;
-        fields[k] = { type: r.type, required: !r.optional };
-      }
-      return { type: { kind: 'object', fields, open: false }, optional: false };
+      if (root === 'request') return `graphs do not read request.* -- a resolver's in does; read {{name.path}} instead`;
+      if (root in rtypes) return typeAt(rtypes[root], path);
+      if (!nodes.has(root)) return `unknown node '${root}' (nodes: ${[...nodes.keys()].join(', ')})`;
+      readNodes.add(root);
+      const base = nodeOut(root);
+      if (!base) return undefined; // its operation was refused already
+      return typeAt(base, path);
     };
-
-    const givenReads = (n: Node, at: string): Record<string, Read | undefined> => {
-      const given: Record<string, Read | undefined> = {};
-      const prev = reading; reading = n.id;
-      for (const [k, s] of Object.entries(n.in ?? {})) given[k] = sourceRead(s, `${at}/in/${k}`);
-      if (isMap(n)) {
-        const over = sourceRead(n.over, `${at}/over`);
-        if (over) {
-          if (over.type.kind !== 'list') this.refuse('G012', file, `over is ${show(over.type)}, not a list`, `${at}/over`);
-          else if (over.optional) this.refuse('G004', file, `over may be missing at run time`, `${at}/over`);
-          else if (n.bind) {
-            for (const [k, p] of Object.entries(n.bind)) {
-              const r = typeAt(over.type.of, p ? p.split('.') : []);
-              if (typeof r === 'string') { this.refuse('G012', file, `bind.${k}: ${r}`, `${at}/bind/${k}`); continue; }
-              if (k in given) this.refuse('G006', file, `'${k}' is both bound and wired`, `${at}/bind/${k}`);
-              given[k] = r;
-            }
-          } else {
-            if ('item' in given) this.refuse('G006', file, `'item' is the element; do not wire it`, `${at}/in/item`);
-            given.item = { type: over.type.of, optional: false };
-          }
-        }
-      }
-      reading = prev;
-      return given;
+    /** Type one value; a whole template the routing switch proved present loses its optionality. */
+    const valueRead = (value: unknown, at: string): Read | undefined => {
+      const r = this.s.valueRead(value, rootRead);
+      if (typeof r === 'string') { this.refuse('G003', file, r, at); return undefined; }
+      if (!r) return undefined;
+      if (r.optional && typeof value === 'string') { const whole = WHOLE_TEMPLATE.exec(value); if (whole && narrowed(whole[1])) return { type: r.type, optional: false }; }
+      return r;
     };
+    /** valueRead with the narrowing of node `id` in force. */
+    const readFor = (id: string) => (value: unknown, at: string): Read | undefined => { const prev = reading; reading = id; try { return valueRead(value, at); } finally { reading = prev; } };
 
     const routedBy = new Map<string, string>();
     const deps = new Map<string, Set<string>>();
     for (const n of nodes.values()) {
       const at = `nodes/${n.id}`;
       const d = new Set<string>();
-      const collect = (src: Source) => { if (typeof src === 'string') { const root = src.split('.')[0]; if (nodes.has(root)) d.add(root); } else if (Array.isArray(src)) src.forEach(collect); else Object.values(src).forEach(collect); };
-      Object.values(n.in ?? {}).forEach(collect);
-      if (isMap(n)) collect(n.over);
+      for (const p of this.s.templateReads(isMap(n) ? [n.in ?? {}, n.over] : n.in ?? {})) if (nodes.has(p[0])) d.add(p[0]);
       deps.set(n.id, d);
+      const read = readFor(n.id);
 
       if (isSwitch(n)) {
         const inputs: Record<string, Read> = {};
-        for (const [k, s] of Object.entries(n.in)) { const r = sourceRead(s, `${at}/in/${k}`); if (r) inputs[k] = r; }
+        for (const [k, v] of Object.entries(n.in)) { const r = read(v, `${at}/in/${k}`); if (r) inputs[k] = r; }
         for (const [i, rule] of n.rules.entries()) {
           try {
             const parsed = expr.parse(rule.when);
             const t = expr.check(parsed, inputs);
             if (t.kind !== 'boolean') this.refuse('G011', file, `rule ${i}: '${rule.when}' is ${show(t)}, not boolean`, `${at}/rules/${i}/when`);
+            // has(x) on a read input proves that path present for the node the rule routes to
             const proved = new Set<string>();
-            const walk = (e: expr.Expr) => { if (e.t === 'bin' && e.op === '&&') { walk(e.l); walk(e.r); } else if (e.t === 'has') { const src = n.in[e.p[0]]; if (typeof src === 'string') proved.add([src, ...e.p.slice(1)].join('.')); } };
+            const walk = (e: expr.Expr) => {
+              if (e.t === 'bin' && e.op === '&&') { walk(e.l); walk(e.r); }
+              else if (e.t === 'has') { const v = n.in[e.p[0]]; const whole = typeof v === 'string' ? WHOLE_TEMPLATE.exec(v) : null; if (whole) proved.add([whole[1], ...e.p.slice(1)].join('.')); }
+            };
             walk(parsed);
             if (proved.size) present.set(rule.to, new Set([...(present.get(rule.to) ?? []), ...proved]));
           } catch (e) { this.refuse('G011', file, `rule ${i}: ${(e as Error).message}`, `${at}/rules/${i}/when`); }
@@ -468,9 +441,27 @@ class Checker {
       }
       const o = ops.get(n.id);
       if (!o) continue;
-      const given = givenReads(n, at);
-      const subst = this.checkFieldsValue(n.params ?? {}, o.op.params, paramResolve, file, `${at}/params`, `'${n.run}' params`, true, g, layer);
-      this.checkInputsAgainst(given, o.op.accepts, file, `${at}/in`, `'${n.run}'`, subst);
+      // a map's element arrives as `item`, or through bind: inputs typed from the list, not given in in
+      const extra: Record<string, Read> = {};
+      if (isMap(n)) {
+        const over = read(n.over, `${at}/over`);
+        if (over) {
+          if (over.type.kind !== 'list') this.refuse('G012', file, `over is ${show(over.type)}, not a list`, `${at}/over`);
+          else if (over.optional) this.refuse('G004', file, `over may be missing at run time`, `${at}/over`);
+          else if (n.bind) {
+            for (const [k, p] of Object.entries(n.bind)) {
+              const r = typeAt(over.type.of, p ? p.split('.') : []);
+              if (typeof r === 'string') { this.refuse('G012', file, `bind.${k}: ${r}`, `${at}/bind/${k}`); continue; }
+              if (k in (n.in ?? {})) this.refuse('G006', file, `'${k}' is both bound and given in in`, `${at}/bind/${k}`);
+              extra[k] = r;
+            }
+          } else {
+            if ('item' in (n.in ?? {})) this.refuse('G006', file, `'item' is the element; do not give it in in`, `${at}/in/item`);
+            extra.item = { type: over.type.of, optional: false };
+          }
+        }
+      }
+      this.checkInputs(n.in ?? {}, o.op.accepts, read, file, `${at}/in`, `'${n.run}'`, g, layer, extra);
       nodeOut(n.id);
     }
 
@@ -534,10 +525,10 @@ class Checker {
     if (doc.input !== undefined) {
       if (!tin) this.refuse('T003', file, 'input is mapped but the trigger declares no in', 'input');
       else {
-        const read = this.s.paramRead(doc.input, (root, path) => root === 'request' ? typeAt(ctx, path) : `'${root}': a trigger's input reads request.* only`);
+        const read = this.s.valueRead(doc.input, (root, path) => root === 'request' ? typeAt(ctx, path) : `'${root}': a trigger's input reads request.* only`);
         if (typeof read === 'string') this.refuse('T003', file, `input: ${read}`, 'input', `wilanis describe ${doc.kind} shows what this kind hands`);
-        else if (read.optional) this.refuse('T003', file, 'input reads a value that may be missing', 'input');
-        else { const bad = assignableWire(read.type, tin); if (bad) this.refuse('T003', file, `input → in: ${bad}`, 'input'); }
+        else if (read?.optional) this.refuse('T003', file, 'input reads a value that may be missing', 'input');
+        else if (read) { const bad = assignableWire(read.type, tin); if (bad) this.refuse('T003', file, `input → in: ${bad}`, 'input'); }
       }
     }
     const gin = this.quiet(g.doc.in), gout = this.quiet(g.doc.out?.type);
@@ -562,7 +553,7 @@ class Checker {
     const g = this.s.registry.get('graph', graphPath); if (!g) return [];
     const out: { path: string[]; file: string }[] = [];
     const reads = (resolvers: Resolvers | undefined, names: Iterable<string>, file: string) => {
-      for (const name of names) { const r = resolvers?.[name]; if (!r) continue; for (const p of this.s.templateReads({ ...(r.in ?? {}), ...(r.params ?? {}) })) if (p[0] === 'request') out.push({ path: p.slice(1), file }); }
+      for (const name of names) { const r = resolvers?.[name]; if (!r) continue; for (const p of this.s.templateReads(r.in ?? {})) if (p[0] === 'request') out.push({ path: p.slice(1), file }); }
     };
     reads(g.doc.resolvers, Object.keys(g.doc.resolvers ?? {}), g.path);
     for (const n of g.doc.nodes) {
@@ -574,13 +565,13 @@ class Checker {
       const bop = b.doc.operations[o.opName];
       if (!bop) continue;
       if (bop.graph) out.push(...this.requestNeeds(this.s.canon(bop.graph), profile, seen));
-      else reads(b.doc.resolvers, new Set(this.s.templateReads(bop.params).map(p => p[0])), b.path);
+      else reads(b.doc.resolvers, new Set(this.s.templateReads(bop.in).map(p => p[0])), b.path);
     }
     return out;
   }
 }
 
-/** Assignability at the edge: wire text (query, params, headers, form fields) may feed any scalar; the codec/trigger coerces and judges it at run time. */
+/** Assignability at the edge: wire text (query, route placeholders, headers, form fields) may feed any scalar; the codec/trigger coerces and judges it at run time. */
 function assignableWire(from: Type, to: Type): string | null {
   if (from.kind === 'string' && !from.enum && (to.kind === 'string' || to.kind === 'number' || to.kind === 'boolean')) return null;
   if (from.kind === 'list' && to.kind === 'list') return assignableWire(from.of, to.of);

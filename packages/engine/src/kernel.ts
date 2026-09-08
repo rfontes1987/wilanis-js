@@ -22,7 +22,6 @@ export function refsOf(src: KSource, out = new Set<string>()): Set<string> {
 export function nodeRefs(n: KNode): Set<string> {
   const out = new Set<string>();
   for (const s of Object.values(n.in)) refsOf(s, out);
-  if (n.kind !== 'switch') for (const s of Object.values(n.params)) refsOf(s, out);
   if (n.kind === 'map') refsOf(n.over, out);
   return out;
 }
@@ -146,7 +145,7 @@ export class Kernel {
       return { hit: false };
     };
 
-    const invoke = async (handler: string, args: { in: Record<string, unknown>; params: Record<string, unknown> }, ctx: RunContext) => {
+    const invoke = async (handler: string, args: { in: Record<string, unknown> }, ctx: RunContext) => {
       const stub = stubFor(ctx.nodePath);
       if (stub.hit) return stub.value;
       const h = this.handlers[handler];
@@ -174,16 +173,14 @@ export class Kernel {
             for (const t of new Set([...n.rules.map(r => r.to), n.else])) if (t !== selected) cancel(t);
           } else if (n.kind === 'call') {
             const inv = readAll(n.in, values);
-            const params = readAll(n.params, values);
-            rep.in = redactValue(inv, n.redact?.in) as Record<string, unknown>; rep.params = params;
-            const out = await invoke(n.handler, { in: inv, params }, ctxFor(id));
+            rep.in = redactValue(inv, n.redact?.in) as Record<string, unknown>;
+            const out = await invoke(n.handler, { in: inv }, ctxFor(id));
             rep.out = redactValue(out, n.redact?.out); values.set(id, out); rep.status = 'done';
           } else {
             const over = readSource(n.over, values);
             if (!Array.isArray(over)) throw new Error(`map '${id}': over is not a list`);
             const broadcast = readAll(n.in, values);
-            const params = readAll(n.params, values);
-            rep.in = { ...broadcast, over }; rep.params = params;
+            rep.in = { ...broadcast, over };
             rep.items = [];
             const results = await Promise.all(over.map(async (item, i) => {
               const inv: Record<string, unknown> = { ...broadcast };
@@ -191,7 +188,7 @@ export class Kernel {
               else inv.item = item;
               const ctx = ctxFor(id); ctx.nodePath = [...nodePath, id, String(i)];
               ctx.attach = sub => { rep.items![i] = sub; };
-              try { return { ok: true as const, value: await invoke(n.handler, { in: inv, params }, ctx) }; }
+              try { return { ok: true as const, value: await invoke(n.handler, { in: inv }, ctx) }; }
               catch (e) {
                 if (n.onItemFailure === 'collect') return { ok: false as const, error: (e as Error).message };
                 throw new Error(`map '${id}' element ${i}: ${(e as Error).message}`);
@@ -235,7 +232,7 @@ export class Kernel {
       const needs = new Set<string>();
       for (const id of pending) {
         const n = spec.nodes[id];
-        const srcs = [...Object.values(n.in), ...(n.kind !== 'switch' ? Object.values(n.params) : []), ...(n.kind === 'map' ? [n.over] : [])];
+        const srcs = [...Object.values(n.in), ...(n.kind === 'map' ? [n.over] : [])];
         for (const s of srcs) for (const p of rootPaths(s)) if (PSEUDO.has(p.split('.')[0]) && !values.has(p.split('.')[0])) needs.add(p);
       }
       return { graph: spec.name, status: 'blocked', needs: [...needs].sort(), nodes, startedAt, endedAt };

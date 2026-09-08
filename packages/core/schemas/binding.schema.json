@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/binding.schema.json",
   "title": "binding",
-  "description": "How a domain port is met. Each operation is bound to a data graph, or delegated to one native operation with its params fixed here -- the declared statement. Params may read {{in.*}} (the operation's accepts) and {{resolver.*}}.",
+  "description": "How a domain port is met. Each operation is bound to a data graph, or delegated to one native operation with its values fixed here -- the declared statement. A delegation's in may read {{in.*}} (the operation's accepts) and {{resolver.*}}; an input it does not give is passed from the operation's accepts by name.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -37,8 +37,8 @@
           "run": {
             "$ref": "common.schema.json#/$defs/opRef"
           },
-          "params": {
-            "$ref": "common.schema.json#/$defs/params"
+          "in": {
+            "$ref": "common.schema.json#/$defs/values"
           },
           "description": {
             "type": "string"
@@ -51,7 +51,7 @@
             ],
             "properties": {
               "run": false,
-              "params": false
+              "in": false
             }
           },
           {

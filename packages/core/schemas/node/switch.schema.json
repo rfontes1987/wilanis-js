@@ -15,7 +15,7 @@
       "type": "string"
     },
     "in": {
-      "$ref": "../common.schema.json#/$defs/sources"
+      "$ref": "../common.schema.json#/$defs/values"
     },
     "rules": {
       "type": "array",

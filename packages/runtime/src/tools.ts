@@ -9,33 +9,35 @@ import { Embedder } from './embed.js';
 import { runGraph, type EffectInfo } from '@wilanis/compiler';
 import type { Handler, Report } from '@wilanis/engine';
 import { generate, rng, substitute, hasVars, show, type Type } from '@wilanis/core';
-import { schemaUrl, splitOp, type Kind, type Loaded, type ScenarioDoc, type TriggerDoc, type TriggerKindDoc, type PortDoc, type GraphDoc, type AnyDoc } from '@wilanis/core';
+import { schemaUrl, splitOp, type Kind, type Loaded, type ScenarioDoc, type TriggerDoc, type TriggerKindDoc, type PortDoc, type GraphDoc, type BindingDoc, type AnyDoc } from '@wilanis/core';
+import { casesFor, setPath, switchesOf, type FoundSwitch } from './branches.js';
 
 // ---- stubbing ---------------------------------------------------------------------------------------
 
 const hash = (s: string) => { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
 
 /** Every effectful native operation answers a generated value of its declared type, deterministic per seed and node path. */
-export function stubEffects(seed: number, record?: Record<string, unknown>) {
-  return (info: EffectInfo): Handler => async ({ params, ctx }) => {
+export function stubEffects(seed: number, record?: Record<string, unknown>, types?: Record<string, Type>) {
+  return (info: EffectInfo): Handler => async ({ in: i, ctx }) => {
     const resolve = ctx.env.resolveType as ((ref: string) => Type) | undefined;
     let t = info.returns;
     if (t && hasVars(t) && resolve) {
       const subst: Record<string, Type> = {};
-      for (const [k, f] of Object.entries(info.op.params ?? {})) if (f.binds && typeof params[k] === 'string') { try { subst[f.binds] = resolve(params[k] as string); } catch { /* unknown */ } }
+      for (const [k, f] of Object.entries(info.op.accepts ?? {})) if (f.binds && f.type === 'type' && typeof i[k] === 'string') { try { subst[f.binds] = resolve(i[k] as string); } catch { /* unknown */ } }
       t = substitute(t, subst);
     }
     const key = ctx.nodePath.join('.');
     const value = t ? generate(t, rng(seed ^ hash(key))) : undefined;
     if (record) record[key] = value;
+    if (types && t) types[key] = t;
     return value;
   };
 }
 
-export function embedderFor(load: LoadResult, opts: { seed?: number; record?: Record<string, unknown>; profile?: string; env?: NodeJS.ProcessEnv } = {}): Embedder {
+export function embedderFor(load: LoadResult, opts: { seed?: number; record?: Record<string, unknown>; types?: Record<string, Type>; profile?: string; env?: NodeJS.ProcessEnv } = {}): Embedder {
   const scope = new Scope(load.registry, load.resolve);
   const env = opts.env ?? (opts.seed !== undefined ? fakeEnv(scope) : process.env);
-  return new Embedder(scope, load.plugins, { profile: opts.profile, stubEffects: opts.seed !== undefined ? stubEffects(opts.seed, opts.record) : undefined, env });
+  return new Embedder(scope, load.plugins, { profile: opts.profile, stubEffects: opts.seed !== undefined ? stubEffects(opts.seed, opts.record, opts.types) : undefined, env });
 }
 
 /** An environment where every declared secret is present, for runs that never leave the process. */
@@ -86,24 +88,319 @@ export function summarize(report: Report, indent = ''): string {
 
 // ---- rehearse ----------------------------------------------------------------------------------------
 
-/** Run every trigger once with stubbed effects. Every graph must settle (done or failed on purpose); blocked means a wiring hole. */
-export async function rehearse(load: LoadResult, opts: { seed?: number; profile?: string; verbose?: boolean } = {}): Promise<{ ok: boolean; lines: string[] }> {
-  const seed = opts.seed ?? 1;
-  const emb = embedderFor(load, { seed, profile: opts.profile });
-  const lines: string[] = [];
-  let ok = true;
-  for (const t of load.registry.all('trigger')) {
-    const { input, request } = generatedFire(emb, t, seed);
-    const report = await emb.fire(t.doc, input, request);
-    const failedNode = Object.entries(report.nodes).find(([, n]) => n.status === 'failed');
-    const leaf = failedLeaf(report);
-    const onPurpose = leaf?.handler?.endsWith('#fail');
-    const status = report.status === 'blocked' ? 'BLOCKED' : report.status;
-    if (report.status === 'blocked') ok = false;
-    lines.push(`${t.path} → ${t.doc.graph}: ${status}${failedNode ? ` (${failedNode[0]}: ${failedNode[1].error}${onPurpose ? ', declared' : ''})` : ''} ${report.endedAt - report.startedAt}ms`);
-    if (opts.verbose) lines.push(summarize(report, '    '));
+/** One line per outcome, and whether the whole rehearsal is acceptable. */
+export interface Rehearsal { ok: boolean; lines: string[] }
+
+/** What one run of one branch settled to, judged at the graph that owns the decision. */
+interface Settled {
+  /** done, failed, or BLOCKED. */
+  status: string;
+  /** The declared failure, when the graph failed on purpose at a #fail node. */
+  declared?: string;
+  /** A failure the graph did not declare: a bug, not a designed outcome. */
+  error?: string;
+  /** A declared failure that came from a graph this one calls, and the node it came through. */
+  propagated?: { node: string; error: string };
+  blocked: boolean;
+  /** The node the switch actually routed to, when it is not the one the branch aimed at. */
+  misrouted?: string;
+}
+
+/** The report of the graph at a dotted node path, or the whole report at the top. */
+function reportAt(report: Report, prefix: string[]): Report | undefined {
+  let cur: Report | undefined = report;
+  for (const seg of prefix) {
+    const n: Report['nodes'][string] | undefined = cur?.nodes?.[seg];
+    if (!n) return undefined;
+    cur = n.sub;
   }
-  return { ok, lines };
+  return cur;
+}
+
+/**
+ * Judge one run at the graph that owns the switch. A branch that routes correctly into a nested graph
+ * which then declares a failure is a success of the routing, so the outcome is read where the decision
+ * was made rather than at the trigger, where every nested failure looks alike.
+ */
+function settle(report: Report, sw: FoundSwitch, aim: string): Settled {
+  const local = reportAt(report, sw.prefix) ?? report;
+  const node = local.nodes[sw.at.split('.').pop()!];
+  const took = node?.selected;
+  const misrouted = took !== undefined && took !== aim ? took : undefined;
+  const failed = Object.entries(local.nodes).find(([, n]) => n.status === 'failed');
+  const out: Settled = {
+    status: local.status === 'blocked' ? 'BLOCKED' : local.status,
+    blocked: local.status === 'blocked',
+    misrouted,
+  };
+  if (local.status !== 'failed' || !failed) return out;
+  const [id, n] = failed;
+  // a fail node in THIS graph is a declared outcome; a failure that arrived from a graph this one calls
+  // is that graph's declared outcome surfacing here, and naming it as ours would credit the wrong document
+  if (n.handler?.endsWith('#fail')) { out.declared = n.error ?? ''; return out; }
+  const deeper = n.sub ? failedLeaf(n.sub) : undefined;
+  if (deeper?.handler?.endsWith('#fail')) { out.propagated = { node: id, error: deeper.error ?? '' }; return out; }
+  out.error = `${id}: ${n.error}`;
+  return out;
+}
+
+/**
+ * Run every trigger with stubbed effects, and every branch of every switch those triggers reach.
+ *
+ * A rehearsal answers one question: is every path through this project wired up? Effects are stubbed, so
+ * nothing leaves the process; what is being judged is the routing, not the data. Each switch is solved
+ * from its own rules -- the inputs that make one rule true while the rules before it are false -- so a
+ * branch is exercised whether or not a generated value would have happened to reach it.
+ *
+ * A branch is acceptable when it settles: the graph answers, or it fails at a #fail node it declared.
+ * It is a problem when the graph blocks (an input nothing supplies), fails somewhere it did not declare,
+ * routes somewhere other than where its rule points, or when no inputs can reach the branch at all.
+ */
+export async function rehearse(load: LoadResult, opts: { seed?: number; profile?: string; verbose?: boolean } = {}): Promise<Rehearsal> {
+  const seed = opts.seed ?? 1;
+  const lines: string[] = [];
+  const decisions: Decision[] = [];
+  const settledGraphs: { trigger: string; graph: string; status: string; declared?: string; error?: string }[] = [];
+  for (const t of load.registry.all('trigger')) {
+    const found = await rehearseTrigger(load, t, seed, opts, decisions);
+    if (!found) {
+      // no switch anywhere under this trigger: one run is the whole of it
+      const emb = embedderFor(load, { seed, profile: opts.profile });
+      const { input, request } = generatedFire(emb, t, seed);
+      const report = await emb.fire(t.doc, input, request);
+      const leaf = failedLeaf(report);
+      const onPurpose = leaf?.handler?.endsWith('#fail');
+      const failed = Object.entries(report.nodes).find(([, n]) => n.status === 'failed');
+      settledGraphs.push({
+        trigger: t.name, graph: t.doc.graph,
+        status: report.status === 'blocked' ? 'BLOCKED' : report.status,
+        declared: report.status === 'failed' && onPurpose ? leaf?.error : undefined,
+        error: report.status === 'failed' && !onPurpose ? (failed ? `${failed[0]}: ${failed[1].error}` : 'failed') : undefined,
+      });
+    }
+  }
+  return { ok: format(decisions, settledGraphs, lines, opts.verbose), lines };
+}
+
+/** One switch, its branches, and what each settled to. Named by the graph that declares it. */
+interface Decision {
+  /** The graph document that declares the switch. */
+  graph: string;
+  /** The switch's node id within that graph. */
+  node: string;
+  /** The triggers whose runs reach this switch. */
+  triggers: string[];
+  branches: { when: string; to: string; settled?: Settled; uncovered?: string }[];
+}
+
+/** Merge a switch's result into the decisions already gathered, so a shared graph is reported once. */
+function gather(decisions: Decision[], d: Decision) {
+  const hit = decisions.find(x => x.graph === d.graph && x.node === d.node);
+  if (!hit) { decisions.push(d); return; }
+  for (const tr of d.triggers) if (!hit.triggers.includes(tr)) hit.triggers.push(tr);
+  // the same switch reached from two triggers should settle the same way; keep the worse of the two
+  for (const b of d.branches) {
+    const at = hit.branches.find(x => x.when === b.when && x.to === b.to);
+    if (!at) { hit.branches.push(b); continue; }
+    if (b.uncovered && !at.uncovered) { at.uncovered = b.uncovered; at.settled = undefined; }
+    if (b.settled && at.settled && (b.settled.error || b.settled.blocked || b.settled.misrouted)) at.settled = b.settled;
+  }
+}
+
+/**
+ * A switch rule as a condition to read. The expression is the truth, but `else` is not a condition and
+ * `status == 200 && has(body)` is not a sentence, so each is put in the words the report needs: what was
+ * arranged for this run.
+ */
+function phrase(when: string): string {
+  if (when === 'else') return 'anything else';
+  return `when ${when}`;
+}
+
+/**
+ * The report. Grouped by the graph that makes each decision, because that is the document to open when
+ * a branch is wrong -- a switch reached from two triggers is one decision, reported once.
+ *
+ * Answers whether the rehearsal passed: every branch settled, and none was left unreachable.
+ */
+function format(
+  decisions: Decision[],
+  plain: { trigger: string; graph: string; status: string; declared?: string; error?: string }[],
+  lines: string[],
+  verbose?: boolean,
+): boolean {
+  const problems: string[] = [];
+  const short = (g: string) => g.replace(/^@/, '').replace(/\.graph\.json$/, '');
+  for (const p of plain) {
+    if (p.error || p.status === 'BLOCKED') problems.push(`${short(p.graph)}: ${p.error ?? 'blocked -- an input it needs is never supplied'}`);
+    lines.push(`${short(p.graph)}  (no branches)`);
+    lines.push(`  ${p.status === 'done' ? 'answers' : p.status === 'BLOCKED' ? 'BLOCKED' : 'fails'}${p.declared ? ` as declared: ${p.declared}` : p.error ? `: ${p.error}` : ''}`);
+  }
+  for (const d of decisions) {
+    const covered = d.branches.filter(b => !b.uncovered).length;
+    lines.push(`${short(d.graph)}  switch '${d.node}'  ${covered}/${d.branches.length} branches${verbose ? `  [via ${d.triggers.join(', ')}]` : ''}`);
+    // one width for the whole decision, so the outcomes line up and the odd one out is visible
+    const w = Math.max(...d.branches.map(b => phrase(b.when).length));
+    for (const b of d.branches) {
+      const when = phrase(b.when).padEnd(w);
+      if (b.uncovered) {
+        lines.push(`  ??  ${when}  NEVER RUN -- ${b.uncovered}`);
+        problems.push(`${short(d.graph)} '${d.node}': the '${b.when}' branch to ${b.to} can never run -- ${b.uncovered}`);
+        continue;
+      }
+      const st = b.settled!;
+      if (st.misrouted) {
+        lines.push(`  !!  ${when}  WRONG ROUTE -- should go to '${b.to}', went to '${st.misrouted}'`);
+        problems.push(`${short(d.graph)} '${d.node}': '${b.when}' should route to ${b.to} but went to ${st.misrouted}`);
+        continue;
+      }
+      if (st.blocked) {
+        lines.push(`  !!  ${when}  BLOCKED at '${b.to}' -- an input it needs is never supplied`);
+        problems.push(`${short(d.graph)} '${d.node}': the branch to ${b.to} blocks -- an input it needs is never supplied`);
+        continue;
+      }
+      if (st.error) {
+        lines.push(`  !!  ${when}  BROKE at '${b.to}' -- ${st.error}`);
+        problems.push(`${short(d.graph)} '${d.node}': the branch to ${b.to} fails where the graph declares no failure -- ${st.error}`);
+        continue;
+      }
+      if (st.declared !== undefined) { lines.push(`  ok  ${when}  refused on purpose at '${b.to}': "${st.declared}"`); continue; }
+      if (st.propagated) { lines.push(`  ok  ${when}  went to '${b.to}', which refused it: "${st.propagated.error}"`); continue; }
+      lines.push(`  ok  ${when}  answered from '${b.to}'`);
+    }
+  }
+  const branches = decisions.reduce((n, d) => n + d.branches.length, 0);
+  lines.push('');
+  if (!problems.length) {
+    lines.push(`every branch settled -- ${branches} branch(es), ${decisions.length} decision(s), ${new Set(decisions.map(d => d.graph)).size} graph(s).`);
+    lines.push('"refused on purpose" is a fail node the graph declares: a designed outcome, not a fault. Effects are stubbed, so no request left this process.');
+    return true;
+  }
+  lines.push(`${problems.length} problem(s):`);
+  for (const p of problems) lines.push(`  - ${p}`);
+  return false;
+}
+
+/**
+ * Every branch of every switch one trigger reaches, each in its own run. The seed's values are recorded
+ * once, then each case patches only the fields its rule reads, so a branch differs from an ordinary run
+ * in the routing it forces and nothing else. Answers false when the trigger reaches no switch at all.
+ */
+async function rehearseTrigger(load: LoadResult, t: Loaded<TriggerDoc>, seed: number, opts: { profile?: string }, decisions: Decision[]): Promise<boolean> {
+  // a first run records what the seed generated for every effectful node, the base each case patches,
+  // and the type each node declared, so a case can generate a type-correct value for a field the seed
+  // left out. Nodes on a branch this run did not take are absent from the recording; those cases start
+  // from nothing and generate what they need from the declared type instead.
+  const record: Record<string, unknown> = {};
+  const types: Record<string, Type> = {};
+  const probe = embedderFor(load, { seed, record, types, profile: opts.profile });
+  const { input, request } = generatedFire(probe, t, seed);
+  await probe.fire(t.doc, input, request);
+
+  const spec = probe.graph(t.doc.graph).spec;
+  // A binding operation lowers to a wrapper spec holding a single node `op`, so a graph reached through
+  // a binding sits one level deeper than the document suggests: the kernel stubs it at `<node>.op.<id>`.
+  const nested = (handler: string): { nodes: Record<string, unknown> } | undefined => {
+    if (handler.startsWith('graph:')) {
+      try { return probe.graph(handler.slice('graph:'.length)).spec; } catch { return undefined; }
+    }
+    const ref = bindingGraph(probe, handler);
+    if (!ref) return undefined;
+    return { nodes: { op: { kind: 'call', handler: `graph:${ref}` } } };
+  };
+  const found = switchesOf(spec, nested);
+  if (!found.length) return false;
+
+  const inType = probe.types(t.doc).in;
+  const cases = (f: FoundSwitch) => casesFor(f, path => record[path], path => types[path], seed, input, inType);
+  /**
+   * The stubs and input that route every switch enclosing `sw` towards the node that contains it. A
+   * nested switch is otherwise cancelled before it runs, and its own case would land on a dead path.
+   */
+  const reach = (sw: FoundSwitch): { stubs: Record<string, unknown>; input: { path: string[]; value: unknown }[] } => {
+    const stubs: Record<string, unknown> = {};
+    const patches: { path: string[]; value: unknown }[] = [];
+    for (const ancestorAt of sw.via) {
+      // the enclosing call is `<...>.<node>`; the switch governing it is a sibling in the same spec
+      const segs = ancestorAt.split('.');
+      const nodeId = segs[segs.length - 1];
+      const governing = found.find(f => f.prefix.join('.') === segs.slice(0, -1).join('.') && [...f.node.rules.map(r => r.to), f.node.else].includes(nodeId));
+      if (!governing) continue;
+      const want = cases(governing).find(c => c.branch.to === nodeId && !c.branch.unsolved && !c.unreachable?.length);
+      if (!want) continue;
+      Object.assign(stubs, want.stubs);
+      patches.push(...(want.input ?? []));
+    }
+    return { stubs, input: patches };
+  };
+
+  // The probe took one path, so nodes behind every branch it did not take are absent from the recording
+  // and their declared types are unknown -- a case built from nothing cannot generate a typed value. One
+  // run per switch, steered to reach it, fills the recording before any case is built from it.
+  for (const sw of found) {
+    if (!sw.via.length) continue;
+    const pre = reach(sw);
+    let warm = input;
+    for (const p of pre.input) warm = setPath(warm, p.path, p.value);
+    const w = embedderFor(load, { seed, record, types, profile: opts.profile });
+    await w.fire(t.doc, warm, request, { stubs: pre.stubs });
+  }
+
+  for (const sw of found) {
+    const pre = reach(sw);
+    // A branch of this switch is about where it routes. What the graph it routes into then decides is
+    // that graph's own business, reported under its own decision -- so steer those to the branch that
+    // answers, and this decision reports its routing rather than an incidental downstream refusal.
+    const downstream: Record<string, unknown> = {};
+    for (const other of found) {
+      if (other === sw) continue;
+      // strictly inside a node this switch routes to: its prefix extends this switch's own
+      const here = sw.prefix.join('.');
+      const there = other.prefix.join('.');
+      if (there === here || !(here === '' || there.startsWith(`${here}.`))) continue;
+      const answering = cases(other).find(c => c.branch.rule >= 0 && !c.branch.unsolved && !c.unreachable?.length);
+      if (answering) Object.assign(downstream, answering.stubs);
+    }
+    const d: Decision = { graph: graphOf(probe, t, sw), node: sw.at.split('.').pop()!, triggers: [t.name], branches: [] };
+    for (const c of cases(sw)) {
+      const at = { when: c.branch.when, to: c.branch.to };
+      if (c.branch.unsolved) { d.branches.push({ ...at, uncovered: c.branch.unsolved }); continue; }
+      if (c.unreachable?.length) { d.branches.push({ ...at, uncovered: `${c.unreachable.join(', ')} is the trigger's own input and the rehearsal cannot vary it` }); continue; }
+      const emb = embedderFor(load, { seed, profile: opts.profile });
+      // a demand on the graph's own input is met by firing with a patched input, not by a stub
+      let fired = input;
+      for (const p of [...pre.input, ...(c.input ?? [])]) fired = setPath(fired, p.path, p.value);
+      const report = await emb.fire(t.doc, fired, request, { stubs: { ...downstream, ...pre.stubs, ...c.stubs } });
+      d.branches.push({ ...at, settled: settle(report, sw, c.branch.to) });
+    }
+    gather(decisions, d);
+  }
+  return true;
+}
+
+/** The graph document a switch belongs to: the trigger's own graph, or the one its enclosing call runs. */
+function graphOf(emb: Embedder, t: Loaded<TriggerDoc>, sw: FoundSwitch): string {
+  let spec = emb.graph(t.doc.graph).spec as { nodes: Record<string, unknown> };
+  let graph = emb.scope.canon(t.doc.graph);
+  for (const seg of sw.prefix) {
+    const n = spec.nodes?.[seg] as Record<string, unknown> | undefined;
+    const handler = typeof n?.handler === 'string' ? n.handler : undefined;
+    if (!handler) continue;
+    const ref = handler.startsWith('graph:') ? handler.slice('graph:'.length) : bindingGraph(emb, handler);
+    if (!ref) continue;
+    graph = emb.scope.canon(ref);
+    try { spec = emb.graph(ref).spec; } catch { /* keep what we have */ }
+  }
+  return graph;
+}
+
+/** The graph a binding operation runs, when its handler names one. */
+function bindingGraph(emb: Embedder, handler: string): string | undefined {
+  const hash = handler.lastIndexOf('#');
+  if (hash < 0) return undefined;
+  const [path, opName] = [handler.slice(0, hash), handler.slice(hash + 1)];
+  try { return (emb.scope.get('binding', path)?.doc as BindingDoc | undefined)?.operations?.[opName]?.graph; }
+  catch { return undefined; }
 }
 
 // ---- fuzz / regress ----------------------------------------------------------------------------------
@@ -203,8 +500,7 @@ export function describe(load: LoadResult, ref: string): string {
   if (doc.kind === 'port') {
     for (const [name, op] of Object.entries((doc.doc as PortDoc).operations)) {
       lines.push(`#${name}${op.pure ? '  (pure)' : ''}: ${op.description}`);
-      for (const [k, f] of Object.entries(op.accepts ?? {})) lines.push(`    in  ${k}${f.required === false ? '?' : ''}: ${showType(f.type)}${f.description ? '  -- ' + f.description : ''}`);
-      for (const [k, f] of Object.entries(op.params ?? {})) lines.push(`    param ${k}${f.required === false ? '?' : ''}: ${typeof f.type === 'string' ? f.type : showType(f.type)}${f.binds ? ` binds ${f.binds}` : ''}${f.enum ? ` ∈ ${f.enum.join('|')}` : ''}${f.description ? '  -- ' + f.description : ''}`);
+      for (const [k, f] of Object.entries(op.accepts ?? {})) lines.push(`    in  ${k}${f.required === false ? '?' : ''}: ${f.type === 'type' ? 'type' : showType(f.type)}${f.static || f.type === 'type' ? '  (static)' : ''}${f.binds ? ` binds ${f.binds}` : ''}${f.enum ? ` ∈ ${f.enum.join('|')}` : ''}${f.description ? '  -- ' + f.description : ''}`);
       if (op.returns) lines.push(`    returns ${showType(op.returns)}`);
     }
   } else if (doc.kind === 'trigger-kind' || doc.kind === 'connection-kind' || doc.kind === 'plugin') {
@@ -266,7 +562,7 @@ export function scaffold(root: string, kind: string, target: string, opts: Recor
       files.push([`${target}.port.json`, { $schema: S('port'), description: 'TODO', operations: { example: { description: 'TODO', accepts: {}, returns: 'string' } } }]);
       break;
     case 'graph':
-      files.push([`${target}.graph.json`, { $schema: S('graph'), description: 'TODO', nodes: [{ type: '@wilanis/node/run.schema.json', id: 'first', run: '@std/text.port.json#format', in: { values: {} }, params: { template: 'hello' } }], out: { type: 'string', from: 'first' } }]);
+      files.push([`${target}.graph.json`, { $schema: S('graph'), description: 'TODO', nodes: [{ type: '@wilanis/node/run.schema.json', id: 'first', run: '@std/text.port.json#format', in: { values: {}, template: 'hello' } }], out: { type: 'string', from: 'first' } }]);
       break;
     case 'binding':
       files.push([`${target}.binding.json`, { $schema: S('binding'), description: 'TODO', port: opts.port ?? '@features/<feature>/<name>.port.json', operations: {} }]);

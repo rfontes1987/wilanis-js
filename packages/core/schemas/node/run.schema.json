@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/node/run.schema.json",
   "title": "node/run",
-  "description": "Run one operation. Runs the moment every source it reads has settled.",
+  "description": "Run one operation. in gives every value it takes: a literal, or {{node.path}} / {{in.path}} / {{const.name}} / {{resolver.path}} to read one. Runs the moment every value it reads has settled.",
   "type": "object",
   "properties": {
     "type": {
@@ -18,10 +18,7 @@
       "$ref": "../common.schema.json#/$defs/opRef"
     },
     "in": {
-      "$ref": "../common.schema.json#/$defs/sources"
-    },
-    "params": {
-      "$ref": "../common.schema.json#/$defs/params"
+      "$ref": "../common.schema.json#/$defs/values"
     }
   },
   "required": [

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger-kind.schema.json",
   "title": "trigger-kind",
-  "description": "A plugin-shipped trigger contract: the settings a trigger of this kind carries (its own vocabulary), and the context it hands a run -- what a trigger's input mapping and resolvers read as request.*. A settings param of type `type` may bind a variable the context names (body: $Body).",
+  "description": "A plugin-shipped trigger contract: the settings a trigger of this kind carries (its own vocabulary), and the context it hands a run -- what a trigger's input mapping and resolvers read as request.*. A setting of type `type` may bind a variable the context names (body: $Body); a string setting may bind its {name} placeholders, as an object of required strings (route: $Params).",
   "type": "object",
   "properties": {
     "$schema": {

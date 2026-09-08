@@ -1,0 +1,61 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "description": "Data graph behind monitor.record: POST the record, take the row the API answers with 201.",
+  "in": "@shapes/EntryRecord.shape.json",
+  "out": {
+    "type": "@shapes/Entry.shape.json",
+    "from": [
+      "row",
+      "failed"
+    ]
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "asked",
+      "run": "@http/http.port.json#request",
+      "in": {
+        "body": "{{in}}",
+        "connection": "@connections/monitor-api.connection.json",
+        "method": "POST",
+        "path": "/monitor",
+        "consumes": "application/json",
+        "produces": "application/json",
+        "returns": "@shapes/EntryRow.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/switch.schema.json",
+      "id": "route",
+      "in": {
+        "status": "{{asked.status}}",
+        "body": "{{asked.body}}"
+      },
+      "rules": [
+        {
+          "when": "status == 201 && has(body)",
+          "to": "row"
+        }
+      ],
+      "else": "failed"
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "row",
+      "run": "@std/data.port.json#object",
+      "in": {
+        "value": "{{asked.body}}",
+        "type": "@shapes/EntryRow.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "failed",
+      "run": "@std/flow.port.json#fail",
+      "in": {
+        "message": "the monitor API answered {{asked.status}}",
+        "type": "@shapes/Entry.shape.json"
+      }
+    }
+  ]
+}

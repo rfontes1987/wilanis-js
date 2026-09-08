@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/connection.schema.json",
+  "description": "The monitor's REST API: GET /monitor, GET /monitor/{id}, POST /monitor, PUT /monitor/{id}, DELETE /monitor/{id}. A missing id answers 404 with the JSON string \"Not found\".",
+  "kind": "@http/http.connection-kind.json",
+  "settings": {
+    "baseUrl": "https://6aa009e23e0d88d3d7e5525d.mockapi.io/api/v1",
+    "timeoutMs": 10000
+  }
+}

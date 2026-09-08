@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "description": "GET /monitor[?method=]",
+  "kind": "@http/http.trigger-kind.json",
+  "settings": {
+    "route": "/monitor",
+    "method": "GET",
+    "produces": "application/json",
+    "access": {
+      "open": true
+    }
+  },
+  "in": "@shapes/ListRequest.shape.json",
+  "input": {
+    "method": "{{request.query.method}}"
+  },
+  "out": "@shapes/EntryView.shape.json[]",
+  "graph": "@monitor/graphs/list-entries.graph.json"
+}

@@ -1,13 +1,16 @@
 /**
  * The semantic view over a Registry that the checker and compiler share: resolving paths through project
  * aliases with feature visibility, addressing operations as path#operation, choosing a binding for a port
- * under a profile, classifying graphs as domain or data, and typing param values with {{templates}}.
+ * under a profile, classifying graphs as domain or data, and typing values with {{templates}}.
  */
 import {
   splitOp, type BindingDoc, type Kind, type Loaded, type Operation, type PortDoc, type ProjectDoc,
   type Registry, type TriggerKindDoc, type DocByKind,
 } from './model.js';
 import { TypeResolver, type Type, UNKNOWN, STRING, typeAt, typeOfValue, substitute, type Read } from './types.js';
+
+/** The {name} placeholders of a templated string setting, such as an http route. */
+export const PLACEHOLDER = /\{([A-Za-z0-9_]+)\}/g;
 
 export const TEMPLATE = /\{\{\s*([a-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*)\s*\}\}/g;
 export const WHOLE_TEMPLATE = /^\{\{\s*([a-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*)\s*\}\}$/;
@@ -92,11 +95,23 @@ export class Scope {
 
   // ---- types ---------------------------------------------------------------------------------
 
-  /** A trigger kind's context type, with variables its settings' `type` params bind (body: $Body) substituted from a trigger's settings. */
+  /**
+   * A trigger kind's context type for one trigger. A `type` setting binds its variable to the type it names
+   * (body: $Body); a string setting binds its {name} placeholders to an object of required strings (route:
+   * $Params), so the kind knows what its runtime guarantees. Without the trigger's settings a placeholder
+   * object is open, since the names are unknown.
+   */
   contextType(kind: TriggerKindDoc, settings: Record<string, unknown> = {}): Type {
     const subst: Record<string, Type> = {};
     for (const [k, f] of Object.entries(kind.settings.fields)) {
-      if (f.binds && typeof settings[k] === 'string') { try { subst[f.binds] = this.types.spec(settings[k] as string); } catch { /* R001 reported by the trigger check */ } }
+      if (!f.binds) continue;
+      const v = settings[k];
+      if (f.type === 'type') { if (typeof v === 'string') { try { subst[f.binds] = this.types.spec(v); } catch { /* R001 reported by the trigger check */ } } continue; }
+      if (f.type !== 'string') continue;
+      if (typeof v !== 'string') { subst[f.binds] = { kind: 'object', fields: {}, open: STRING }; continue; }
+      const fields: Record<string, { type: Type; required: boolean }> = {};
+      for (const m of v.matchAll(PLACEHOLDER)) fields[m[1]] = { type: STRING, required: true };
+      subst[f.binds] = { kind: 'object', fields, open: false };
     }
     return substitute(this.types.inline(kind.context), subst);
   }
@@ -112,8 +127,11 @@ export class Scope {
     return { type: hits[0].type, optional: hits.some(h => h.optional) };
   }
 
-  /** Type a param value; `resolve` types a template root+path. */
-  paramRead(value: unknown, resolve: (root: string, path: string[]) => Read | string): Read | string {
+  /**
+   * Type a value: a literal by what it is, a template by `resolve` (root and path in the caller's context).
+   * A string answer is the reason it cannot be typed; undefined means the reason was already reported.
+   */
+  valueRead(value: unknown, resolve: (root: string, path: string[]) => Read | string | undefined): Read | string | undefined {
     if (typeof value === 'string') {
       const whole = WHOLE_TEMPLATE.exec(value);
       if (whole) { const p = whole[1].split('.'); return resolve(p[0], p.slice(1)); }
@@ -121,7 +139,7 @@ export class Scope {
       for (const m of value.matchAll(TEMPLATE)) {
         const p = m[1].split('.');
         const r = resolve(p[0], p.slice(1));
-        if (typeof r === 'string') return r;
+        if (typeof r !== 'object') return r;
         if (!['string', 'number', 'boolean', 'unknown'].includes(r.type.kind)) return `{{${m[1]}}} is ${r.type.kind}; only scalars interpolate into text`;
         optional ||= r.optional;
       }
@@ -129,15 +147,16 @@ export class Scope {
     }
     if (Array.isArray(value)) {
       if (!value.length) return { type: { kind: 'list', of: UNKNOWN }, optional: false };
-      const first = this.paramRead(value[0], resolve);
-      if (typeof first === 'string') return first;
-      for (const v of value.slice(1)) { const r = this.paramRead(v, resolve); if (typeof r === 'string') return r; }
+      const first = this.valueRead(value[0], resolve);
+      if (typeof first !== 'object') return first;
+      for (const v of value.slice(1)) { const r = this.valueRead(v, resolve); if (typeof r !== 'object') return r; }
       return { type: { kind: 'list', of: first.type }, optional: false };
     }
     if (value && typeof value === 'object') {
       const fields: Record<string, { type: Type; required: boolean }> = {};
       for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-        const r = this.paramRead(v, resolve);
+        const r = this.valueRead(v, resolve);
+        if (r === undefined) return undefined;
         if (typeof r === 'string') return `${k}: ${r}`;
         fields[k] = { type: r.type, required: !r.optional };
       }
@@ -145,6 +164,9 @@ export class Scope {
     }
     return { type: typeOfValue(value), optional: false };
   }
+
+  /** Is the value a literal, free of templates? */
+  literal(value: unknown): boolean { return this.templateReads(value).length === 0; }
 
   /** All template roots+paths a value reads. */
   templateReads(value: unknown, out: string[][] = []): string[][] {

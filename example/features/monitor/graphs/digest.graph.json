@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "description": "One line per entry, for the digest.",
+  "out": {
+    "type": "string",
+    "from": "joined"
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "all",
+      "run": "@monitor/monitor.port.json#listAll"
+    },
+    {
+      "type": "@wilanis/node/map.schema.json",
+      "id": "lines",
+      "run": "@std/text.port.json#format",
+      "over": "{{all}}",
+      "bind": {
+        "values": ""
+      },
+      "in": {
+        "template": "- {method} {url}"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "joined",
+      "run": "@std/text.port.json#join",
+      "in": {
+        "parts": "{{lines}}",
+        "separator": "\n"
+      }
+    }
+  ]
+}

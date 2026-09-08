@@ -1,10 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/project.schema.json",
-  "name": "board",
-  "description": "A task board: the routes talk to a PostgREST-shaped database API. Plugins come from npm packages named by \"from\".",
+  "name": "monitor",
+  "description": "A monitor of observed HTTP calls: the routes talk to a REST API (mockapi.io). Plugins come from npm packages named by \"from\". No secrets: the API is public.",
   "aliases": {
-    "@tasks": "@features/tasks",
-    "@shapes": "@features/tasks/shapes"
+    "@monitor": "@features/monitor",
+    "@shapes": "@features/monitor/shapes"
   },
   "plugins": [
     {
@@ -19,27 +19,16 @@
       "settings": {
         "port": 8080,
         "codecs": {
-          "application/json": "@http/codecs/json.codec.json",
-          "application/x-www-form-urlencoded": "@http/codecs/form.codec.json",
-          "multipart/form-data": "@http/codecs/multipart.codec.json",
-          "text/plain": "@http/codecs/text.codec.json"
-        },
-        "jwt": {
-          "secret": "{{secrets.jwt}}",
-          "rolesClaim": "role"
+          "application/json": "@http/codecs/json.codec.json"
         }
       }
     }
   ],
-  "secrets": {
-    "dbKey": "BOARD_DB_KEY",
-    "jwt": "BOARD_JWT_SECRET"
-  },
   "profiles": {
     "live": {
-      "description": "The real database API.",
+      "description": "The real monitor API.",
       "bindings": {
-        "@tasks/tasks.port.json": "@tasks/tasks-rest.binding.json"
+        "@monitor/monitor.port.json": "@monitor/monitor-rest.binding.json"
       }
     }
   }

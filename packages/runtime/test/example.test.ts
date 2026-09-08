@@ -27,9 +27,34 @@ function sabotage(file: string, edit: (doc: any) => void): string[] {
 
 describe('the example tree', () => {
   it('passes check', () => { expect(codes(EXAMPLE)).toEqual([]); });
-  it('rehearses every trigger to a settled report', async () => {
-    const r = await rehearse(loadTree(EXAMPLE, PLUGINS), { seed: 4 });
-    expect(r.ok).toBe(true);
+  it('rehearses every branch of every switch, whatever the seed', async () => {
+    // solved from the rules, so no seed can leave a branch untried
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const r = await rehearse(loadTree(EXAMPLE, PLUGINS), { seed });
+      expect(r.ok, `seed ${seed}: ${r.lines.join('\n')}`).toBe(true);
+      expect(r.lines.join('\n')).not.toMatch(/NEVER RUN|BROKE|BLOCKED|WRONG ROUTE/);
+    }
+  });
+  it('reports each decision once, under the graph that declares it', async () => {
+    const r = await rehearse(loadTree(EXAMPLE, PLUGINS), { seed: 1 });
+    const text = r.lines.join('\n');
+    // list-rows is reached from two triggers (the listing and the digest), and is one decision even so
+    expect(text.match(/list-rows  switch 'route'/g)).toHaveLength(1);
+    expect(text).toMatch(/every branch settled -- 17 branch\(es\), 7 decision\(s\), 7 graph\(s\)/);
+  });
+  it('reaches both the answer and the declared failure of every data graph', async () => {
+    const r = await rehearse(loadTree(EXAMPLE, PLUGINS), { seed: 1 });
+    const text = r.lines.join('\n');
+    // the six data graphs each answer on one branch and refuse on purpose on the others
+    expect(text.match(/refused on purpose at 'failed'/g)).toHaveLength(6);
+    // the three graphs behind an id declare what a missing id means
+    expect(text.match(/refused on purpose at 'missing': "no entry /g)).toHaveLength(3);
+    // every branch that answers names the node it answered from, never a bare status word
+    expect(text.match(/answered from '/g)).toHaveLength(8);
+    // the rule is shown as a condition, not as a bare expression next to a node id
+    expect(text).toMatch(/when status == 200 && has\(body\)/);
+    expect(text).toMatch(/anything else/);
+    expect(text).toMatch(/when status == 404/);
   });
   it('loads its plugin packages through project.json → plugins[].from', async () => {
     const l = await loadProject(EXAMPLE);
@@ -68,56 +93,96 @@ describe('plugin packages and hooks', () => {
   });
 });
 
+describe('branch rehearsal', () => {
+  /** Copy the example, edit one document, and rehearse every branch of it. */
+  async function withEdit(file: string, edit: (doc: any) => void): Promise<string[]> {
+    const dir = mkdtempSync(join(tmpdir(), 'wilanis-'));
+    cpSync(EXAMPLE, dir, { recursive: true, filter: p => !p.includes('node_modules') });
+    const p = join(dir, file);
+    const doc = JSON.parse(readFileSync(p, 'utf8'));
+    edit(doc);
+    writeFileSync(p, JSON.stringify(doc));
+    const r = await rehearse(loadTree(dir, PLUGINS), { seed: 1 });
+    rmSync(dir, { recursive: true, force: true });
+    return r.lines;
+  }
+
+  it('reports a rule an earlier rule already covers', async () => {
+    const lines = await withEdit('features/monitor/graphs/list-rows.graph.json', d => {
+      const route = d.nodes.find((n: any) => n.id === 'route');
+      route.rules = [{ when: 'status >= 200', to: 'rows' }, { when: 'status == 200 && has(body)', to: 'rows' }];
+    });
+    expect(lines.join('\n')).toMatch(/NEVER RUN/);
+  });
+
+  it('reports a rule that contradicts itself', async () => {
+    const lines = await withEdit('features/monitor/graphs/list-rows.graph.json', d => {
+      const route = d.nodes.find((n: any) => n.id === 'route');
+      route.rules = [{ when: 'status > 500 && status < 200', to: 'rows' }];
+    });
+    expect(lines.join('\n')).toMatch(/NEVER RUN/);
+  });
+});
+
 describe('sabotage', () => {
   it('G003 a deep path that does not exist', () => {
-    expect(sabotage('features/tasks/graphs/create-task.graph.json', d => { d.nodes[0].in.title = 'in.tittle'; })).toContain('G003');
+    expect(sabotage('features/monitor/graphs/record-entry.graph.json', d => { d.nodes[0].in.url = '{{in.urrl}}'; })).toContain('G003');
   });
   it('G004 an optional read feeding a required input', () => {
-    expect(sabotage('features/tasks/graphs/list-tasks.graph.json', d => { d.nodes[0].rules[0].when = 'true == true'; })).toContain('G004');
+    expect(sabotage('features/monitor/graphs/list-entries.graph.json', d => { d.nodes[0].rules[0].when = 'true == true'; })).toContain('G004');
   });
   it('G005 a required input left unwired', () => {
-    expect(sabotage('features/tasks/graphs/create-task.graph.json', d => { delete d.nodes[0].in.title; })).toContain('G005');
+    expect(sabotage('features/monitor/graphs/record-entry.graph.json', d => { delete d.nodes[0].in.url; })).toContain('G005');
   });
   it('G008 a node nobody reads', () => {
-    expect(sabotage('features/tasks/graphs/digest.graph.json', d => { d.out.from = 'all'; d.out.type = '@shapes/Task.shape.json[]'; })).toContain('G008');
+    expect(sabotage('features/monitor/graphs/digest.graph.json', d => { d.out.from = 'all'; d.out.type = '@shapes/Entry.shape.json[]'; })).toContain('G008');
   });
   it('G010 a second out candidate that is never routed', () => {
-    expect(sabotage('features/tasks/graphs/digest.graph.json', d => { d.out.from = ['joined', 'all']; })).toContain('G010');
+    expect(sabotage('features/monitor/graphs/digest.graph.json', d => { d.out.from = ['joined', 'all']; })).toContain('G010');
   });
   it('L002 an effect run from a domain graph', () => {
-    expect(sabotage('features/tasks/graphs/digest.graph.json', d => { d.nodes[0].run = '@http/http.port.json#request'; d.nodes[0].params = { connection: '@connections/postgres-rest.connection.json', method: 'GET', path: '/x' }; })).toContain('L002');
+    expect(sabotage('features/monitor/graphs/digest.graph.json', d => { d.nodes[0].run = '@http/http.port.json#request'; d.nodes[0].in = { connection: '@connections/monitor-api.connection.json', method: 'GET', path: '/x' }; })).toContain('L002');
   });
   it('L003 an effect the feature does not allow', () => {
-    expect(sabotage('features/tasks/feature.json', d => { d.effects = []; })).toContain('L003');
+    expect(sabotage('features/monitor/feature.json', d => { d.effects = []; })).toContain('L003');
   });
   it('T002 a trigger whose edge shape does not fit the graph', () => {
-    expect(sabotage('features/tasks/shapes/CreateTaskRequest.shape.json', d => { delete d.fields.title; })).toContain('T002');
+    expect(sabotage('features/monitor/shapes/RecordRequest.shape.json', d => { delete d.fields.url; })).toContain('T002');
   });
   it('T004 a resolver reading request.* under a kind that hands none', () => {
-    expect(sabotage('features/tasks/graphs/list-rows.graph.json', d => {
-      d.resolvers = { caller: { run: '@std/text.port.json#format', in: { values: '{{request.headers}}' }, params: { template: '{authorization}' } } };
-      d.nodes[0].params.headers = { authorization: '{{caller}}' };
+    expect(sabotage('features/monitor/graphs/list-rows.graph.json', d => {
+      d.resolvers = { caller: { run: '@std/text.port.json#format', in: { values: '{{request.headers}}', template: '{authorization}' } } };
+      d.nodes[0].in.headers = { authorization: '{{caller}}' };
     })).toContain('T004');
   });
-  it('P001 a param the operation does not declare', () => {
-    expect(sabotage('features/tasks/graphs/list-rows.graph.json', d => { d.nodes[0].params.query = { a: 'b' }; })).toContain('P001');
+  it('G006 an input the operation does not declare', () => {
+    expect(sabotage('features/monitor/graphs/list-rows.graph.json', d => { d.nodes[0].in.query = { a: 'b' }; })).toContain('G006');
+  });
+  it('P001 a static field given a read', () => {
+    expect(sabotage('features/monitor/graphs/list-rows-by-method.graph.json', d => { d.nodes[0].in.method = '{{in.method}}'; })).toContain('P001');
+  });
+  it('G003 a read of a node that does not exist', () => {
+    expect(sabotage('features/monitor/graphs/list-rows.graph.json', d => { d.nodes[2].in.value = '{{asked2.body}}'; })).toContain('G003');
+  });
+  it('T003 a route placeholder the route does not declare', () => {
+    expect(sabotage('features/monitor/triggers/get-entry.trigger.json', d => { d.settings.route = '/monitor/{entry}'; })).toContain('T003');
   });
   it('X002 a content type with no codec', () => {
-    expect(sabotage('features/tasks/triggers/create-task.trigger.json', d => { d.settings.consumes = 'application/xml'; })).toContain('X002');
+    expect(sabotage('features/monitor/triggers/record-entry.trigger.json', d => { d.settings.consumes = 'application/xml'; })).toContain('X002');
   });
   it('B004 a profile whose binding implements another port', () => {
-    expect(sabotage('features/tasks/tasks-rest.binding.json', d => { d.port = '@tasks/other.port.json'; })).toContain('B004');
+    expect(sabotage('features/monitor/monitor-rest.binding.json', d => { d.port = '@monitor/other.port.json'; })).toContain('B004');
   });
   it('B002 a domain port with no binding once the profile is gone', () => {
-    expect(sabotage('project.json', d => { delete d.profiles; d.aliases['@tasks'] = '@features/nowhere'; })).toContain('B002');
+    expect(sabotage('project.json', d => { delete d.profiles; d.aliases['@monitor'] = '@features/nowhere'; })).toContain('B002');
   });
   it('D001 a document that breaks its schema', () => {
-    expect(sabotage('features/tasks/tasks.port.json', d => { d.operations.listAll.returnz = 'x'; })).toContain('D001');
+    expect(sabotage('features/monitor/monitor.port.json', d => { d.operations.listAll.returnz = 'x'; })).toContain('D001');
   });
   it('D001 a $schema in neither the published nor the alias form', () => {
-    expect(sabotage('features/tasks/tasks.port.json', d => { d.$schema = 'https://example.com/port.schema.json'; })).toContain('D001');
+    expect(sabotage('features/monitor/monitor.port.json', d => { d.$schema = 'https://example.com/port.schema.json'; })).toContain('D001');
   });
   it('R001 an alias to nowhere', () => {
-    expect(sabotage('features/tasks/graphs/digest.graph.json', d => { d.nodes[0].run = '@tasks/nope.port.json#listAll'; })).toContain('R001');
+    expect(sabotage('features/monitor/graphs/digest.graph.json', d => { d.nodes[0].run = '@monitor/nope.port.json#listAll'; })).toContain('R001');
   });
 });

@@ -19,19 +19,19 @@ const P = (f: string) => `${ROOT}/${f}`;
 
 export const httpPort: PortDoc = {
   $schema: schemaRef('port'),
-  description: 'Outbound HTTP. request knows what HTTP knows: method, path, headers, body in; status, headers, body out. It executes and reports -- whether 404 is a failure is the caller\'s business, decided by a switch on status. It fails only on the unexpected: network, timeout, a body the codec cannot decode or that does not conform to the declared type.',
+  description: 'Outbound HTTP. request knows what HTTP knows: method, path, headers, body in; status, headers, body out. It executes and reports -- whether 404 is a failure is the caller\'s business, decided by a switch on status. It fails only on the unexpected: network, timeout, a body the codec cannot decode, or a 2xx body that does not conform to the declared type.',
   operations: {
     request: {
-      description: 'Send one request against a connection. path, headers and method are fixed where the statement is declared and carry {{in.*}} / {{resolver.*}} templates; the body is the input.',
-      accepts: { body: { type: 'unknown', required: false, description: 'the request body, encoded by the consumes codec' } },
-      params: {
-        connection: { type: 'string', description: 'an http connection document path' },
-        method: { type: 'string', enum: METHODS },
-        path: { type: 'string', description: 'path under the connection\'s baseUrl, query string included, templates allowed' },
-        headers: { type: OPEN_STRING, required: false, description: 'added to the connection\'s, templates allowed' },
-        consumes: { type: 'string', required: false, description: 'content type of the body sent; must be in the plugin\'s codecs table. Default application/json' },
-        produces: { type: 'string', required: false, description: 'content type expected back; must be in the codecs table. Absent: the answer\'s own content-type decides' },
-        returns: { type: 'type', binds: '$Body', required: false, description: 'the type the decoded answer body must have. Absent: unknown, forward it whole' },
+      description: 'Send one request against a connection. The connection, method, content types and result type are static, declared where the statement is written; path, headers and body may read what any value may.',
+      accepts: {
+        connection: { type: 'string', static: true, description: 'an http connection document path' },
+        method: { type: 'string', enum: METHODS, static: true },
+        path: { type: 'string', description: 'path under the connection\'s baseUrl, query string included; e.g. "/tasks/{{in.id}}"' },
+        headers: { type: OPEN_STRING, required: false, description: 'added to the connection\'s' },
+        body: { type: 'unknown', required: false, description: 'the request body, encoded by the consumes codec' },
+        consumes: { type: 'string', required: false, static: true, description: 'content type of the body sent; must be in the plugin\'s codecs table. Default application/json' },
+        produces: { type: 'string', required: false, static: true, description: 'content type expected back; must be in the codecs table. Absent: the answer\'s own content-type decides' },
+        returns: { type: 'type', binds: '$Body', required: false, description: 'the type the decoded body must have when the status is 2xx. Any other status forwards the body as the codec decoded it, so a switch on status can still route it. Absent: unknown, forward it whole' },
       },
       returns: { fields: { status: { type: 'number' }, headers: { type: OPEN_STRING }, body: { type: '$Body', required: false } } },
     },
@@ -46,14 +46,14 @@ export const httpConnectionKind: ConnectionKindDoc = {
 
 export const httpTriggerKind: TriggerKindDoc = {
   $schema: schemaRef('trigger-kind'),
-  description: 'A route. The body is decoded by the consumes codec into request.body (typed by settings.body); query, route params, headers and the principal are in the context too. The trigger\'s input mapping picks what the graph gets; access is checked before the graph runs; the answer is encoded by the produces codec with the status the response block chooses.',
+  description: 'A route. The body is decoded by the consumes codec into request.body (typed by settings.body); query, route placeholders (request.params, each one required), headers and the principal are in the context too. The trigger\'s input mapping picks what the graph gets; access is checked before the graph runs; the answer is encoded by the produces codec with the status the response block chooses.',
   settings: {
     fields: {
-      route: { type: 'string', description: 'e.g. /tasks or /tasks/{id}' },
+      route: { type: 'string', binds: '$Params', description: 'e.g. /tasks or /tasks/{id}; each {name} is a required request.params.name' },
       method: { type: 'string', enum: METHODS },
       consumes: { type: 'string', required: false, description: 'the body\'s content type; must be in the plugin\'s codecs table' },
       produces: { type: 'string', required: false, description: 'the answer\'s content type; must be in the codecs table. Default application/json' },
-      body: { type: 'type', binds: '$Body', required: false, description: 'the edge type of the decoded body (request.body). Absent: the trigger\'s in' },
+      body: { type: 'type', binds: '$Body', required: false, description: 'the edge type of the decoded body (request.body); declaring it means a body is expected, so a request without one is a 400. Absent: the body is the trigger\'s in' },
       access: { type: { fields: { open: { type: 'boolean', required: false, description: 'true: no token needed' }, roles: { type: 'string[]', required: false, description: 'the principal must hold one of these' } } }, required: false, description: 'absent: a valid token is required, any role' },
       response: { type: { fields: { status: { type: { fields: { from: { type: 'string', required: false, description: 'a path into the answer whose value picks the status' }, map: { type: { fields: {}, open: 'number' }, required: false }, default: { type: 'number', required: false } } }, required: false } } }, required: false },
     },
@@ -64,8 +64,8 @@ export const httpTriggerKind: TriggerKindDoc = {
       path: { type: 'string' },
       headers: { type: OPEN_STRING, description: 'lower-cased names' },
       query: { type: OPEN_STRING },
-      params: { type: OPEN_STRING, description: 'route placeholders' },
-      body: { type: '$Body', required: false },
+      params: { type: '$Params', description: 'the route\'s placeholders, each a string the route guarantees' },
+      body: { type: '$Body', description: 'present whenever settings.body is declared' },
       principal: { type: { fields: { subject: { type: 'string' }, roles: { type: 'string[]' }, claims: { type: { fields: {}, open: true } }, token: { type: 'string', secret: true } } }, required: false },
     },
   },
@@ -95,24 +95,24 @@ function codecTable(env: Record<string, unknown>): Codecs {
 }
 const mediaType = (ct: string) => ct.split(';')[0].trim().toLowerCase();
 
-async function request({ in: i, params, ctx }: { in: Record<string, unknown>; params: Record<string, unknown>; ctx: { env: Record<string, unknown> } }) {
+async function request({ in: i, ctx }: { in: Record<string, unknown>; ctx: { env: Record<string, unknown> } }) {
   const canon = (ctx.env.canon as ((r: string) => string) | undefined) ?? ((r: string) => r);
   const conns = (ctx.env.connections ?? {}) as Record<string, Conn>;
-  const conn = conns[canon(String(params.connection))];
-  if (!conn) throw new Error(`unknown connection '${params.connection}'`);
-  if (conn.kind !== P('http.connection-kind.json')) throw new Error(`connection '${params.connection}' is ${conn.kind}, not ${P('http.connection-kind.json')}`);
+  const conn = conns[canon(String(i.connection))];
+  if (!conn) throw new Error(`unknown connection '${i.connection}'`);
+  if (conn.kind !== P('http.connection-kind.json')) throw new Error(`connection '${i.connection}' is ${conn.kind}, not ${P('http.connection-kind.json')}`);
   const codecs = codecTable(ctx.env);
-  const path = String(params.path);
+  const path = String(i.path);
   const url = new URL(conn.settings.baseUrl.replace(/\/$/, '') + (path.startsWith('/') ? path : `/${path}`));
-  const headers: Record<string, string> = { ...(conn.settings.headers ?? {}), ...((params.headers ?? {}) as Record<string, string>) };
-  const init: RequestInit = { method: String(params.method), headers };
+  const headers: Record<string, string> = { ...(conn.settings.headers ?? {}), ...((i.headers ?? {}) as Record<string, string>) };
+  const init: RequestInit = { method: String(i.method), headers };
   if (i.body !== undefined) {
-    const consumes = String(params.consumes ?? 'application/json').toLowerCase();
+    const consumes = String(i.consumes ?? 'application/json').toLowerCase();
     const codec = codecs[consumes]; if (!codec) throw new Error(`no codec for '${consumes}' in ${ROOT} settings.codecs`);
     const enc = codec.encode(i.body, undefined);
     init.body = new Uint8Array(enc.bytes); headers['content-type'] ??= enc.contentType;
   }
-  if (params.produces) headers.accept ??= String(params.produces);
+  if (i.produces) headers.accept ??= String(i.produces);
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), Number(conn.settings.timeoutMs ?? 30000));
   init.signal = ac.signal;
@@ -123,10 +123,11 @@ async function request({ in: i, params, ctx }: { in: Record<string, unknown>; pa
   res.headers.forEach((v, k) => { outHeaders[k] = v; });
   const out: Record<string, unknown> = { status: res.status, headers: outHeaders };
   if (bytes.length) {
-    const ct = String(params.produces ?? res.headers.get('content-type') ?? 'text/plain');
+    const ct = String(i.produces ?? res.headers.get('content-type') ?? 'text/plain');
     const codec = codecs[mediaType(ct)] ?? codecs['text/plain'] ?? text;
     const resolve = ctx.env.resolveType as ((ref: string) => Type) | undefined;
-    const declared = typeof params.returns === 'string' && resolve ? resolve(params.returns) : undefined;
+    // returns describes a successful answer; an error status carries whatever body the API chose, and judging it would fail the node before a switch on status could decide
+    const declared = res.ok && typeof i.returns === 'string' && resolve ? resolve(i.returns) : undefined;
     out.body = codec.decode(bytes, ct, declared);
   }
   return out;
@@ -218,6 +219,7 @@ const runtime: TriggerRuntime = {
 
         const bytes = await readBody(req);
         let body: unknown;
+        if (s.body && !bytes.length) return send(res, 400, { error: 'a body is required' }, produces);
         if (bytes.length) {
           const ct = s.consumes ?? headers['content-type'] ?? 'application/json';
           const codec = codecs[mediaType(ct)];
@@ -251,9 +253,9 @@ function check({ scope, settings, refuse }: PluginCheckContext) {
   const known = new Set(Object.keys(table).map(k => k.toLowerCase()));
   const need = (file: string, at: string, ct: unknown) => { if (typeof ct === 'string' && !known.has(ct.toLowerCase())) refuse('X002', file, `content type '${ct}' has no codec in ${ROOT} settings.codecs`, at, `add "${ct}": "@http/codecs/<codec>.codec.json" to project.json`); };
   for (const t of scope.registry.all('trigger')) if (scope.canon(t.doc.kind) === P('http.trigger-kind.json')) { need(t.path, 'settings/consumes', t.doc.settings.consumes); need(t.path, 'settings/produces', t.doc.settings.produces); }
-  const opParams = (params: Record<string, unknown> | undefined, file: string, at: string) => { need(file, `${at}/consumes`, params?.consumes); need(file, `${at}/produces`, params?.produces); };
-  for (const b of scope.registry.all('binding')) for (const [name, op] of Object.entries(b.doc.operations)) if (op.run && scope.canon(op.run.split('#')[0]) === P('http.port.json')) opParams(op.params, b.path, `operations/${name}/params`);
-  for (const g of scope.registry.all('graph')) for (const n of g.doc.nodes) if ('run' in n && scope.canon(n.run.split('#')[0]) === P('http.port.json')) opParams(n.params, g.path, `nodes/${n.id}/params`);
+  const opIn = (values: Record<string, unknown> | undefined, file: string, at: string) => { need(file, `${at}/consumes`, values?.consumes); need(file, `${at}/produces`, values?.produces); };
+  for (const b of scope.registry.all('binding')) for (const [name, op] of Object.entries(b.doc.operations)) if (op.run && scope.canon(op.run.split('#')[0]) === P('http.port.json')) opIn(op.in, b.path, `operations/${name}/in`);
+  for (const g of scope.registry.all('graph')) for (const n of g.doc.nodes) if ('run' in n && scope.canon(n.run.split('#')[0]) === P('http.port.json')) opIn(n.in, g.path, `nodes/${n.id}/in`);
 }
 
 export const http: PluginModule = {

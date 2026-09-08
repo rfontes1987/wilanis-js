@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/binding.schema.json",
+  "description": "monitor.port.json over the REST API: one data graph per operation, each a declared request plus the decision of what its status means.",
+  "port": "@monitor/monitor.port.json",
+  "operations": {
+    "listAll": {
+      "graph": "@monitor/graphs/list-rows.graph.json"
+    },
+    "listByMethod": {
+      "graph": "@monitor/graphs/list-rows-by-method.graph.json"
+    },
+    "get": {
+      "graph": "@monitor/graphs/get-row.graph.json"
+    },
+    "record": {
+      "graph": "@monitor/graphs/create-row.graph.json"
+    },
+    "update": {
+      "graph": "@monitor/graphs/update-row.graph.json"
+    },
+    "remove": {
+      "graph": "@monitor/graphs/delete-row.graph.json"
+    }
+  }
+}

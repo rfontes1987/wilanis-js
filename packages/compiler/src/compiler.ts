@@ -1,13 +1,14 @@
 /**
  * The compiler: a checked tree in, kernel specs out. Every path#operation becomes a handler -- a plugin's
- * native function, or a nested spec for a domain port's binding (delegation or data graph). Resolver
- * templates become edges from resolver nodes, constants are baked, secret paths are marked.
+ * native function, or a nested spec for a domain port's binding (delegation or data graph). A node's `in`
+ * lowers to kernel sources: literals baked, {{templates}} as reads of nodes, the input, resolvers or
+ * constants. Secret paths are marked.
  *
  * Only run this on a tree `checkTree` accepted; the compiler assumes every rule held.
  */
 import { Kernel, readPath } from '@wilanis/engine';
 import type { Handler, Handlers, KernelSpec, KNode, KSource, Redact, Report, RunOptions } from '@wilanis/engine';
-import { isMap, isRun, isSwitch, type BindingDoc, type GraphDoc, type Loaded, type Operation, type Params, type Resolvers, type Source } from '@wilanis/core';
+import { isMap, isRun, isSwitch, type BindingDoc, type GraphDoc, type Loaded, type Operation, type Resolvers, type Values } from '@wilanis/core';
 import type { PluginModule } from '@wilanis/core';
 import { expr } from '@wilanis/core';
 import { Scope, TEMPLATE, WHOLE_TEMPLATE } from '@wilanis/core';
@@ -22,6 +23,18 @@ export interface CompileOptions {
 }
 
 export interface Compiled { spec: KernelSpec; handlers: Handlers }
+
+/** The roots a value may read where it is written, and how each lowers. */
+interface Roots {
+  /** resolver name -> node id */
+  resolvers: Record<string, string>;
+  /** constant name -> baked value */
+  consts?: Record<string, unknown>;
+  /** may read request.* (a resolver's own in) */
+  request?: boolean;
+  /** may read other nodes by id (a graph node's in) */
+  nodes?: boolean;
+}
 
 export class Compiler {
   private handlers: Handlers = {};
@@ -86,20 +99,18 @@ export class Compiler {
     const nodes: Record<string, KNode> = {};
     const consts: Record<string, unknown> = {};
     for (const [k, c] of Object.entries(doc.constants ?? {})) consts[k] = c.value;
-    const roots = this.resolverRoots(doc.resolvers, nodes);
-    const src = (s: Source): KSource => this.lowerSource(s, consts);
-    const srcs = (m: Record<string, Source> | undefined) => Object.fromEntries(Object.entries(m ?? {}).map(([k, s]) => [k, src(s)]));
+    const resolvers = this.resolverRoots(doc.resolvers, nodes);
+    const roots: Roots = { resolvers, consts, nodes: true };
     for (const n of doc.nodes) {
       if (isSwitch(n)) {
-        nodes[n.id] = { kind: 'switch', in: srcs(n.in), rules: n.rules.map(r => ({ when: expr.compilePredicate(r.when), to: r.to, label: r.when })), else: n.else };
+        nodes[n.id] = { kind: 'switch', in: this.lowerValues(n.in, roots), rules: n.rules.map(r => ({ when: expr.compilePredicate(r.when), to: r.to, label: r.when })), else: n.else };
         continue;
       }
       const { handler, op } = this.handlerFor(n.run);
-      const params = this.lowerParams(n.params, roots);
-      const redact = this.redactFor(op, n.params);
-      if (isRun(n)) nodes[n.id] = { kind: 'call', handler, in: srcs(n.in), params, redact };
+      const redact = this.redactFor(op, n.in);
+      if (isRun(n)) nodes[n.id] = { kind: 'call', handler, in: this.lowerValues(n.in, roots), redact };
       else if (isMap(n)) nodes[n.id] = {
-        kind: 'map', handler, over: src(n.over), in: srcs(n.in), params, onItemFailure: n.onItemFailure ?? 'fail', redact,
+        kind: 'map', handler, over: this.lowerValue(n.over, roots), in: this.lowerValues(n.in, roots), onItemFailure: n.onItemFailure ?? 'fail', redact,
         bind: n.bind ? Object.fromEntries(Object.entries(n.bind).map(([k, p]) => [k, p ? p.split('.') : []])) : undefined,
       };
     }
@@ -107,7 +118,10 @@ export class Compiler {
     return { name: g.path, nodes, output };
   }
 
-  /** A binding operation as a nested spec: its resolvers, then the delegate call or the bound graph. */
+  /**
+   * A binding operation as a nested spec: its resolvers, then the delegate call or the bound graph. A
+   * delegation gives values in its `in`; every input it does not give is passed from the caller's by name.
+   */
   private lowerBindingOp(b: Loaded<BindingDoc>, opName: string, op: Operation): KernelSpec {
     const key = `${b.path}#${opName}`;
     const hit = this.bindingSpecs.get(key); if (hit) return hit;
@@ -119,13 +133,13 @@ export class Compiler {
       this.handlers[handlerKey] ??= this.nestedRunner(this.lowerGraph(g));
       const passIn: Record<string, KSource> = {};
       for (const k of Object.keys(op.accepts ?? {})) passIn[k] = { ref: 'in', path: [k] };
-      nodes.op = { kind: 'call', handler: handlerKey, in: passIn, params: {} };
+      nodes.op = { kind: 'call', handler: handlerKey, in: passIn };
     } else {
-      const roots = this.resolverRoots(b.doc.resolvers, nodes);
+      const resolvers = this.resolverRoots(b.doc.resolvers, nodes);
       const { handler, op: target } = this.handlerFor(bop.run!);
-      const passIn: Record<string, KSource> = {};
-      for (const k of Object.keys(target.accepts ?? {})) passIn[k] = { ref: 'in', path: [k] };
-      nodes.op = { kind: 'call', handler, in: passIn, params: this.lowerParams(bop.params, roots), redact: this.redactFor(target, bop.params) };
+      const given: Values = { ...(bop.in ?? {}) };
+      for (const k of Object.keys(target.accepts ?? {})) if (!(k in given) && op.accepts?.[k]) given[k] = `{{in.${k}}}`;
+      nodes.op = { kind: 'call', handler, in: this.lowerValues(given, { resolvers }), redact: this.redactFor(target, given) };
     }
     const spec: KernelSpec = { name: key, nodes, output: op.returns ? ['op'] : undefined };
     this.bindingSpecs.set(key, spec);
@@ -138,33 +152,26 @@ export class Compiler {
     for (const name of Object.keys(resolvers ?? {})) roots[name] = `resolver:${name}`;
     for (const [name, r] of Object.entries(resolvers ?? {})) {
       const { handler, op } = this.handlerFor(r.run);
-      nodes[roots[name]] = { kind: 'call', handler, in: this.lowerParams(r.in, roots, true), params: this.lowerParams(r.params, roots, true), redact: this.redactFor(op, r.params) };
+      nodes[roots[name]] = { kind: 'call', handler, in: this.lowerValues(r.in, { resolvers: roots, request: true }), redact: this.redactFor(op, r.in) };
     }
     return roots;
   }
 
-  private lowerSource(s: Source, consts: Record<string, unknown>): KSource {
-    if (typeof s === 'string') {
-      const [root, ...path] = s.split('.');
-      if (root === 'const') return { value: readPath(consts[path[0]], path.slice(1)) };
-      return { ref: root, path };
-    }
-    if (Array.isArray(s)) return { list: s.map(x => this.lowerSource(x, consts)) };
-    return { object: Object.fromEntries(Object.entries(s).map(([k, x]) => [k, this.lowerSource(x, consts)])) };
-  }
-
-  private lowerParams(params: Params | undefined, roots: Record<string, string>, resolverInput = false): Record<string, KSource> {
+  private lowerValues(values: Values | undefined, roots: Roots): Record<string, KSource> {
     const out: Record<string, KSource> = {};
-    for (const [k, v] of Object.entries(params ?? {})) out[k] = this.lowerValue(v, roots, resolverInput);
+    for (const [k, v] of Object.entries(values ?? {})) out[k] = this.lowerValue(v, roots);
     return out;
   }
 
-  /** Template roots: a resolver node, `in`, and (in a resolver's own inputs) `request`. */
-  private lowerValue(v: unknown, roots: Record<string, string>, resolverInput: boolean): KSource {
+  /** One value: a literal bakes, a whole template reads, text with templates concatenates. */
+  private lowerValue(v: unknown, roots: Roots): KSource {
     const refFor = (t: string): KSource => {
       const [root, ...path] = t.split('.');
-      if (roots[root]) return { ref: roots[root], path };
-      if (root === 'in' || (root === 'request' && resolverInput)) return { ref: root, path };
+      if (roots.resolvers[root]) return { ref: roots.resolvers[root], path };
+      if (root === 'in') return { ref: root, path };
+      if (root === 'const' && roots.consts) return { value: readPath(roots.consts[path[0]], path.slice(1)) };
+      if (root === 'request' && roots.request) return { ref: root, path };
+      if (roots.nodes) return { ref: root, path };
       throw new Error(`unresolvable template {{${t}}}`);
     };
     if (typeof v === 'string') {
@@ -181,13 +188,13 @@ export class Compiler {
       if (last < v.length) parts.push(v.slice(last));
       return { concat: parts };
     }
-    if (Array.isArray(v)) return { list: v.map(x => this.lowerValue(x, roots, resolverInput)) };
-    if (v && typeof v === 'object') return { object: Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, this.lowerValue(x, roots, resolverInput)])) };
+    if (Array.isArray(v)) return { list: v.map(x => this.lowerValue(x, roots)) };
+    if (v && typeof v === 'object') return { object: Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, this.lowerValue(x, roots)])) };
     return { value: v };
   }
 
-  /** Secret paths of an operation's inputs and result (result substituted through its type params). */
-  private redactFor(op: Operation, params: Params | undefined): Redact | undefined {
+  /** Secret paths of an operation's inputs and result (result substituted through its type fields). */
+  private redactFor(op: Operation, given: Values | undefined): Redact | undefined {
     const paths = (t: Type | undefined, prefix: string[] = [], out: string[][] = [], depth = 0): string[][] => {
       if (!t || depth > 6) return out;
       if (t.kind === 'object') for (const [k, f] of Object.entries(t.fields)) { if (f.secret) out.push([...prefix, k]); else paths(f.type, [...prefix, k], out, depth + 1); }
@@ -198,15 +205,22 @@ export class Compiler {
     try {
       inT = this.scope.types.fields(op.accepts);
       outT = op.returns ? this.scope.types.spec(op.returns) : undefined;
-      if (outT && hasVars(outT)) {
-        const subst: Record<string, Type> = {};
-        for (const [k, f] of Object.entries(op.params ?? {})) if (f.binds && typeof params?.[k] === 'string') subst[f.binds] = this.scope.types.spec(params[k] as string);
-        outT = substitute(outT, subst);
-      }
+      if (outT && hasVars(outT)) outT = substitute(outT, bindings(this.scope, op, given));
     } catch { return undefined; }
     const i = paths(inT), o = paths(outT);
     return i.length || o.length ? { in: i, out: o } : undefined;
   }
+}
+
+/** The variables an operation's `type` fields bind at one call site: each is a literal type reference in `given`. */
+export function bindings(scope: Scope, op: Operation, given: Values | undefined): Record<string, Type> {
+  const subst: Record<string, Type> = {};
+  for (const [k, f] of Object.entries(op.accepts ?? {})) {
+    if (!f.binds || f.type !== 'type') continue;
+    const v = given?.[k];
+    if (typeof v === 'string') { try { subst[f.binds] = scope.types.spec(v); } catch { /* unknown type: R001 elsewhere */ } }
+  }
+  return subst;
 }
 
 /** The environment handlers see: connections with secrets substituted, plugin settings, a type resolver. */

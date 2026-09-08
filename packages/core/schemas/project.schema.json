@@ -45,6 +45,7 @@
             "pattern": "^(@[a-z0-9-~][a-z0-9-._~]*/)?[a-z0-9-~][a-z0-9-._~]*$"
           },
           "settings": {
+            "description": "The values the plugin's settings contract judges. May read {{secrets.key}} and nothing else.",
             "type": "object"
           }
         },

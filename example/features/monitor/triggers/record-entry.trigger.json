@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "description": "POST /monitor \u2192 201 with the recorded entry. The body is the input.",
+  "kind": "@http/http.trigger-kind.json",
+  "settings": {
+    "route": "/monitor",
+    "method": "POST",
+    "consumes": "application/json",
+    "produces": "application/json",
+    "access": {
+      "open": true
+    },
+    "response": {
+      "status": {
+        "default": 201
+      }
+    }
+  },
+  "in": "@shapes/RecordRequest.shape.json",
+  "out": "@shapes/EntryView.shape.json",
+  "graph": "@monitor/graphs/record-entry.graph.json"
+}

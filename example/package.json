@@ -1,16 +1,16 @@
 {
-  "name": "wilanis-example-board",
+  "name": "wilanis-example-monitor",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "A wilanis project: pure JSON documents, run by @wilanis/runtime with the @http plugin package.",
+  "description": "A wilanis project: pure JSON documents, run by @wilanis/runtime with the @http plugin package, against a public REST API.",
   "scripts": {
     "check": "wilanis check .",
     "rehearse": "wilanis rehearse .",
     "fuzz": "wilanis fuzz .",
     "regress": "wilanis regress .",
     "serve": "wilanis serve .",
-    "digest": "wilanis run @tasks/triggers/digest.trigger.json ."
+    "digest": "wilanis run @monitor/triggers/digest.trigger.json ."
   },
   "dependencies": {
     "@wilanis/plugin-http": "0.1.0",

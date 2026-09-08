@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/common.schema.json",
   "title": "common",
-  "description": "The grammar every wilanis document shares. A document is one JSON file whose $schema names its kind: https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/<kind>.schema.json, or the alias @wilanis/<kind>.schema.json. Every reference is a path from the source root: @features/tasks/tasks.port.json, or through a project alias such as @tasks/tasks.port.json. Plugins are alias roots: @std, @http. An operation is path#operation.",
+  "description": "The grammar every wilanis document shares. A document is one JSON file whose $schema names its kind: https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/<kind>.schema.json, or the alias @wilanis/<kind>.schema.json. Every reference is a path from the source root: @features/tasks/tasks.port.json, or through a project alias such as @tasks/tasks.port.json. Plugins are alias roots: @std, @http. An operation is path#operation. Values where an operation is called are written in one grammar: literals as they are, {{root.path}} to read.",
   "$defs": {
     "ident": {
-      "description": "A field, input, param, operation or node identifier.",
+      "description": "A field, input, operation, resolver or node identifier.",
       "type": "string",
       "pattern": "^[a-z][A-Za-z0-9_]*$"
     },
@@ -25,7 +25,7 @@
       "pattern": "^@[A-Za-z0-9_.-]*(/[A-Za-z0-9_.-]+)*\\.json#[a-z][A-Za-z0-9_]*$"
     },
     "typeRef": {
-      "description": "A type: string, number, boolean, unknown, or the path of a shape; any of them followed by [] for a list of it. Native contracts may also write type (a param whose value is a type reference) and $T variables bound by such params. No bare object, no bare array.",
+      "description": "A type: string, number, boolean, unknown, or the path of a shape; any of them followed by [] for a list of it. Native contracts may also write type (a field whose value is a type reference) and $T variables bound by such fields. No bare object, no bare array.",
       "type": "string",
       "pattern": "^(string|number|boolean|unknown|type|\\$[A-Z][A-Za-z0-9]*|@[A-Za-z0-9_.-]*(/[A-Za-z0-9_.-]+)*\\.json)(\\[\\])*$"
     },
@@ -73,7 +73,7 @@
       ]
     },
     "field": {
-      "description": "One field, input or param: its type, whether it is required (default true), what it means.",
+      "description": "One field of a shape or of a contract: its type, whether it is required (default true), what it means.",
       "type": "object",
       "properties": {
         "type": {
@@ -100,9 +100,13 @@
           "uniqueItems": true
         },
         "binds": {
-          "description": "Native contracts only, on a param of type : the variable its value binds, so returns can name it.",
+          "description": "Native contracts only. On a field of type `type`: the variable its value binds, so returns can name it. On a string setting of a trigger kind: the variable its {name} placeholders bind, as an object of required strings, so the kind's context can name it.",
           "type": "string",
           "pattern": "^\\$[A-Z][A-Za-z0-9]*$"
+        },
+        "static": {
+          "description": "The value must be a literal where the operation is called, never a read: the checker and the plugin's rules judge it (a connection, a content type). A field of type `type` is always static.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -119,57 +123,8 @@
         "$ref": "#/$defs/field"
       }
     },
-    "sourcePath": {
-      "description": "A dotted read: in.field, nodeId, nodeId.field.deeper, const.name.",
-      "type": "string",
-      "pattern": "^[a-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$"
-    },
-    "source": {
-      "description": "Where a value comes from: a dotted read, a list of sources (builds a list), or an object of sources (builds an object; {} is the empty object). Strings are always references; literals live in constants.",
-      "oneOf": [
-        {
-          "$ref": "#/$defs/sourcePath"
-        },
-        {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/source"
-          }
-        },
-        {
-          "type": "object",
-          "propertyNames": {
-            "$ref": "#/$defs/ident"
-          },
-          "additionalProperties": {
-            "$ref": "#/$defs/source"
-          }
-        }
-      ]
-    },
-    "sources": {
-      "type": "object",
-      "propertyNames": {
-        "$ref": "#/$defs/ident"
-      },
-      "additionalProperties": {
-        "$ref": "#/$defs/source"
-      }
-    },
-    "paramValue": {
-      "description": "A literal of any JSON type. A string may carry {{root.path}} templates: alone it takes the value and its type, embedded in text it is interpolated. Roots: in (the graph's or operation's input) and a resolver name; a resolver's own in may also read request."
-    },
-    "params": {
-      "type": "object",
-      "propertyNames": {
-        "$ref": "#/$defs/ident"
-      },
-      "additionalProperties": {
-        "$ref": "#/$defs/paramValue"
-      }
-    },
     "resolvers": {
-      "description": "name -> an operation whose result params read as {{name.path}}. The one place request.* (the trigger kind's context) may be read.",
+      "description": "name -> an operation whose result is read as {{name.path}}. A resolver's in reads other resolvers, and in a binding or a data graph also request.* (the trigger kind's context); a domain graph's resolvers never read request.",
       "type": "object",
       "propertyNames": {
         "$ref": "#/$defs/ident"
@@ -181,10 +136,7 @@
             "$ref": "#/$defs/opRef"
           },
           "in": {
-            "$ref": "#/$defs/params"
-          },
-          "params": {
-            "$ref": "#/$defs/params"
+            "$ref": "#/$defs/values"
           },
           "description": {
             "type": "string"
@@ -194,6 +146,18 @@
           "run"
         ],
         "additionalProperties": false
+      }
+    },
+    "value": {
+      "description": "A value where an operation is called. Literals are written as they are: a string, a number, a boolean, a list or an object of values. A string may carry {{root.path}} templates: alone it takes that value and its type; embedded in text it is interpolated (scalars only). Roots in a graph node: in (the graph's input), const (a constant), a node id, a resolver name. In a resolver's in: request and other resolvers. In a binding delegation's in: in (the operation's accepts) and resolvers. In a trigger's input: request."
+    },
+    "values": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/ident"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/value"
       }
     }
   }

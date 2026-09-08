@@ -12,7 +12,7 @@ import { describe, fuzz, ls, map, regress, rehearse, scaffold, summarize } from 
 const USAGE = `wilanis -- declarative dataflow, judged by a compiler, run by a stateless engine
 
   wilanis check    [root] [--profile p]            judge the whole tree; exit 1 with every refusal
-  wilanis rehearse [root] [--seed n] [-v]          run every trigger once with stubbed effects
+  wilanis rehearse [root] [--seed n] [-v]          run every trigger, and every branch of every switch
   wilanis fuzz     [root] [--runs n]               write one scenario per trigger per seed to scenarios/
   wilanis regress  [root]                          replay every scenario and diff node by node
   wilanis serve    [root] [--profile p]            run every plugin's postLoad, start every trigger kind
@@ -65,7 +65,7 @@ async function main() {
       const l = await check(rootArg(0));
       const r = await rehearse(l, { seed: flags.seed ? Number(flags.seed) : undefined, profile: flags.profile, verbose: Boolean(flags.verbose) });
       console.log(r.lines.join('\n'));
-      if (!r.ok) { console.error('\nrehearsal: a graph blocked -- an input it needs is never supplied'); process.exit(1); }
+      if (!r.ok) process.exit(1);
       break;
     }
     case 'fuzz': { const l = await check(rootArg(0)); const w = await fuzz(l, { runs: flags.runs ? Number(flags.runs) : undefined, profile: flags.profile }); console.log(w.map(f => `wrote ${f}`).join('\n')); break; }

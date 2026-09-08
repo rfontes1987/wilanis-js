@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
   "title": "port",
-  "description": "A contract: named operations, each with what it accepts, what it returns, and the params fixed where it is called. A port a plugin grants is NATIVE (the plugin binds it); a port in a feature is a DOMAIN port (a binding binds it). Nodes run path#operation.",
+  "description": "A contract: named operations, each with what it accepts and what it returns. A field marked static is fixed where the operation is called. A port a plugin grants is NATIVE (the plugin binds it); a port in a feature is a DOMAIN port (a binding binds it). Nodes run path#operation.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -34,9 +34,6 @@
           },
           "returns": {
             "$ref": "common.schema.json#/$defs/type"
-          },
-          "params": {
-            "$ref": "common.schema.json#/$defs/fields"
           },
           "pure": {
             "description": "True when running it changes nothing in the world. Native operations default to false.",

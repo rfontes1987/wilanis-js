@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "description": "Domain graph behind POST /monitor: every entry recorded through this API is attributed to this recorder; the domain decides that, not the client.",
+  "constants": {
+    "recorder": {
+      "type": "string",
+      "value": "wilanis-example/0.1.0",
+      "description": "the user agent every recorded entry carries"
+    }
+  },
+  "in": "@shapes/EntryDraft.shape.json",
+  "out": {
+    "type": "@shapes/Entry.shape.json",
+    "from": "recorded"
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "recorded",
+      "run": "@monitor/monitor.port.json#record",
+      "in": {
+        "url": "{{in.url}}",
+        "method": "{{in.method}}",
+        "ua": "{{const.recorder}}"
+      }
+    }
+  ]
+}

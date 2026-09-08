@@ -51,12 +51,13 @@ A project installs `@wilanis/runtime` and the plugin packages it uses. Nothing e
 - **Documents.** One JSON file each. The `$schema` names the kind: `https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json`, or the alias `@wilanis/graph.schema.json`.
 - **References are paths.** `@features/tasks/tasks.port.json`; `project.json` declares aliases (`@tasks` → `@features/tasks`); plugins are alias roots (`@std`, `@http`); an operation is `path#operation`.
 - **Shapes** have a layer: `edge` (what the world imposes) or `core` (ours). `unknown` exists only in edge shapes and native contracts.
-- **Ports** are contracts. Granted by a plugin → native (the plugin implements it). In a feature → domain (a **binding** implements it, per operation: a data graph, or a delegation `run` + `params`).
+- **Ports** are contracts: operations with `accepts` and `returns`. Granted by a plugin → native (the plugin implements it). In a feature → domain (a **binding** implements it, per operation: a data graph, or a delegation `run` + `in`).
+- **One way in.** A node's `in` gives every value an operation takes, in one grammar: a literal as written, or `{{asked.status}}` to read another node, the graph's `in`, a constant (`{{const.initial}}`) or a resolver; embedded in text, a template interpolates (`"/tasks/{{in.id}}"`). A contract marks the fields that must be literals `static` (a connection, a content type); a `type` field always is.
 - **Graphs** are dataflow. Nodes are explicit types: `@wilanis/node/run.schema.json`, `switch`, `map`. A node runs when its sources settled. `switch` routes to exactly one node and cancels the rest; `has(x)` in a rule proves `x` present for the routed node. Reconvergence only at `out.from`.
-- **Types are declared, never inferred.** `data#object`, `data#merge`, `list#first`, `list#concat`, `http#request` take a `type` or `returns` param; the checker verifies the wiring fits it.
+- **Types are declared, never inferred.** `data#object`, `data#merge`, `list#first`, `list#concat`, `http#request` take a `type` or `returns` field naming the result type; the checker verifies the values given fit it.
 - **No absence.** Required unless `required: false`; optional cannot feed required; a missing key stays missing.
 - **Triggers are generic.** A trigger names its kind (http route, cli command, ...), the settings that kind judges, an `input` mapping from the kind's context (`{{request.body.title}}`), edge `in`/`out` types, and a graph. `request.*` is legal in a trigger's `input` and a resolver's `in`; nowhere else.
-- **Effects are explicit.** `http.request` answers status, headers, body. Whether 404 is a failure is a `switch`'s decision. A node fails only on the unexpected.
+- **Effects are explicit.** `http.request` answers status, headers, body. Whether 404 is a failure is a `switch`'s decision: the body is judged against `returns` only on a 2xx, so an error body reaches the switch. A node fails only on the unexpected.
 - **Engine.** Stateless, clockless; runs all ready nodes concurrently; `blocked` + `needs` when input is missing; any node's value can be pre-supplied (replay); nested reports for binding graphs; secret redaction.
 
 ## project.json: plugins and hooks
@@ -80,6 +81,9 @@ A plugin package exports its `PluginModule` as the default export. Two hooks on 
   plugin's settings (secrets substituted), the registry, the scope and the environment. Open connections,
   warm caches, register parsers here. It may hand back a teardown, run when the runtime stops. `serve`
   and a real `run` call it; the stubbed gates (`rehearse`, `fuzz`, `regress`, `run --seed`) do not.
+- **Every branch, not just the one a seed found.** `rehearse` reads each `switch` rule, solves the inputs
+  that make it true while the rules before it are false, and runs that branch. So the gate does not depend
+  on the seed: a rule no inputs can reach is reported `NEVER RUN` -- a dead rule, or a hole in the routing.
 
 ## Schemas
 
@@ -96,17 +100,19 @@ in `graph.schema.json`.
 
 ## The example
 
-`example/` is a task board and a complete consumer project: it installs `@wilanis/runtime` and
-`@wilanis/plugin-http` from `package.json` and contains nothing but JSON. `GET /tasks[?status=]` and
-`POST /tasks` are http triggers into domain graphs that speak `@tasks/tasks.port.json`;
-`tasks-rest.binding.json` meets that port with data graphs that issue declared PostgREST requests, forward
-the caller's bearer token through a resolver, and decide with a `switch` on `status` whether the answer is
-rows or a failure. A cli trigger prints a digest through the same port.
+`example/` is a monitor of observed HTTP calls and a complete consumer project: it installs
+`@wilanis/runtime` and `@wilanis/plugin-http` from `package.json` and contains nothing but JSON. Its
+routes are http triggers into domain graphs that speak `@monitor/monitor.port.json`;
+`monitor-rest.binding.json` meets that port with one data graph per operation, each a declared request to a
+public REST API (mockapi.io) and a `switch` on `status` that decides what the answer means: the rows, the
+declared refusal `no entry {id}` when the API answers 404 for an id that does not exist, or a failure for
+anything else. A cli trigger prints a digest through the same port. The API needs no key, so the example
+reads no secret and `serve` runs with no environment.
 
 ```
 npm install && npm run build
 npx wilanis check example
-npx wilanis rehearse example --seed 4
+npx wilanis rehearse example
 npx wilanis map example
 npx wilanis describe @http/http.port.json example
 npm test

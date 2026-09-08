@@ -20,6 +20,7 @@
       "$ref": "common.schema.json#/$defs/path"
     },
     "settings": {
+      "description": "The values the kind's settings contract judges. May read {{secrets.key}} and nothing else.",
       "type": "object"
     },
     "in": {
@@ -27,7 +28,7 @@
     },
     "input": {
       "description": "How in is built from the kind's context: a templated literal reading {{request.*}} (e.g. request.body.title, request.query.page, request.principal). Absent: in is the decoded body.",
-      "$ref": "common.schema.json#/$defs/paramValue"
+      "$ref": "common.schema.json#/$defs/value"
     },
     "out": {
       "$ref": "common.schema.json#/$defs/typeRef"

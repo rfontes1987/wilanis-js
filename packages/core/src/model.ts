@@ -39,14 +39,19 @@ export interface Envelope { $schema: string; description: string }
 export type TypeRef = string;
 export interface InlineObject { fields: Record<string, Field>; open?: boolean | TypeRef; description?: string }
 export type TypeSpec = TypeRef | InlineObject;
-export interface Field { type: TypeSpec; required?: boolean; description?: string; secret?: boolean; enum?: string[]; binds?: string }
+/** One field of a shape or a contract. `static`: where the operation is called the value must be a literal, never a read; a field of type `type` always is. */
+export interface Field { type: TypeSpec; required?: boolean; description?: string; secret?: boolean; enum?: string[]; binds?: string; static?: boolean }
 export type Fields = Record<string, Field>;
 
-export type Source = string | Source[] | { [k: string]: Source };
-export type Sources = Record<string, Source>;
-export type Params = Record<string, unknown>;
+/**
+ * A value where an operation is called: a literal as written, or a string carrying {{root.path}} templates.
+ * Alone, a template takes that value and its type; embedded in text it is interpolated. Lists and objects
+ * hold values. This is the one grammar for a node's in, a resolver's in, a delegation's in and a trigger's input.
+ */
+export type Value = unknown;
+export type Values = Record<string, Value>;
 
-export interface ResolverSpec { run: string; in?: Params; params?: Params; description?: string }
+export interface ResolverSpec { run: string; in?: Values; description?: string }
 export type Resolvers = Record<string, ResolverSpec>;
 
 export interface ProjectDoc extends Envelope {
@@ -61,14 +66,14 @@ export interface PluginDoc extends Envelope {
   settings?: InlineObject;
   grants: { ports?: string[]; triggerKinds?: string[]; connectionKinds?: string[]; codecs?: string[] };
 }
-export interface Operation { description: string; accepts?: Fields; returns?: TypeSpec; params?: Fields; pure?: boolean }
+export interface Operation { description: string; accepts?: Fields; returns?: TypeSpec; pure?: boolean }
 export interface PortDoc extends Envelope { operations: Record<string, Operation> }
-export interface BindingOp { graph?: string; run?: string; params?: Params; description?: string }
+export interface BindingOp { graph?: string; run?: string; in?: Values; description?: string }
 export interface BindingDoc extends Envelope { port: string; resolvers?: Resolvers; operations: Record<string, BindingOp> }
 
-export interface RunNode { type: typeof NODE_RUN; id: string; description?: string; run: string; in?: Sources; params?: Params }
-export interface SwitchNode { type: typeof NODE_SWITCH; id: string; description?: string; in: Sources; rules: { when: string; to: string; description?: string }[]; else: string }
-export interface MapNode { type: typeof NODE_MAP; id: string; description?: string; run: string; over: Source; in?: Sources; bind?: Record<string, string>; params?: Params; onItemFailure?: 'fail' | 'collect' }
+export interface RunNode { type: typeof NODE_RUN; id: string; description?: string; run: string; in?: Values }
+export interface SwitchNode { type: typeof NODE_SWITCH; id: string; description?: string; in: Values; rules: { when: string; to: string; description?: string }[]; else: string }
+export interface MapNode { type: typeof NODE_MAP; id: string; description?: string; run: string; over: Value; in?: Values; bind?: Record<string, string>; onItemFailure?: 'fail' | 'collect' }
 export type Node = RunNode | SwitchNode | MapNode;
 export const isRun = (n: Node): n is RunNode => n.type === NODE_RUN;
 export const isSwitch = (n: Node): n is SwitchNode => n.type === NODE_SWITCH;

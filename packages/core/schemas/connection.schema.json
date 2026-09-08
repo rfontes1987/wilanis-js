@@ -20,6 +20,7 @@
       "$ref": "common.schema.json#/$defs/path"
     },
     "settings": {
+      "description": "The values the kind's settings contract judges. May read {{secrets.key}} and nothing else.",
       "type": "object"
     }
   },

@@ -1,2 +1,0 @@
-{ "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json", "layer": "edge", "description": "A task as the front end sees it. The trigger prunes anything the domain carries beyond these fields.",
-  "fields": { "id": { "type": "string" }, "title": { "type": "string" }, "status": { "type": "string" }, "assignee": { "type": "string", "required": false } } }

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
   "title": "graph",
-  "description": "Behaviour as dataflow. Nodes run when their sources have settled; list order carries no meaning. Node types are documents of their own: @wilanis/node/run, switch, map. Reconvergence happens at out.from: one node, or an ordered list of candidates each behind a switch.",
+  "description": "Behaviour as dataflow. A node runs when every value it reads has settled; list order carries no meaning. Node types are documents of their own: @wilanis/node/run, switch, map. Reconvergence happens at out.from: one node, or an ordered list of candidates each behind a switch.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -20,7 +20,7 @@
       "$ref": "common.schema.json#/$defs/resolvers"
     },
     "constants": {
-      "description": "Typed literals, read as const.name.",
+      "description": "Typed literals, read as {{const.name}}.",
       "type": "object",
       "propertyNames": {
         "$ref": "common.schema.json#/$defs/ident"
@@ -44,7 +44,7 @@
       }
     },
     "in": {
-      "description": "What the graph takes, read as in.field. Absent: takes nothing.",
+      "description": "What the graph takes, read as {{in.field}}. Absent: takes nothing.",
       "$ref": "common.schema.json#/$defs/typeRef"
     },
     "out": {

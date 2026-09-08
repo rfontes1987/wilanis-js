@@ -26,14 +26,7 @@
       "$ref": "common.schema.json#/$defs/fields"
     },
     "open": {
-      "oneOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "$ref": "common.schema.json#/$defs/typeRef"
-        }
-      ]
+      "$ref": "common.schema.json#/$defs/inlineObject/properties/open"
     }
   },
   "required": [

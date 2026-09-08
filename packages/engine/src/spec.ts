@@ -18,8 +18,8 @@ export interface Redact { in?: string[][]; out?: string[][] }
 export interface KCall {
   kind: 'call';
   handler: string;
+  /** Every value the handler takes, literal or read; the compiler lowers a node's `in` to this. */
   in: Record<string, KSource>;
-  params: Record<string, KSource>;
   redact?: Redact;
 }
 export interface KSwitch {
@@ -35,7 +35,6 @@ export interface KMap {
   in: Record<string, KSource>;
   /** input name -> path within the element ([] = the whole element). Absent: the element arrives as `item`. */
   bind?: Record<string, string[]>;
-  params: Record<string, KSource>;
   onItemFailure: 'fail' | 'collect';
   redact?: Redact;
 }
@@ -55,7 +54,6 @@ export interface NodeReport {
   /** call/map: the handler that ran (path#operation, or a binding operation). */
   handler?: string;
   in?: Record<string, unknown>;
-  params?: Record<string, unknown>;
   out?: unknown;
   error?: string;
   /** switch: the node it routed to. */
@@ -93,7 +91,7 @@ export interface RunContext {
   env: Record<string, unknown>;
 }
 
-export interface HandlerArgs { in: Record<string, unknown>; params: Record<string, unknown>; ctx: RunContext }
+export interface HandlerArgs { in: Record<string, unknown>; ctx: RunContext }
 export type Handler = (args: HandlerArgs) => Promise<unknown>;
 export type Handlers = Record<string, Handler>;
 

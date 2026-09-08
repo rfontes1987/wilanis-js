@@ -1,2 +1,0 @@
-{ "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json", "layer": "core", "description": "How a listing may be narrowed.",
-  "fields": { "status": { "type": "string", "enum": ["todo", "doing", "done"], "required": false } } }

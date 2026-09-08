@@ -78,7 +78,7 @@ export class TypeResolver {
 
   spec(s: TypeSpec): Type { return typeof s === 'string' ? this.ref(s) : this.inline(s); }
 
-  /** accepts/params: named fields become one object type. */
+  /** accepts: named fields become one object type. */
   fields(f: Fields | undefined): Type { return this.inline({ fields: f ?? {} }); }
 }
 
