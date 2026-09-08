@@ -511,7 +511,10 @@ export function describe(load: LoadResult, ref: string): string {
   const { path } = splitOp(ref.includes('#') ? ref : `${ref}#`);
   const doc = scope.any(path || ref);
   if (!doc) return `no document at '${ref}'`;
-  const lines = [`${doc.kind}  ${doc.path}`, ...(doc.file ? [`file  ${doc.file}`] : []), doc.doc.description, ''];
+  // a native document is a plugin's: say which, and the package it came from, so who implements it is not a code detail
+  const from = doc.native ? scope.project?.plugins.find(p => p.use === doc.native)?.from : undefined;
+  const grantedBy = doc.native ? [`granted by  ${doc.native}${from ? `  (${from})` : '  (built into the runtime)'}`] : [];
+  const lines = [`${doc.kind}  ${doc.path}`, ...(doc.file ? [`file  ${doc.file}`] : []), ...grantedBy, doc.doc.description, ''];
   const showType = (t: unknown) => { try { return show(scope.types.spec(t as string)); } catch { return JSON.stringify(t); } };
   if (doc.kind === 'port') {
     for (const [name, op] of Object.entries((doc.doc as PortDoc).operations)) {

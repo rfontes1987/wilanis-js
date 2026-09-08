@@ -67,7 +67,9 @@ core needs a build before its effect shows in a runtime test; `npm test` does th
   compiler lowers it to a source reference and nothing runs.
 - **Discoverability.** Every refusal has a code, a file, an `at` path and a hint that names the command
   or the edit that fixes it. Every document kind has a schema with descriptions. Every public function has a
-  one-line doc comment that says what it answers.
+  one-line doc comment that says what it answers. Who implements a thing is never a code detail: a domain
+  port names its bindings, and a native port says which plugin grants it -- `wilanis describe` prints
+  `granted by @http (@wilanis/plugin-http)` and the viewer links its manifest.
 
 ## How to change things
 

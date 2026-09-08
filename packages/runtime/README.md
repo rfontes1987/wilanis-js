@@ -15,7 +15,7 @@ npx wilanis check .
 - `runStartup(load, emb, log)` runs `project.json → startup` in order: each step fires one port operation, so a pool is opened, a watcher started or a port listened on where a reader can see it. A step that refuses stops the start and exits nonzero unless it says `"required": false`.
 - `Served` is the tree a listener answers from. A `holds` operation reads it as `env.serving` and re-reads it per request, so `reload()` can put a freshly loaded and judged tree behind a socket that never closed -- what `@reload` drives.
 - `rehearse`, `fuzz`, `regress` are the gates: every trigger with stubbed effects, recorded scenarios, replay and diff.
-- `ls`, `describe`, `map` are discovery; `scaffold` writes new documents; `wilanis init` writes `CLAUDE.md` and agent hooks into a tree.
+- `ls`, `describe`, `map` are discovery; `describe` names the plugin behind a native document (`granted by  @http  (@wilanis/plugin-http)`), so who implements an operation is read rather than grepped; `scaffold` writes new documents; `wilanis init` writes `CLAUDE.md` and agent hooks into a tree.
 - `FileBlobStore` is the blob registry: one file per blob under `project.json → blobs.dir` (default: under the system temp dir), streamed in and out, so a file is held once and never as a value. The embedder hands every run a scope of it; `serve` releases a request's blobs once answered. `wilanis run --file path` hands a file as `request.file`; `--out path` receives a blob answer.
 
 Depends on `@wilanis/core`, `@wilanis/engine`, `@wilanis/compiler`.

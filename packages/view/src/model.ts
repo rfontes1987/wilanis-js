@@ -147,6 +147,8 @@ export interface DocView {
   feature?: string;
   layer?: Layer;
   native?: string;
+  /** On a native document: the npm package that ships the plugin, absent for the runtime's builtins. */
+  from?: string;
   file?: string;
   description: string;
   doc: unknown;
@@ -249,7 +251,8 @@ export function viewOf(load: LoadResult, ref: string): DocView | undefined {
   const index = referenceIndex(load, scope);
   const refusals = checkTree(load).items.filter(r => r.file === doc.path || `@${r.file}` === doc.path);
   const view: DocView = {
-    path: doc.path, kind: doc.kind, name: doc.name, label: labelOf(doc), feature: doc.feature, layer: doc.layer, native: doc.native, file: doc.file,
+    path: doc.path, kind: doc.kind, name: doc.name, label: labelOf(doc), feature: doc.feature, layer: doc.layer, native: doc.native,
+    from: doc.native ? scope.project?.plugins.find(p => p.use === doc.native)?.from : undefined, file: doc.file,
     description: doc.doc.description, doc: doc.doc,
     refs: index.filter(r => r.from === doc.path).map(r => ({ path: r.to, label: labelOf(scope.registry.any(r.to)), kind: r.kind, at: r.at })),
     callers: callersOf(doc.path, index, scope),

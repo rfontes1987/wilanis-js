@@ -19,7 +19,7 @@ with a fault. `@reload/watch.port.json#watch` serves the tree again whenever a d
 closing the port. `@http/server.port.json#listen` opens :8080 -- **delete that step and nothing listens**, since
 no runtime opens a port merely because http triggers exist. The first is a domain port operation, so whichever
 binding the profile chose is what gets checked; the last two are `holds` operations, which a plugin grants and
-the runtime stops when the process ends.
+the runtime stops when the process ends. `wilanis describe @http/server.port.json` says which plugin grants it.
 
 `monitor.port.json` is what the domain needs: `listAll`, `listByMethod`, `get`, `record`, `update`,
 `remove`, `parseDrafts`, `toCsv`, `removeMany`, `submit`, `list`, `digest`, `import`, `export`. `monitor-rest.binding.json` meets the first eight with a data

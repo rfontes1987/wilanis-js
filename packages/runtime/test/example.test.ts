@@ -112,6 +112,13 @@ describe('plugin packages and hooks', () => {
       expect(JSON.parse(readFileSync(f.file!, 'utf8'))).toEqual(f.doc);
     }
     expect(describeDoc(l, '@http/http.port.json')).toContain(`file  ${l.registry.get('port', '@http/http.port.json')!.file}`);
+    // a native document says whose it is: who implements it must not be a code detail
+    expect(describeDoc(l, '@http/server.port.json')).toContain('granted by  @http  (@wilanis/plugin-http)');
+    expect(describeDoc(l, '@reload/watch.port.json')).toContain('granted by  @reload  (@wilanis/plugin-reload)');
+    expect(describeDoc(l, '@std/list.port.json')).toContain('granted by  @std  (built into the runtime)');
+    expect(describeDoc(l, '@monitor/domain/monitor.port.json')).not.toContain('granted by');
+    // and a holds operation says that it holds
+    expect(describeDoc(l, '@http/server.port.json')).toContain('#listen  (holds until stopped)');
     expect(l.registry.get('graph', '@features/monitor/data/get-row.graph.json')!.file).toBe(join(EXAMPLE, 'features/monitor/data/get-row.graph.json'));
   });
   it('D006 when a plugin ships no plugin.json', () => {

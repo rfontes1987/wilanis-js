@@ -237,6 +237,9 @@ describe('the view model of the example', () => {
     expect(port.callers.map(c => c.path)).toContain('@features/monitor/domain/list-entries.graph.json');
     expect(port.refs.map(r => r.path)).toContain('@features/monitor/domain/Entry.shape.json');
     expect(port.implementations).toEqual([{ path: '@features/monitor/data/monitor-rest.binding.json', label: 'REST storage', operations: expect.objectContaining({ get: { graph: GET_ROW, graphLabel: 'Get a row' } }) }]);
+    // a native port has no binding: the page names the plugin that grants it instead
+    expect(await view('@http/server.port.json')).toMatchObject({ native: '@http', from: '@wilanis/plugin-http', implementations: [] });
+    expect(await view('@std/list.port.json')).toMatchObject({ native: '@std', from: undefined });
   });
 });
 

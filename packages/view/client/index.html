@@ -427,11 +427,12 @@
       }
       case 'port': {
         const impls = v.implementations || [];
-        page.appendChild(el('h2', null, impls.length ? `Implemented by ${impls.length === 1 ? 'one binding' : impls.length + ' bindings'}` : (v.native ? 'A native port: the plugin implements it' : 'No binding implements this port yet')));
+        page.appendChild(el('h2', null, impls.length ? `Implemented by ${impls.length === 1 ? 'one binding' : impls.length + ' bindings'}` : (v.native ? 'Implemented by its plugin' : 'No binding implements this port yet')));
         if (impls.length) page.appendChild(chips(impls.map(i => i.path)));
+        else if (v.native) { const p = el('p'); p.appendChild(document.createTextNode('Granted by ')); p.appendChild(link(v.native + '/plugin.json')); p.appendChild(document.createTextNode(v.from ? ` (${v.from}), which carries the code behind every operation below.` : ', built into the runtime, which carries the code behind every operation below.')); page.appendChild(p); }
         page.appendChild(el('h2', null, 'Operations'));
         for (const [name, op] of Object.entries(d.operations)) {
-          const h = el('h3', null, readable(name)); h.appendChild(el('code', null, '#' + name)); if (op.pure) h.appendChild(el('span', 'badge ok', 'pure')); else if (v.native) h.appendChild(el('span', 'badge warn', 'effect')); if (op.refuses) h.appendChild(el('span', 'badge warn', 'refuses on purpose')); page.appendChild(h);
+          const h = el('h3', null, readable(name)); h.appendChild(el('code', null, '#' + name)); if (op.pure) h.appendChild(el('span', 'badge ok', 'pure')); else if (v.native) h.appendChild(el('span', 'badge warn', 'effect')); if (op.refuses) h.appendChild(el('span', 'badge warn', 'refuses on purpose')); if (op.holds) h.appendChild(el('span', 'badge warn', 'holds until stopped')); page.appendChild(h);
           page.appendChild(el('p', null, op.description));
           if (op.accepts && Object.keys(op.accepts).length) page.appendChild(fieldsTable(op.accepts)); else page.appendChild(el('p', null, 'Takes nothing.'));
           const r = el('p'); r.appendChild(frag('Answers ')); r.appendChild(op.returns ? typeEl(op.returns) : frag('nothing')); page.appendChild(r);
