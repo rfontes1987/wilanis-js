@@ -11,17 +11,19 @@ packages/core/         @wilanis/core       model types expr scope load validate 
 packages/compiler/     @wilanis/compiler   checker.ts compiler.ts                  → core, engine
 packages/runtime/      @wilanis/runtime    embed tools serve project cli, plugins/{std,cli-trigger}, docs/{std,cli}, bin/, templates/   → core, engine, compiler
 packages/plugin-http/  @wilanis/plugin-http  index.ts codecs.ts, docs/             → core, engine
+packages/view/         @wilanis/view       model.ts serve.ts cli.ts, client/index.html, bin/   → core, compiler, runtime
 example/               a consumer project: JSON documents + package.json
 ```
 
-Dependencies point one way: engine ← core ← compiler ← runtime, and plugins depend on core and engine
-only. A plugin never imports the compiler or the runtime. The runtime never reaches into a plugin's
+Dependencies point one way: engine ← core ← compiler ← runtime ← view, and plugins depend on core and
+engine only. The viewer is a tool over a loaded tree, not a plugin: it grants nothing to a tree and
+executes nothing; `viewOf` is pure and the page under `client/` is one static file with no build step. A plugin never imports the compiler or the runtime. The runtime never reaches into a plugin's
 internals; it sees the `PluginModule` contract in `packages/core/src/plugin.ts`. If a change needs an
 import against this direction, the design is wrong, not the import rule.
 
 Tests live next to what they test: `packages/engine/test` (kernel), `packages/runtime/test` (the example
 tree, sabotaged variants, plugin loading, postLoad), `packages/plugin-http/test` (end to end against a
-fake upstream). The runtime and the http plugin depend on each other only as devDependencies, for tests.
+fake upstream), `packages/view/test` (the view model of the example, and the server). The runtime and the http plugin depend on each other only as devDependencies, for tests.
 
 ## Commands
 
@@ -30,7 +32,8 @@ npm install                 # links the workspace
 npm run build               # tsc -b, project references, dependency order
 npm test                    # build, then vitest
 npx wilanis check example   # the CLI from the built runtime
-npm run release             # publishes engine, core, compiler, runtime, plugin-http in that order
+npx wilanis-view example    # the viewer, on http://127.0.0.1:4400/
+npm run release             # publishes engine, core, compiler, runtime, plugin-http, view in that order
 ```
 
 `npm test` must pass before a commit. Tests import the built `dist` of sibling packages, so a change in
@@ -43,6 +46,13 @@ core needs a build before its effect shows in a runtime test; `npm test` does th
   G P B T C S) or a plugin's `check` (X); never duplicate a check in the runtime.
 - **Orthogonality.** The engine knows nodes, sources and handlers; it never learns about files, shapes or
   triggers. The compiler knows documents and the engine; it never learns about HTTP. Keep it that way.
+  A feature is three directories -- `edge/`, `domain/`, `data/` -- and the directory *is* the layer: the
+  checker reads it off the path rather than inferring a role from who references a document. A trigger fires
+  a domain port operation through its `fire` run node and never names a graph, so the port is the one seam
+  between the edge and the business. A binding says how a port is met and never cares which layer it is in.
+  The request is read in two places only: a trigger's `fire.in`, and a `resolvers` document (edge/) whose
+  named reads a data graph or a binding uses as `{{name}}`. A resolver is a read, never an operation; the
+  compiler lowers it to a source reference and nothing runs.
 - **Discoverability.** Every refusal has a code, a file, an `at` path and a hint that names the command
   or the edit that fixes it. Every document kind has a schema with descriptions. Every public function has a
   one-line doc comment that says what it answers.
@@ -52,9 +62,15 @@ core needs a build before its effect shows in a runtime test; `npm test` does th
 - **A new rule.** Add it to `packages/compiler/src/checker.ts` under its family, give it the next code,
   write the hint, and add a sabotage test in `packages/runtime/test/example.test.ts` that breaks the example
   and expects the code.
+- **A new placement rule.** Placement lives in one place: `HOME` in `packages/core/src/load.ts`, which says
+  the layer (or top-level directory) each kind lives in and refuses the rest as D008. Add the kind there, add
+  its row to `packages/runtime/templates/CLAUDE.md`, and teach `into()` in `tools.ts` where `wilanis new`
+  should write it. A document's layer is read off its path by `layerOf` in `model.ts` -- never inferred from
+  what references it.
 - **A new document kind.** Schema in `packages/core/schemas/` (with `$id` under the published base and
-  `$schema` accepting both forms), a `*Doc` interface and the `Kind` entry in `model.ts`, a row in
-  `packages/runtime/templates/CLAUDE.md`.
+  `$schema` accepting both forms, and the optional `label` every kind carries), a `*Doc` interface and the
+  `Kind` entry in `model.ts`, a row in `packages/runtime/templates/CLAUDE.md`, and a page in the viewer's
+  `client/index.html` (`renderDocPage`), since the viewer never shows raw JSON by default.
 - **A schema change.** Compatible: edit in place. Breaking: the base URL in `model.ts` and every `$id`
   move to `schemas-v2`, and the old branch stays.
 - **A new plugin.** A new package under `packages/`, depending on core and engine only, exporting its

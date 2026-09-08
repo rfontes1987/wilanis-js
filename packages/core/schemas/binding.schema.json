@@ -16,11 +16,17 @@
       "type": "string",
       "minLength": 1
     },
+    "label": {
+      "description": "A short human name for this document, shown wherever a reader sees it instead of its path. Absent: the file name stands in.",
+      "type": "string",
+      "minLength": 1
+    },
     "port": {
       "$ref": "common.schema.json#/$defs/path"
     },
     "resolvers": {
-      "$ref": "common.schema.json#/$defs/resolvers"
+      "description": "The resolvers document (edge/) whose reads this binding may use as {{name}}: values taken straight from the request. A delegation reads them in its in.",
+      "$ref": "common.schema.json#/$defs/path"
     },
     "operations": {
       "type": "object",

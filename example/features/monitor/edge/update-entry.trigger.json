@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "label": "PUT /monitor/{id}",
+  "description": "PUT /monitor/{id}: the id from the route, the new call from the body.",
+  "settings": {
+    "route": "/monitor/{id}",
+    "method": "PUT",
+    "consumes": "application/json",
+    "produces": "application/json",
+    "body": "@monitor/edge/UpdateRequest.shape.json",
+    "access": {
+      "open": true
+    }
+  },
+  "in": "@monitor/edge/UpdateRequest.shape.json",
+  "out": "@monitor/edge/EntryView.shape.json",
+  "kind": "@http/http.trigger-kind.json",
+  "fire": {
+    "run": "@monitor/domain/monitor.port.json#update",
+    "in": {
+      "id": "{{request.params.id}}",
+      "url": "{{request.body.url}}",
+      "method": "{{request.body.method}}"
+    }
+  }
+}

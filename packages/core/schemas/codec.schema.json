@@ -16,6 +16,11 @@
       "type": "string",
       "minLength": 1
     },
+    "label": {
+      "description": "A short human name for this document, shown wherever a reader sees it instead of its path. Absent: the file name stands in.",
+      "type": "string",
+      "minLength": 1
+    },
     "yields": {
       "description": "declared: the shape the trigger or operation names; otherwise the fixed type every decoded body has.",
       "oneOf": [

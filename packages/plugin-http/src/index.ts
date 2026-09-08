@@ -158,8 +158,10 @@ const runtime: TriggerRuntime = {
           const ct = s.consumes ?? headers['content-type'] ?? 'application/json';
           const codec = codecs[mediaType(ct)];
           if (!codec) return send(res, 415, { error: `no codec for '${mediaType(ct)}'` }, produces);
-          const declared = s.body ? undefined : types(t).in; // settings.body typed the context; else the body IS the input, judged by inputFor
-          try { body = codec.decode(bytes, headers['content-type'] ?? ct, declared && t.input === undefined ? undefined : declared); }
+          // settings.body names the body's edge shape; without it the body IS the input. Either way the
+          // declared shape judges what arrives, so a closed shape still refuses an undeclared field.
+          const declared = s.body === t.in || !s.body ? types(t).in : undefined;
+          try { body = codec.decode(bytes, headers['content-type'] ?? ct, declared); }
           catch (e) { return send(res, 400, { error: (e as Error).message }, produces); }
         }
         const request: Record<string, unknown> = { method: req.method, path: url.pathname, headers, query, params, ...(body !== undefined ? { body } : {}), ...(principal ? { principal } : {}) };
@@ -167,7 +169,7 @@ const runtime: TriggerRuntime = {
         if ('error' in built) return send(res, 400, { error: built.error }, produces);
         const report = await fire({ trigger: t, input: built.input, request });
         const { status, body: answer } = encode(t, report);
-        log(`${req.method} ${url.pathname} → ${status} (${Date.now() - started}ms, ${t.graph} ${report.status})`);
+        log(`${req.method} ${url.pathname} → ${status} (${Date.now() - started}ms, ${t.fire.run} ${report.status})`);
         return send(res, status, answer, produces);
       } catch (e) {
         log(`error: ${(e as Error).message}`);
@@ -175,7 +177,7 @@ const runtime: TriggerRuntime = {
       }
     });
     await new Promise<void>((ok, fail) => { server.once('error', fail); server.listen(port, () => { server.off('error', fail); ok(); }); });
-    log(`http: listening on :${port} -- ${routes.map(r => `${r.s.method} ${r.s.route} → ${r.t.graph}`).join(', ')}`);
+    log(`http: listening on :${port} -- ${routes.map(r => `${r.s.method} ${r.s.route} → ${r.t.fire.run}`).join(', ')}`);
     return () => new Promise<void>(ok => server.close(() => ok()));
   },
 };

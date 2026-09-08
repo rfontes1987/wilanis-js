@@ -1,9 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
-  "description": "Strings: templating, splitting, joining, replacing.",
+  "label": "Text",
+  "description": "Text. fill a template, join parts, split on a separator, replace.",
   "operations": {
-    "format": {
-      "description": "Fill a template: {path.to.value} placeholders read into values.",
+    "fill": {
+      "description": "Fill a template with fields of values: each {name} placeholder takes values.name (a dotted path reaches deeper). Placeholders with one brace are this operation's own and are filled at run time; {{reads}} with two braces are the language's, resolved where the node is written.",
       "accepts": {
         "values": {
           "type": {

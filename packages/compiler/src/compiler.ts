@@ -8,10 +8,10 @@
  */
 import { Kernel, readPath } from '@wilanis/engine';
 import type { Handler, Handlers, KernelSpec, KNode, KSource, Redact, Report, RunOptions } from '@wilanis/engine';
-import { isMap, isRun, isSwitch, type BindingDoc, type GraphDoc, type Loaded, type Operation, type Resolvers, type Values } from '@wilanis/core';
+import { isMap, isRun, isSwitch, type BindingDoc, type GraphDoc, type Loaded, type Operation, type Values } from '@wilanis/core';
 import type { PluginModule } from '@wilanis/core';
 import { expr } from '@wilanis/core';
-import { Scope, TEMPLATE, WHOLE_TEMPLATE } from '@wilanis/core';
+import { Scope, TEMPLATE, WHOLE_TEMPLATE, splitPath } from '@wilanis/core';
 import { substitute, hasVars, type Type } from '@wilanis/core';
 
 export interface EffectInfo { path: string; opName: string; op: Operation; returns: Type | undefined }
@@ -26,8 +26,8 @@ export interface Compiled { spec: KernelSpec; handlers: Handlers }
 
 /** The roots a value may read where it is written, and how each lowers. */
 interface Roots {
-  /** resolver name -> node id */
-  resolvers: Record<string, string>;
+  /** resolver name -> the segments it reads below request */
+  resolvers: Record<string, string[]>;
   /** constant name -> baked value */
   consts?: Record<string, unknown>;
   /** may read request.* (a resolver's own in) */
@@ -47,6 +47,19 @@ export class Compiler {
     const g = this.scope.get('graph', ref);
     if (!g) throw new Error(`unknown graph '${ref}'`);
     return { spec: this.lowerGraph(g), handlers: this.handlers };
+  }
+
+  /**
+   * Compile a domain port operation by path#operation: the spec of the binding that meets it under the
+   * chosen profile. This is what a trigger fires -- it names what it wants done, never how.
+   */
+  operation(opRef: string): Compiled {
+    const o = this.scope.op(opRef);
+    if (typeof o === 'string') throw new Error(o);
+    if (o.port.native) throw new Error(`'${opRef}' is a native operation; a trigger fires a domain port`);
+    const b = this.scope.bindingFor(o.path, this.opts.profile);
+    if (typeof b === 'string') throw new Error(b);
+    return { spec: this.lowerBindingOp(b, o.opName, o.op), handlers: this.handlers };
   }
 
   private nativeHandler(path: string, opName: string, op: Operation): string {
@@ -99,7 +112,7 @@ export class Compiler {
     const nodes: Record<string, KNode> = {};
     const consts: Record<string, unknown> = {};
     for (const [k, c] of Object.entries(doc.constants ?? {})) consts[k] = c.value;
-    const resolvers = this.resolverRoots(doc.resolvers, nodes);
+    const resolvers = this.resolverRoots(doc.resolvers);
     const roots: Roots = { resolvers, consts, nodes: true };
     for (const n of doc.nodes) {
       if (isSwitch(n)) {
@@ -135,7 +148,7 @@ export class Compiler {
       for (const k of Object.keys(op.accepts ?? {})) passIn[k] = { ref: 'in', path: [k] };
       nodes.op = { kind: 'call', handler: handlerKey, in: passIn };
     } else {
-      const resolvers = this.resolverRoots(b.doc.resolvers, nodes);
+      const resolvers = this.resolverRoots(b.doc.resolvers);
       const { handler, op: target } = this.handlerFor(bop.run!);
       const given: Values = { ...(bop.in ?? {}) };
       for (const k of Object.keys(target.accepts ?? {})) if (!(k in given) && op.accepts?.[k]) given[k] = `{{in.${k}}}`;
@@ -146,15 +159,12 @@ export class Compiler {
     return spec;
   }
 
-  /** Resolver nodes: name -> node id. Their inputs may read request.* and each other. */
-  private resolverRoots(resolvers: Resolvers | undefined, nodes: Record<string, KNode>): Record<string, string> {
-    const roots: Record<string, string> = {};
-    for (const name of Object.keys(resolvers ?? {})) roots[name] = `resolver:${name}`;
-    for (const [name, r] of Object.entries(resolvers ?? {})) {
-      const { handler, op } = this.handlerFor(r.run);
-      nodes[roots[name]] = { kind: 'call', handler, in: this.lowerValues(r.in, { resolvers: roots, request: true }), redact: this.redactFor(op, r.in) };
-    }
-    return roots;
+  /** The resolvers a document names: name -> the segments read below request. A resolver is a read, so it lowers to no node. */
+  private resolverRoots(ref: string | undefined): Record<string, string[]> {
+    if (!ref) return {};
+    const d = this.scope.get('resolvers', ref);
+    if (!d) throw new Error(`unknown resolvers document '${ref}'`);
+    return Object.fromEntries(Object.entries(d.doc.resolvers).map(([name, r]) => [name, splitPath(r.read).slice(1)]));
   }
 
   private lowerValues(values: Values | undefined, roots: Roots): Record<string, KSource> {
@@ -166,8 +176,8 @@ export class Compiler {
   /** One value: a literal bakes, a whole template reads, text with templates concatenates. */
   private lowerValue(v: unknown, roots: Roots): KSource {
     const refFor = (t: string): KSource => {
-      const [root, ...path] = t.split('.');
-      if (roots.resolvers[root]) return { ref: roots.resolvers[root], path };
+      const [root, ...path] = splitPath(t);
+      if (roots.resolvers[root]) return { ref: 'request', path: [...roots.resolvers[root], ...path] };
       if (root === 'in') return { ref: root, path };
       if (root === 'const' && roots.consts) return { value: readPath(roots.consts[path[0]], path.slice(1)) };
       if (root === 'request' && roots.request) return { ref: root, path };
@@ -234,7 +244,7 @@ export function buildEnv(scope: Scope, env: NodeJS.ProcessEnv = process.env): { 
     return v;
   };
   const substitute = (v: unknown): unknown => {
-    if (typeof v === 'string') return v.replace(TEMPLATE, (_, t: string) => { const [root, key] = t.split('.'); return root === 'secrets' ? secret(key) : `{{${t}}}`; });
+    if (typeof v === 'string') return v.replace(TEMPLATE, (_, t: string) => { const [root, key] = splitPath(t); return root === 'secrets' ? secret(key) : `{{${t}}}`; });
     if (Array.isArray(v)) return v.map(substitute);
     if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, substitute(x)]));
     return v;

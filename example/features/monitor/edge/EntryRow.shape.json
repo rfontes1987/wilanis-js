@@ -1,0 +1,38 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "API row",
+  "layer": "edge",
+  "description": "A record as the monitor API returns it. Extra fields are tolerated -- reponseStatus is the API's own spelling and stays at the edge; trigger-facing shapes never see it.",
+  "fields": {
+    "id": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "method": {
+      "type": "string"
+    },
+    "reponseStatus": {
+      "type": "number",
+      "required": false
+    },
+    "ipv4": {
+      "type": "string",
+      "required": false
+    },
+    "mac": {
+      "type": "string",
+      "required": false
+    },
+    "ua": {
+      "type": "string",
+      "required": false
+    },
+    "createdAt": {
+      "type": "string",
+      "required": false
+    }
+  },
+  "open": true
+}

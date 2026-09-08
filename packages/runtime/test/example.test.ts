@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadTree, schemaRef, schemaUrl, type PluginModule } from '@wilanis/core';
 import { checkTree } from '@wilanis/compiler';
@@ -27,6 +27,17 @@ function sabotage(file: string, edit: (doc: any) => void): string[] {
   const doc = JSON.parse(readFileSync(p, 'utf8'));
   edit(doc);
   writeFileSync(p, JSON.stringify(doc));
+  const out = codes(dir);
+  rmSync(dir, { recursive: true, force: true });
+  return out;
+}
+
+/** Copy the example, move one document to another path, and answer the refusal codes. */
+function relocate(from: string, to: string): string[] {
+  const dir = mkdtempSync(join(tmpdir(), 'wilanis-'));
+  cpSync(EXAMPLE, dir, { recursive: true, filter: p => !p.includes('node_modules') });
+  mkdirSync(dirname(join(dir, to)), { recursive: true });
+  renameSync(join(dir, from), join(dir, to));
   const out = codes(dir);
   rmSync(dir, { recursive: true, force: true });
   return out;
@@ -89,7 +100,7 @@ describe('plugin packages and hooks', () => {
       expect(JSON.parse(readFileSync(f.file!, 'utf8'))).toEqual(f.doc);
     }
     expect(describeDoc(l, '@http/http.port.json')).toContain(`file  ${l.registry.get('port', '@http/http.port.json')!.file}`);
-    expect(l.registry.get('graph', '@features/monitor/graphs/get-row.graph.json')!.file).toBe(join(EXAMPLE, 'features/monitor/graphs/get-row.graph.json'));
+    expect(l.registry.get('graph', '@features/monitor/data/get-row.graph.json')!.file).toBe(join(EXAMPLE, 'features/monitor/data/get-row.graph.json'));
   });
   it('D006 when a plugin ships no plugin.json', () => {
     const fake: PluginModule = { root: '@fake', docs: docsDir({ 'fake.port.json': { $schema: schemaRef('port'), description: 'a port', operations: { op: { description: 'x' } } } }), handlers: {} };
@@ -131,7 +142,7 @@ describe('branch rehearsal', () => {
   }
 
   it('reports a rule an earlier rule already covers', async () => {
-    const lines = await withEdit('features/monitor/graphs/list-rows.graph.json', d => {
+    const lines = await withEdit('features/monitor/data/list-rows.graph.json', d => {
       const route = d.nodes.find((n: any) => n.id === 'route');
       route.rules = [{ when: 'status >= 200', to: 'rows' }, { when: 'status == 200 && has(body)', to: 'rows' }];
     });
@@ -139,7 +150,7 @@ describe('branch rehearsal', () => {
   });
 
   it('reports a rule that contradicts itself', async () => {
-    const lines = await withEdit('features/monitor/graphs/list-rows.graph.json', d => {
+    const lines = await withEdit('features/monitor/data/list-rows.graph.json', d => {
       const route = d.nodes.find((n: any) => n.id === 'route');
       route.rules = [{ when: 'status > 500 && status < 200', to: 'rows' }];
     });
@@ -149,63 +160,112 @@ describe('branch rehearsal', () => {
 
 describe('sabotage', () => {
   it('G003 a deep path that does not exist', () => {
-    expect(sabotage('features/monitor/graphs/record-entry.graph.json', d => { d.nodes[0].in.url = '{{in.urrl}}'; })).toContain('G003');
+    expect(sabotage('features/monitor/domain/record-entry.graph.json', d => { d.nodes[0].in.url = '{{in.urrl}}'; })).toContain('G003');
   });
   it('G004 an optional read feeding a required input', () => {
-    expect(sabotage('features/monitor/graphs/list-entries.graph.json', d => { d.nodes[0].rules[0].when = 'true == true'; })).toContain('G004');
+    expect(sabotage('features/monitor/domain/list-entries.graph.json', d => { d.nodes[0].rules[0].when = 'true == true'; })).toContain('G004');
   });
   it('G005 a required input left unwired', () => {
-    expect(sabotage('features/monitor/graphs/record-entry.graph.json', d => { delete d.nodes[0].in.url; })).toContain('G005');
+    expect(sabotage('features/monitor/domain/record-entry.graph.json', d => { delete d.nodes[0].in.url; })).toContain('G005');
   });
   it('G008 a node nobody reads', () => {
-    expect(sabotage('features/monitor/graphs/digest.graph.json', d => { d.out.from = 'all'; d.out.type = '@shapes/Entry.shape.json[]'; })).toContain('G008');
+    expect(sabotage('features/monitor/domain/digest.graph.json', d => { d.out.from = 'all'; d.out.type = '@monitor/domain/Entry.shape.json[]'; })).toContain('G008');
   });
   it('G010 a second out candidate that is never routed', () => {
-    expect(sabotage('features/monitor/graphs/digest.graph.json', d => { d.out.from = ['joined', 'all']; })).toContain('G010');
+    expect(sabotage('features/monitor/domain/digest.graph.json', d => { d.out.from = ['joined', 'all']; })).toContain('G010');
   });
   it('L002 an effect run from a domain graph', () => {
-    expect(sabotage('features/monitor/graphs/digest.graph.json', d => { d.nodes[0].run = '@http/http.port.json#request'; d.nodes[0].in = { connection: '@connections/monitor-api.connection.json', method: 'GET', path: '/x' }; })).toContain('L002');
+    expect(sabotage('features/monitor/domain/digest.graph.json', d => { d.nodes[0].run = '@http/http.port.json#request'; d.nodes[0].in = { connection: '@connections/monitor-api.connection.json', method: 'GET', path: '/x' }; })).toContain('L002');
+  });
+  it('D008 a port outside the domain layer', () => {
+    expect(relocate('features/monitor/domain/monitor.port.json', 'features/monitor/edge/monitor.port.json')).toContain('D008');
+  });
+  it('D008 a trigger outside the edge layer', () => {
+    expect(relocate('features/monitor/edge/digest.trigger.json', 'features/monitor/domain/digest.trigger.json')).toContain('D008');
+  });
+  it('D008 a document in a feature but in no layer at all', () => {
+    expect(relocate('features/monitor/domain/Entry.shape.json', 'features/monitor/Entry.shape.json')).toContain('D008');
+  });
+  it('D008 a connection outside connections/', () => {
+    expect(relocate('connections/monitor-api.connection.json', 'features/monitor/data/monitor-api.connection.json')).toContain('D008');
+  });
+  it('D008 a shape whose declared layer contradicts the directory it sits in', () => {
+    expect(sabotage('features/monitor/domain/Entry.shape.json', d => { d.layer = 'edge'; })).toContain('D008');
+  });
+  it('L006 a trigger that fires a native operation instead of a domain port', () => {
+    expect(sabotage('features/monitor/edge/digest.trigger.json', d => { d.fire.run = '@std/list.port.json#count'; })).toContain('L006');
+  });
+  it('L007 a domain graph that only forwards its input to one port operation', () => {
+    expect(sabotage('features/monitor/domain/record-entry.graph.json', d => {
+      // strip what earns its place: the constant it injects, so it becomes a pass-through
+      delete d.constants;
+      d.in = '@monitor/domain/EntryRef.shape.json';
+      d.out = { type: '@monitor/domain/Entry.shape.json', from: 'recorded' };
+      d.nodes = [{ type: '@wilanis/node/run.schema.json', id: 'recorded', run: '@monitor/domain/monitor.port.json#get', in: { id: '{{in.id}}' } }];
+    })).toContain('L007');
   });
   it('L003 an effect the feature does not allow', () => {
     expect(sabotage('features/monitor/feature.json', d => { d.effects = []; })).toContain('L003');
   });
   it('T002 a trigger whose edge shape does not fit the graph', () => {
-    expect(sabotage('features/monitor/shapes/RecordRequest.shape.json', d => { delete d.fields.url; })).toContain('T002');
+    expect(sabotage('features/monitor/edge/RecordRequest.shape.json', d => { delete d.fields.url; })).toContain('T002');
   });
   it('T004 a resolver reading request.* under a kind that hands none', () => {
-    expect(sabotage('features/monitor/graphs/list-rows.graph.json', d => {
-      d.resolvers = { caller: { run: '@std/text.port.json#format', in: { values: '{{request.headers}}', template: '{authorization}' } } };
-      d.nodes[0].in.headers = { authorization: '{{caller}}' };
+    // list-rows is reached from the digest, a cli trigger: the command line hands no headers
+    expect(sabotage('features/monitor/data/list-rows.graph.json', d => {
+      d.resolvers = '@monitor/edge/request.resolvers.json';
+      d.nodes[0].in.headers = { 'x-forwarded-user-agent': '{{agent}}' };
     })).toContain('T004');
   });
+  it('L002 a domain graph that names a resolvers document', () => {
+    expect(sabotage('features/monitor/domain/digest.graph.json', d => { d.resolvers = '@monitor/edge/request.resolvers.json'; })).toContain('L002');
+  });
+  it('R001 a resolvers document that does not exist', () => {
+    expect(sabotage('features/monitor/data/create-row.graph.json', d => { d.resolvers = '@monitor/edge/nope.resolvers.json'; })).toContain('R001');
+  });
+  it('G003 a read of a resolver the named document does not define', () => {
+    expect(sabotage('features/monitor/data/create-row.graph.json', d => { d.nodes[0].in.headers = { 'x-forwarded-user-agent': '{{caller}}' }; })).toContain('G003');
+  });
+  it('P002 a resolver reading a path no trigger kind hands', () => {
+    expect(sabotage('features/monitor/edge/request.resolvers.json', d => { d.resolvers.agent.read = 'request.cookies.session'; })).toContain('P002');
+  });
+  it('P003 a resolver named like a root', () => {
+    expect(sabotage('features/monitor/edge/request.resolvers.json', d => { d.resolvers.in = { read: 'request.headers.host' }; })).toContain('P003');
+  });
+  it('D001 a resolver whose read does not start at the request', () => {
+    expect(sabotage('features/monitor/edge/request.resolvers.json', d => { d.resolvers.agent.read = "headers['user-agent']"; })).toContain('D001');
+  });
+  it('D008 a resolvers document outside the edge layer', () => {
+    expect(relocate('features/monitor/edge/request.resolvers.json', 'features/monitor/data/request.resolvers.json')).toContain('D008');
+  });
   it('G006 an input the operation does not declare', () => {
-    expect(sabotage('features/monitor/graphs/list-rows.graph.json', d => { d.nodes[0].in.query = { a: 'b' }; })).toContain('G006');
+    expect(sabotage('features/monitor/data/list-rows.graph.json', d => { d.nodes[0].in.query = { a: 'b' }; })).toContain('G006');
   });
   it('P001 a static field given a read', () => {
-    expect(sabotage('features/monitor/graphs/list-rows-by-method.graph.json', d => { d.nodes[0].in.method = '{{in.method}}'; })).toContain('P001');
+    expect(sabotage('features/monitor/data/list-rows-by-method.graph.json', d => { d.nodes[0].in.method = '{{in.method}}'; })).toContain('P001');
   });
   it('G003 a read of a node that does not exist', () => {
-    expect(sabotage('features/monitor/graphs/list-rows.graph.json', d => { d.nodes[2].in.value = '{{asked2.body}}'; })).toContain('G003');
+    expect(sabotage('features/monitor/data/list-rows.graph.json', d => { d.nodes[2].in.value = '{{asked2.body}}'; })).toContain('G003');
   });
   it('T003 a route placeholder the route does not declare', () => {
-    expect(sabotage('features/monitor/triggers/get-entry.trigger.json', d => { d.settings.route = '/monitor/{entry}'; })).toContain('T003');
+    expect(sabotage('features/monitor/edge/get-entry.trigger.json', d => { d.settings.route = '/monitor/{entry}'; })).toContain('T003');
   });
   it('X002 a content type with no codec', () => {
-    expect(sabotage('features/monitor/triggers/record-entry.trigger.json', d => { d.settings.consumes = 'application/xml'; })).toContain('X002');
+    expect(sabotage('features/monitor/edge/record-entry.trigger.json', d => { d.settings.consumes = 'application/xml'; })).toContain('X002');
   });
   it('B004 a profile whose binding implements another port', () => {
-    expect(sabotage('features/monitor/monitor-rest.binding.json', d => { d.port = '@monitor/other.port.json'; })).toContain('B004');
+    expect(sabotage('features/monitor/data/monitor-rest.binding.json', d => { d.port = '@monitor/other.port.json'; })).toContain('B004');
   });
   it('B002 a domain port with no binding once the profile is gone', () => {
     expect(sabotage('project.json', d => { delete d.profiles; d.aliases['@monitor'] = '@features/nowhere'; })).toContain('B002');
   });
   it('D001 a document that breaks its schema', () => {
-    expect(sabotage('features/monitor/monitor.port.json', d => { d.operations.listAll.returnz = 'x'; })).toContain('D001');
+    expect(sabotage('features/monitor/domain/monitor.port.json', d => { d.operations.listAll.returnz = 'x'; })).toContain('D001');
   });
   it('D001 a $schema in neither the published nor the alias form', () => {
-    expect(sabotage('features/monitor/monitor.port.json', d => { d.$schema = 'https://example.com/port.schema.json'; })).toContain('D001');
+    expect(sabotage('features/monitor/domain/monitor.port.json', d => { d.$schema = 'https://example.com/port.schema.json'; })).toContain('D001');
   });
   it('R001 an alias to nowhere', () => {
-    expect(sabotage('features/monitor/graphs/digest.graph.json', d => { d.nodes[0].run = '@monitor/nope.port.json#listAll'; })).toContain('R001');
+    expect(sabotage('features/monitor/domain/digest.graph.json', d => { d.nodes[0].run = '@monitor/nope.port.json#listAll'; })).toContain('R001');
   });
 });

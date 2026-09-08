@@ -1,6 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
-  "description": "Lists. Like [].concat: the result type is declared in type.",
+  "label": "Lists",
+  "description": "Lists: count, first, concat, slice. Where the result type depends on the list, it is declared in type.",
   "operations": {
     "concat": {
       "description": "a followed by b.",
@@ -14,7 +15,7 @@
         "type": {
           "type": "type",
           "binds": "$T",
-          "description": "the list type, e.g. @shapes/Task.shape.json[]"
+          "description": "the list type, e.g. @features/tasks/domain/Task.shape.json[]"
         }
       },
       "returns": "$T",

@@ -16,8 +16,14 @@
       "type": "string",
       "minLength": 1
     },
+    "label": {
+      "description": "A short human name for this document, shown wherever a reader sees it instead of its path. Absent: the file name stands in.",
+      "type": "string",
+      "minLength": 1
+    },
     "resolvers": {
-      "$ref": "common.schema.json#/$defs/resolvers"
+      "description": "The resolvers document (edge/) whose reads this graph may use as {{name}}: values taken straight from the request. Data graphs only: a domain graph never reads the request.",
+      "$ref": "common.schema.json#/$defs/path"
     },
     "constants": {
       "description": "Typed literals, read as {{const.name}}.",

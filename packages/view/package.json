@@ -1,0 +1,55 @@
+{
+  "name": "@wilanis/view",
+  "version": "0.1.0",
+  "description": "A viewer for wilanis trees: every graph as a canvas of nodes, typed ports and the edges between them, with what calls what one click away. An HTTP server; the same page serves an editor preview.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Rafael Fontes <rfontes1987@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rfontes1987/wilanis-js.git",
+    "directory": "packages/view"
+  },
+  "homepage": "https://github.com/rfontes1987/wilanis-js/tree/main/packages/view#readme",
+  "bugs": "https://github.com/rfontes1987/wilanis-js/issues",
+  "keywords": [
+    "wilanis",
+    "dataflow",
+    "declarative",
+    "viewer",
+    "graph"
+  ],
+  "bin": {
+    "wilanis-view": "./bin/wilanis-view.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "client",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@wilanis/compiler": "0.1.0",
+    "@wilanis/core": "0.1.0",
+    "@wilanis/runtime": "0.1.0"
+  },
+  "devDependencies": {
+    "@wilanis/plugin-http": "0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

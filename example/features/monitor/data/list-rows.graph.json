@@ -1,0 +1,63 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "label": "List rows",
+  "description": "Data graph behind monitor.listAll: one GET, the rows when it answered 200, a failure otherwise. It is also reached from the digest, where there is no caller.",
+  "out": {
+    "type": "@monitor/domain/Entry.shape.json[]",
+    "from": [
+      "rows",
+      "failed"
+    ]
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "asked",
+      "label": "GET the rows",
+      "run": "@http/http.port.json#request",
+      "in": {
+        "connection": "@connections/monitor-api.connection.json",
+        "method": "GET",
+        "path": "/monitor",
+        "produces": "application/json",
+        "returns": "@monitor/edge/EntryRow.shape.json[]"
+      }
+    },
+    {
+      "type": "@wilanis/node/switch.schema.json",
+      "id": "route",
+      "label": "What did the API say?",
+      "in": {
+        "status": "{{asked.status}}",
+        "body": "{{asked.body}}"
+      },
+      "rules": [
+        {
+          "when": "status == 200 && has(body)",
+          "to": "rows"
+        }
+      ],
+      "else": "failed"
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "rows",
+      "label": "The rows",
+      "run": "@std/object.port.json#make",
+      "in": {
+        "value": "{{asked.body}}",
+        "type": "@monitor/edge/EntryRow.shape.json[]"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "failed",
+      "label": "Unexpected answer",
+      "run": "@std/outcome.port.json#refuse",
+      "in": {
+        "message": "the monitor API answered {{asked.status}}",
+        "type": "@monitor/domain/Entry.shape.json[]"
+      }
+    }
+  ]
+}

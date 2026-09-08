@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "label": "GET /monitor/{id}",
+  "description": "GET /monitor/{id} \u2192 the entry, or a 500 with `no entry {id}` when there is none.",
+  "settings": {
+    "route": "/monitor/{id}",
+    "method": "GET",
+    "produces": "application/json",
+    "access": {
+      "open": true
+    }
+  },
+  "in": "@monitor/edge/IdRequest.shape.json",
+  "out": "@monitor/edge/EntryView.shape.json",
+  "kind": "@http/http.trigger-kind.json",
+  "fire": {
+    "run": "@monitor/domain/monitor.port.json#get",
+    "in": {
+      "id": "{{request.params.id}}"
+    }
+  }
+}

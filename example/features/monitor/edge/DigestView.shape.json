@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "Digest (printed)",
+  "layer": "edge",
+  "description": "The digest as the command line prints it.",
+  "fields": {
+    "count": {
+      "type": "number",
+      "description": "how many entries"
+    },
+    "text": {
+      "type": "string",
+      "description": "one line per entry"
+    }
+  }
+}

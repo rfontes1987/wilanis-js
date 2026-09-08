@@ -10,7 +10,7 @@
     "fuzz": "wilanis fuzz .",
     "regress": "wilanis regress .",
     "serve": "wilanis serve .",
-    "digest": "wilanis run @monitor/triggers/digest.trigger.json ."
+    "digest": "wilanis run @monitor/edge/digest.trigger.json ."
   },
   "dependencies": {
     "@wilanis/plugin-http": "0.1.0",

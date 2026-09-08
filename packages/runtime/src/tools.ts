@@ -55,7 +55,7 @@ export function generatedFire(emb: Embedder, t: Loaded<TriggerDoc>, seed: number
   const types = emb.types(t.doc);
   // the body/input is generated from the trigger's in type so it always conforms; the mapping is then honoured
   if (types.in) {
-    if (t.doc.input !== undefined) {
+    if (t.doc.fire.in !== undefined) {
       const built = emb.inputFor(t.doc, request);
       if ('input' in built) return { input: built.input, request };
       return { input: generate(types.in, r), request };
@@ -95,7 +95,7 @@ export interface Rehearsal { ok: boolean; lines: string[] }
 interface Settled {
   /** done, failed, or BLOCKED. */
   status: string;
-  /** The declared failure, when the graph failed on purpose at a #fail node. */
+  /** The declared failure, when the graph failed on purpose at a #refuse node. */
   declared?: string;
   /** A failure the graph did not declare: a bug, not a designed outcome. */
   error?: string;
@@ -137,9 +137,9 @@ function settle(report: Report, sw: FoundSwitch, aim: string): Settled {
   const [id, n] = failed;
   // a fail node in THIS graph is a declared outcome; a failure that arrived from a graph this one calls
   // is that graph's declared outcome surfacing here, and naming it as ours would credit the wrong document
-  if (n.handler?.endsWith('#fail')) { out.declared = n.error ?? ''; return out; }
+  if (n.handler?.endsWith('#refuse')) { out.declared = n.error ?? ''; return out; }
   const deeper = n.sub ? failedLeaf(n.sub) : undefined;
-  if (deeper?.handler?.endsWith('#fail')) { out.propagated = { node: id, error: deeper.error ?? '' }; return out; }
+  if (deeper?.handler?.endsWith('#refuse')) { out.propagated = { node: id, error: deeper.error ?? '' }; return out; }
   out.error = `${id}: ${n.error}`;
   return out;
 }
@@ -152,7 +152,7 @@ function settle(report: Report, sw: FoundSwitch, aim: string): Settled {
  * from its own rules -- the inputs that make one rule true while the rules before it are false -- so a
  * branch is exercised whether or not a generated value would have happened to reach it.
  *
- * A branch is acceptable when it settles: the graph answers, or it fails at a #fail node it declared.
+ * A branch is acceptable when it settles: the graph answers, or it fails at a #refuse node it declared.
  * It is a problem when the graph blocks (an input nothing supplies), fails somewhere it did not declare,
  * routes somewhere other than where its rule points, or when no inputs can reach the branch at all.
  */
@@ -169,10 +169,10 @@ export async function rehearse(load: LoadResult, opts: { seed?: number; profile?
       const { input, request } = generatedFire(emb, t, seed);
       const report = await emb.fire(t.doc, input, request);
       const leaf = failedLeaf(report);
-      const onPurpose = leaf?.handler?.endsWith('#fail');
+      const onPurpose = leaf?.handler?.endsWith('#refuse');
       const failed = Object.entries(report.nodes).find(([, n]) => n.status === 'failed');
       settledGraphs.push({
-        trigger: t.name, graph: t.doc.graph,
+        trigger: t.name, graph: t.doc.fire.run,
         status: report.status === 'blocked' ? 'BLOCKED' : report.status,
         declared: report.status === 'failed' && onPurpose ? leaf?.error : undefined,
         error: report.status === 'failed' && !onPurpose ? (failed ? `${failed[0]}: ${failed[1].error}` : 'failed') : undefined,
@@ -297,7 +297,7 @@ async function rehearseTrigger(load: LoadResult, t: Loaded<TriggerDoc>, seed: nu
   const { input, request } = generatedFire(probe, t, seed);
   await probe.fire(t.doc, input, request);
 
-  const spec = probe.graph(t.doc.graph).spec;
+  const spec = probe.operation(t.doc.fire.run).spec;
   // A binding operation lowers to a wrapper spec holding a single node `op`, so a graph reached through
   // a binding sits one level deeper than the document suggests: the kernel stubs it at `<node>.op.<id>`.
   const nested = (handler: string): { nodes: Record<string, unknown> } | undefined => {
@@ -380,8 +380,9 @@ async function rehearseTrigger(load: LoadResult, t: Loaded<TriggerDoc>, seed: nu
 
 /** The graph document a switch belongs to: the trigger's own graph, or the one its enclosing call runs. */
 function graphOf(emb: Embedder, t: Loaded<TriggerDoc>, sw: FoundSwitch): string {
-  let spec = emb.graph(t.doc.graph).spec as { nodes: Record<string, unknown> };
-  let graph = emb.scope.canon(t.doc.graph);
+  let spec = emb.operation(t.doc.fire.run).spec as { nodes: Record<string, unknown> };
+  let graph = bindingGraph(emb, `${emb.scope.canon(t.doc.fire.run.split('#')[0])}#${t.doc.fire.run.split('#')[1]}`) ?? t.doc.fire.run;
+  graph = emb.scope.canon(graph);
   for (const seg of sw.prefix) {
     const n = spec.nodes?.[seg] as Record<string, unknown> | undefined;
     const handler = typeof n?.handler === 'string' ? n.handler : undefined;
@@ -429,7 +430,7 @@ export async function fuzz(load: LoadResult, opts: { runs?: number; profile?: st
       const sc: ScenarioDoc = {
         $schema: schemaUrl('scenario'),
         description: `${t.path} under seed ${seed}: ${report.status}. Generated by wilanis fuzz; edit stubs to pin an edge case.`,
-        graph: t.doc.graph, seed, in: input, request, stubs: record,
+        trigger: t.path, seed, in: input, request, stubs: record,
         expect: { status: report.status, ...(report.status === 'done' ? { output: report.output } : {}), nodes: pick(report) },
       };
       const file = join(dir, `${t.name}.${seed}.scenario.json`);
@@ -448,15 +449,10 @@ export async function regress(load: LoadResult, opts: { profile?: string } = {})
   let ok = true;
   const emb = embedderFor(load, { seed: 0, profile: opts.profile, env: fakeEnvFor(load) });
   for (const sc of load.registry.all('scenario')) {
-    const trigger = load.registry.all('trigger').find(t => load.resolve(t.doc.graph) === load.resolve(sc.doc.graph));
-    let report: Report;
-    if (trigger) report = await emb.fire(trigger.doc, sc.doc.in, sc.doc.request ?? {}, { stubs: sc.doc.stubs });
-    else {
-      const g = emb.scope.get('graph', sc.doc.graph)!.doc as GraphDoc;
-      const initial: Record<string, unknown> = { request: sc.doc.request ?? {} };
-      if (g.in) initial.in = sc.doc.in;
-      report = await runGraph(emb.graph(sc.doc.graph), { initial, stubs: sc.doc.stubs, env: emb.env });
-    }
+    const trigger = load.registry.all('trigger').find(t => t.path === load.resolve(sc.doc.trigger));
+    // S001 has already refused a scenario whose trigger is gone; skip rather than replay nothing.
+    if (!trigger) { ok = false; lines.push(`${sc.path}: names unknown trigger '${sc.doc.trigger}'`); continue; }
+    const report: Report = await emb.fire(trigger.doc, sc.doc.in, sc.doc.request ?? {}, { stubs: sc.doc.stubs });
     const diffs: string[] = [];
     if (report.status !== sc.doc.expect.status) diffs.push(`status ${sc.doc.expect.status} → ${report.status}`);
     if (sc.doc.expect.status === 'done' && !same(report.output, sc.doc.expect.output)) diffs.push('output changed');
@@ -536,13 +532,40 @@ export function map(load: LoadResult): string[] {
       if (bop?.graph) graph(bop.graph, indent + '      ', seen);
     }
   };
-  for (const t of load.registry.all('trigger')) { lines.push(`${t.path}  (${t.doc.kind})`); graph(t.doc.graph, '  ', new Set()); }
+  for (const t of load.registry.all('trigger')) {
+    lines.push(`${t.path}  (${t.doc.kind})`);
+    const o = load.registry.get('port', load.resolve(t.doc.fire.run.split('#')[0]));
+    const opName = t.doc.fire.run.split('#')[1];
+    lines.push(`  ${t.doc.fire.run}`);
+    if (o) for (const b of load.registry.all('binding').filter(b => load.resolve(b.doc.port) === o.path)) {
+      const bop = b.doc.operations[opName];
+      if (bop?.graph) graph(bop.graph, '    ', new Set());
+      else if (bop?.run) lines.push(`    ${b.path}#${opName} → ${bop.run}`);
+    }
+  }
   const reached = new Set(lines.filter(l => l.trim().endsWith('.graph.json')).map(l => l.trim()));
   for (const g of load.registry.all('graph')) if (!reached.has(g.path)) lines.push(`orphan  ${g.path}`);
   return lines;
 }
 
 // ---- scaffolds -------------------------------------------------------------------------------------
+
+/**
+ * Where a scaffolded document goes: inside a feature, in the layer its kind lives in. `target` may already
+ * name a path (features/x/domain/y); a bare name is placed under the layer of the feature it belongs to.
+ */
+function into(target: string, layer: 'edge' | 'domain' | 'data', kind: string): string {
+  const suffix = `.${kind}.json`;
+  if (target.includes('/')) {
+    const parts = target.split('/');
+    // features/<name>/<rest> -- insert the layer when the author did not
+    if (parts[0] === 'features' && parts.length > 2 && !['edge', 'domain', 'data'].includes(parts[2])) {
+      return [...parts.slice(0, 2), layer, ...parts.slice(2)].join('/') + suffix;
+    }
+    return target + suffix;
+  }
+  return `${layer}/${target}${suffix}`;
+}
 
 export function scaffold(root: string, kind: string, target: string, opts: Record<string, string | undefined>): string[] {
   const files: [string, unknown][] = [];
@@ -555,22 +578,28 @@ export function scaffold(root: string, kind: string, target: string, opts: Recor
     case 'feature':
       files.push([`features/${target}/feature.json`, { $schema: S('feature'), description: 'TODO', exports: [], effects: [] }]);
       break;
-    case 'shape':
-      files.push([`${target}.shape.json`, { $schema: S('shape'), layer: opts.layer ?? 'core', description: 'TODO', fields: {} }]);
+    case 'shape': {
+      // a shape is the world's (edge) or ours (domain); `layer: core` is the domain's word for it
+      const layer = opts.layer === 'edge' ? 'edge' : 'core';
+      files.push([into(target, layer === 'edge' ? 'edge' : 'domain', 'shape'), { $schema: S('shape'), layer, description: 'TODO', fields: {} }]);
       break;
+    }
     case 'port':
-      files.push([`${target}.port.json`, { $schema: S('port'), description: 'TODO', operations: { example: { description: 'TODO', accepts: {}, returns: 'string' } } }]);
+      files.push([into(target, 'domain', 'port'), { $schema: S('port'), description: 'TODO', operations: { example: { description: 'TODO', accepts: {}, returns: 'string' } } }]);
       break;
     case 'graph':
-      files.push([`${target}.graph.json`, { $schema: S('graph'), description: 'TODO', nodes: [{ type: '@wilanis/node/run.schema.json', id: 'first', run: '@std/text.port.json#format', in: { values: {}, template: 'hello' } }], out: { type: 'string', from: 'first' } }]);
+      files.push([into(target, opts.layer === 'data' ? 'data' : 'domain', 'graph'), { $schema: S('graph'), description: 'TODO', nodes: [{ type: '@wilanis/node/run.schema.json', id: 'first', run: '@std/text.port.json#fill', in: { values: {}, template: 'hello' } }], out: { type: 'string', from: 'first' } }]);
       break;
     case 'binding':
-      files.push([`${target}.binding.json`, { $schema: S('binding'), description: 'TODO', port: opts.port ?? '@features/<feature>/<name>.port.json', operations: {} }]);
+      files.push([into(target, 'data', 'binding'), { $schema: S('binding'), description: 'TODO', port: opts.port ?? '@features/TODO/domain/TODO.port.json', operations: {} }]);
+      break;
+    case 'resolvers':
+      files.push([into(target, 'edge', 'resolvers'), { $schema: S('resolvers'), description: 'TODO', resolvers: { caller: { read: "request.headers['user-agent']", description: 'TODO' } } }]);
       break;
     case 'trigger':
-      files.push([`${target}.trigger.json`, { $schema: S('trigger'), description: 'TODO', kind: opts.kind ?? '@http/http.trigger-kind.json', settings: { route: '/todo', method: 'GET', produces: 'application/json' }, graph: opts.graph ?? '@features/<feature>/graphs/<name>.graph.json' }]);
+      files.push([into(target, 'edge', 'trigger'), { $schema: S('trigger'), description: 'TODO', kind: opts.kind ?? '@http/http.trigger-kind.json', settings: { route: '/todo', method: 'GET', produces: 'application/json' }, fire: { run: opts.run ?? '@features/TODO/domain/TODO.port.json#todo' } }]);
       break;
-    default: throw new Error(`unknown kind '${kind}'; one of project, feature, shape, port, graph, binding, trigger`);
+    default: throw new Error(`unknown kind '${kind}'; one of project, feature, shape, port, graph, binding, trigger, resolvers`);
   }
   const written: string[] = [];
   for (const [rel, doc] of files) {

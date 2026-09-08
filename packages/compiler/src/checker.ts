@@ -6,9 +6,9 @@
 import type { LoadResult } from '@wilanis/core';
 import {
   isMap, isRun, isSwitch, RefusalList, type BindingDoc, type Fields, type GraphDoc, type Loaded, type Node,
-  type Operation, type PortDoc, type Resolvers, type ShapeDoc, type TriggerDoc, type TypeSpec, type ConnectionDoc,
+  type Operation, type PortDoc, type ResolversDoc, type ShapeDoc, type TriggerDoc, type TypeSpec, type ConnectionDoc,
 } from '@wilanis/core';
-import { Scope, WHOLE_TEMPLATE, type OpHit } from '@wilanis/core';
+import { Scope, WHOLE_TEMPLATE, splitPath, type OpHit } from '@wilanis/core';
 import { assignable, conforms, EMPTY_OBJECT, hasVars, show, STRING, substitute, typeAt, TypeError_, type Read, type Type } from '@wilanis/core';
 import { expr } from '@wilanis/core';
 
@@ -48,14 +48,11 @@ class Checker {
     for (const sh of this.s.registry.all('shape')) this.checkShape(sh);
     for (const p of this.s.registry.all('port')) this.checkPort(p);
     for (const c of this.s.registry.all('connection')) this.checkConnection(c);
-    const roles = this.s.graphRoles();
-    for (const [path, e] of roles) {
-      if (e.roles.size > 1) this.refuse('L004', path, `graph is fired by a trigger and bound by a binding (${e.by.join(', ')})`, undefined, 'a graph is either domain (behind a trigger) or data (behind a binding); split it');
-    }
-    for (const g of this.s.registry.all('graph')) this.checkGraph(g, this.s.roleOf(g.path, roles));
+    for (const r of this.s.registry.all('resolvers')) this.checkResolversDoc(r);
+    for (const g of this.s.registry.all('graph')) this.checkGraph(g, this.s.roleOf(g.path));
     for (const b of this.s.registry.all('binding')) this.checkBinding(b);
     for (const t of this.s.registry.all('trigger')) this.checkTrigger(t);
-    for (const sc of this.s.registry.all('scenario')) if (!this.s.get('graph', sc.doc.graph)) this.refuse('S001', sc.path, `scenario names unknown graph '${sc.doc.graph}'`, 'graph');
+    for (const sc of this.s.registry.all('scenario')) if (!this.s.get('trigger', sc.doc.trigger)) this.refuse('S001', sc.path, `scenario names unknown trigger '${sc.doc.trigger}'`, 'trigger', 'wilanis ls trigger');
   }
 
   // ---- project ------------------------------------------------------------------------------------
@@ -153,38 +150,44 @@ class Checker {
 
   // ---- resolvers ----------------------------------------------------------------------------------
 
+  /** A resolver: the segments it reads below `request`, and what every trigger kind that hands the path says its type is. */
+  private resolverReads = new Map<string, Record<string, ResolverRead>>();
+
   /**
-   * Check a resolvers block. Answers name -> returns type. `allowRequest`: whether {{request.*}} is legal
-   * in resolver inputs here (data layer yes, domain layer no). `effects`: the allowlist, or null to skip.
+   * Judge a resolvers document once: every name is free, every read is a path some trigger kind hands.
+   * A read no kind hands is refused here, at the document; whether the kinds that reach it hand it is T004.
    */
-  checkResolvers(resolvers: Resolvers | undefined, from: Loaded, allowRequest: boolean, nativeOnly: boolean, effects: Set<string> | null, effectsAt: string): Record<string, Type> {
-    const types: Record<string, Type> = {};
-    if (!resolvers) return types;
-    const visiting = new Set<string>();
-    const file = from.path;
-    const resolveType = (name: string, stack: string[]): Type | undefined => {
-      if (types[name]) return types[name];
-      if (visiting.has(name)) { this.refuse('P004', file, `resolver cycle: ${[...stack, name].join(' → ')}`, `resolvers/${name}`); return undefined; }
-      const spec = resolvers[name];
-      visiting.add(name);
-      const o = this.opAt(spec.run, from, `resolvers/${name}/run`);
-      if (!o) { visiting.delete(name); return undefined; }
-      if (nativeOnly && !o.port.native) this.refuse('L002', file, `resolver '${name}' runs domain operation '${spec.run}' from the data layer`, `resolvers/${name}/run`, 'the data layer speaks native ports only');
-      if (o.port.native && o.op.pure !== true && effects && !effects.has(`${o.path}#${o.opName}`)) this.refuse('L003', file, `resolver '${name}' runs effectful '${o.path}#${o.opName}' which the feature does not allow`, `resolvers/${name}/run`, `add "${o.path}#${o.opName}" to ${effectsAt}`);
-      const resolve = (root: string, path: string[]): Read | string => {
-        if (root === 'request') return allowRequest ? this.s.requestRead(path) : 'request.* is read by the data layer only -- declare this resolver in the binding';
-        if (root in resolvers) { const t = resolveType(root, [...stack, name]); return t ? typeAt(t, path) : `resolver '${root}' could not be typed`; }
-        return `'${root}' is not a resolver here (resolvers: ${Object.keys(resolvers).join(', ')}); a resolver reads request.* and other resolvers`;
-      };
-      const subst = this.checkInputs(spec.in ?? {}, o.op.accepts, this.reader(resolve, file), file, `resolvers/${name}/in`, `'${spec.run}'`, from, null);
-      let ret = this.type(o.op.returns, o.port.path, 'returns') ?? EMPTY_OBJECT;
-      if (hasVars(ret)) ret = substitute(ret, subst);
-      types[name] = ret;
-      visiting.delete(name);
-      return ret;
-    };
-    for (const name of Object.keys(resolvers)) resolveType(name, []);
-    return types;
+  checkResolversDoc(r: Loaded<ResolversDoc>) {
+    const out: Record<string, ResolverRead> = {};
+    for (const [name, spec] of Object.entries(r.doc.resolvers)) {
+      const at = `resolvers/${name}`;
+      if (RESERVED.has(name)) { this.refuse('P003', r.path, `resolver name '${name}' is reserved`, at, `in, const, request and secrets are roots; pick another name`); continue; }
+      const path = splitPath(spec.read).slice(1);
+      const read = this.s.requestRead(path);
+      if (typeof read === 'string') { this.refuse('P002', r.path, `resolver '${name}': ${read}`, `${at}/read`, 'wilanis describe <trigger kind> shows what each kind hands as request.*'); continue; }
+      out[name] = { path, read };
+    }
+    this.resolverReads.set(r.path, out);
+  }
+
+  /**
+   * The resolvers a graph or binding may read, from the document it names. A domain graph names none: the
+   * request is the world's, and the domain never sees it.
+   */
+  private resolversFor(ref: string | undefined, from: Loaded, allowed: boolean, at = 'resolvers'): Record<string, ResolverRead> {
+    if (!ref) return {};
+    if (!allowed) { this.refuse('L002', from.path, 'a domain graph never reads the request', at, 'read the request in the data layer: the data graph or the binding names the resolvers document'); return {}; }
+    const doc = this.s.get('resolvers', ref);
+    if (!doc) { this.refuse('R001', from.path, `unknown resolvers document '${ref}'`, at, 'wilanis ls resolvers'); return {}; }
+    const v = this.s.visibility(from, doc); if (v) this.refuse('L005', from.path, v, at);
+    return this.resolverReads.get(doc.path) ?? {};
+  }
+
+  /** The request.* paths a set of reads touches through the resolvers they name: what a trigger kind must hand. */
+  private requestNeedsOf(resolvers: Record<string, ResolverRead>, reads: string[][], file: string): { path: string[]; file: string }[] {
+    const out: { path: string[]; file: string }[] = [];
+    for (const p of reads) { const r = resolvers[p[0]]; if (r) out.push({ path: [...r.path, ...p.slice(1)], file }); }
+    return out;
   }
 
   /** Resolve path#operation from a document, with visibility. */
@@ -212,7 +215,7 @@ class Checker {
       if (this.quiet(f.type)?.kind !== 'type') continue;
       if (!(k in given)) { if (f.required !== false) this.refuse('G005', file, `${what} requires '${k}'`, at); continue; }
       const v = given[k];
-      if (typeof v !== 'string' || !this.s.literal(v)) { this.refuse('P001', file, `'${k}' is a type reference, written as a literal string`, `${at}/${k}`, 'e.g. "@shapes/Task.shape.json[]"'); continue; }
+      if (typeof v !== 'string' || !this.s.literal(v)) { this.refuse('P001', file, `'${k}' is a type reference, written as a literal string`, `${at}/${k}`, 'e.g. "@features/tasks/domain/Task.shape.json[]"'); continue; }
       const t = this.type(v, file, `${at}/${k}`);
       if (!t) continue;
       this.checkLayer(v, from, `${at}/${k}`, layer, `'${k}'`);
@@ -263,7 +266,7 @@ class Checker {
     const feature = b.feature ? this.s.registry.get('feature', `@features/${b.feature}/feature.json`)?.doc : undefined;
     const effects = new Set((feature?.effects ?? []).map(e => { const i = e.lastIndexOf('#'); return `${this.s.canon(e.slice(0, i))}${e.slice(i)}`; }));
     const effectsAt = `@features/${b.feature}/feature.json → effects`;
-    const rtypes = this.checkResolvers(b.doc.resolvers, b, true, true, effects, effectsAt);
+    const rreads = this.resolversFor(b.doc.resolvers, b, true);
 
     for (const opName of Object.keys(port.doc.operations)) if (!b.doc.operations[opName]) this.refuse('B001', b.path, `operation '${opName}' of '${port.path}' is not bound`, 'operations');
     for (const [opName, bop] of Object.entries(b.doc.operations)) {
@@ -287,13 +290,12 @@ class Checker {
       } else if (bop.run) {
         const o = this.opAt(bop.run, b, `${at}/run`);
         if (!o) continue;
-        if (!o.port.native) { this.refuse('L002', b.path, `'${opName}' delegates to domain operation '${bop.run}' -- a binding speaks native ports only`, `${at}/run`); continue; }
         if (o.op.pure !== true && !effects.has(`${o.path}#${o.opName}`)) this.refuse('L003', b.path, `'${opName}' delegates to effectful '${o.path}#${o.opName}' which the feature does not allow`, `${at}/run`, `add "${o.path}#${o.opName}" to ${effectsAt}`);
         let tReturns = this.type(o.op.returns, o.port.path, 'returns');
         const resolve = (root: string, path: string[]): Read | string => {
-          if (root in rtypes) return typeAt(rtypes[root], path);
+          if (root in rreads) return readAt(rreads[root].read, path);
           if (root === 'in') return accepts ? typeAt(accepts, path) : 'this operation accepts nothing';
-          return `'${root}' is not in or a resolver of this binding (resolvers: ${Object.keys(rtypes).join(', ') || 'none'})`;
+          return `'${root}' is not in or a resolver of this binding (resolvers: ${Object.keys(rreads).join(', ') || 'none'})`;
         };
         // what the delegate gets: the statement's own values, and the caller's by name for the rest
         const given: Record<string, unknown> = { ...(bop.in ?? {}) };
@@ -317,7 +319,9 @@ class Checker {
     const effectsAt = `@features/${g.feature}/feature.json → effects`;
     const layer: 'core' | null = role === 'data' ? null : 'core';
 
-    const rtypes = this.checkResolvers(doc.resolvers, g, role === 'data', role === 'data', role === 'data' ? effects : null, effectsAt);
+    if (role === 'domain') this.checkNotPassThrough(g);
+
+    const rreads = this.resolversFor(doc.resolvers, g, role === 'data');
 
     const inType = this.type(doc.in, file, 'in');
     if (doc.in) this.checkLayer(doc.in, g, 'in', layer, 'in');
@@ -384,8 +388,8 @@ class Checker {
         readsConst.add(path[0]);
         return typeAt(constTypes[path[0]], path.slice(1));
       }
-      if (root === 'request') return `graphs do not read request.* -- a resolver's in does; read {{name.path}} instead`;
-      if (root in rtypes) return typeAt(rtypes[root], path);
+      if (root === 'request') return `graphs do not read request.* -- a resolvers document does; name it in resolvers and read {{name}}`;
+      if (root in rreads) return readAt(rreads[root].read, path);
       if (!nodes.has(root)) return `unknown node '${root}' (nodes: ${[...nodes.keys()].join(', ')})`;
       readNodes.add(root);
       const base = nodeOut(root);
@@ -517,55 +521,88 @@ class Checker {
     }
     if (doc.in) this.checkLayer(doc.in, t, 'in', 'edge', 'in');
     if (doc.out) this.checkLayer(doc.out, t, 'out', 'edge', 'out');
-    const g = this.s.get('graph', doc.graph);
-    if (!g) { this.refuse('R001', file, `unknown graph '${doc.graph}'`, 'graph'); return; }
-    const v = this.s.visibility(t, g); if (v) this.refuse('L005', file, v, 'graph');
+    const o = this.s.op(doc.fire.run);
+    if (typeof o === 'string') { this.refuse('R001', file, o, 'fire/run', 'wilanis ls port'); return; }
+    if (o.port.native) { this.refuse('L006', file, `trigger fires native operation '${doc.fire.run}'`, 'fire/run', 'a trigger fires a domain port; the port\'s binding reaches the native operation'); return; }
+    const v = this.s.visibility(t, o.port); if (v) this.refuse('L005', file, v, 'fire/run');
     const tin = this.type(doc.in, file, 'in'), tout = this.type(doc.out, file, 'out');
     const ctx = this.s.contextType(kind.doc, doc.settings);
-    if (doc.input !== undefined) {
-      if (!tin) this.refuse('T003', file, 'input is mapped but the trigger declares no in', 'input');
+    if (doc.fire.in !== undefined) {
+      if (!tin) this.refuse('T003', file, 'fire.in is given but the trigger declares no in', 'fire/in');
       else {
-        const read = this.s.valueRead(doc.input, (root, path) => root === 'request' ? typeAt(ctx, path) : `'${root}': a trigger's input reads request.* only`);
-        if (typeof read === 'string') this.refuse('T003', file, `input: ${read}`, 'input', `wilanis describe ${doc.kind} shows what this kind hands`);
-        else if (read?.optional) this.refuse('T003', file, 'input reads a value that may be missing', 'input');
-        else if (read) { const bad = assignableWire(read.type, tin); if (bad) this.refuse('T003', file, `input → in: ${bad}`, 'input'); }
+        const read = this.s.valueRead(doc.fire.in, (root, path) => root === 'request' ? typeAt(ctx, path) : `'${root}': a trigger's input reads request.* only`);
+        if (typeof read === 'string') this.refuse('T003', file, `fire.in: ${read}`, 'fire/in', `wilanis describe ${doc.kind} shows what this kind hands`);
+        else if (read?.optional) this.refuse('T003', file, 'fire.in reads a value that may be missing', 'fire/in');
+        else if (read) { const bad = assignableWire(read.type, tin); if (bad) this.refuse('T003', file, `fire.in → in: ${bad}`, 'fire/in'); }
       }
     }
-    const gin = this.quiet(g.doc.in), gout = this.quiet(g.doc.out?.type);
-    if (gin && !tin) this.refuse('T002', file, `graph takes ${show(gin)} but the trigger declares no in`, 'in');
-    if (tin && gin) { const bad = assignable(tin, gin); if (bad) this.refuse('T002', file, `in → graph in: ${bad}`, 'in', "the edge shape must be assignable to the graph's core shape, field for field"); }
-    if (gout && !tout) this.refuse('T002', file, `graph answers ${show(gout)} but the trigger declares no out`, 'out');
-    if (tout && !gout) this.refuse('T002', file, 'trigger declares out but the graph answers nothing', 'out');
-    if (tout && gout) { const bad = assignable(gout, tout); if (bad) this.refuse('T002', file, `graph out → out: ${bad}`, 'out'); }
+    const accepts = o.op.accepts ?? {};
+    const gin = Object.keys(accepts).length ? this.quiet({ fields: accepts }) : undefined;
+    const gout = this.quiet(o.op.returns);
+    if (gin && !tin) this.refuse('T002', file, `'${doc.fire.run}' takes ${show(gin)} but the trigger declares no in`, 'in');
+    if (tin && gin) { const bad = assignable(tin, gin); if (bad) this.refuse('T002', file, `in → ${doc.fire.run}: ${bad}`, 'in', "the edge shape must be assignable to the operation's core contract, field for field"); }
+    if (gout && !tout) this.refuse('T002', file, `'${doc.fire.run}' answers ${show(gout)} but the trigger declares no out`, 'out');
+    if (tout && !gout) this.refuse('T002', file, `trigger declares out but '${doc.fire.run}' returns nothing`, 'out');
+    if (tout && gout) { const bad = assignable(gout, tout); if (bad) this.refuse('T002', file, `${doc.fire.run} → out: ${bad}`, 'out'); }
     // request reachability: every request.* a resolver reads under this trigger must be in the kind's context
     const profiles = this.s.profiles().length ? this.s.profiles() : [undefined];
     for (const prof of profiles) {
-      for (const need of this.requestNeeds(g.path, prof)) {
+      for (const need of this.opNeeds(doc.fire.run, prof)) {
         const rr = typeAt(ctx, need.path);
-        if (typeof rr === 'string') this.refuse('T004', file, `${need.file} reads request.${need.path.join('.')} but trigger kind '${doc.kind}' hands no such value${prof ? ` (profile '${prof}')` : ''}`, 'kind', 'fire this graph from a kind that hands it, or bind the port differently under a profile');
+        if (typeof rr === 'string') this.refuse('T004', file, `${need.file} reads request.${need.path.join('.')} but trigger kind '${doc.kind}' hands no such value${prof ? ` (profile '${prof}')` : ''}`, 'kind', 'fire this operation from a kind that hands it, or bind the port differently under a profile');
       }
     }
   }
 
-  /** Every request.* path read by resolvers reachable from a graph: its own, and per node the one binding operation it reaches. */
+  /**
+   * A domain graph earns its place by doing something the port call alone cannot: composing more than one
+   * node, routing, mapping, or supplying a value the caller never gave. One node that forwards its input to
+   * one port operation is boilerplate between the trigger and the binding -- the trigger fires the port.
+   */
+  private checkNotPassThrough(g: Loaded<GraphDoc>) {
+    const doc = g.doc;
+    if (doc.nodes.length !== 1) return;
+    const n = doc.nodes[0];
+    if (!isRun(n)) return;
+    if (Object.keys(doc.constants ?? {}).length || doc.resolvers) return;
+    const o = this.s.op(n.run);
+    if (typeof o === 'string' || o.port.native) return;
+    // every input forwarded one-for-one from the graph's own in, and nothing added
+    const given = Object.entries(n.in ?? {});
+    if (!given.every(([k, v]) => v === `{{in.${k}}}`)) return;
+    this.refuse('L007', g.path, `graph only forwards its input to '${n.run}'`, undefined,
+      `it adds no rule of its own; fire ${n.run} from the trigger and delete this graph`);
+  }
+
+  /** Every request.* path reachable from a domain port operation: through the binding that meets it. */
+  private opNeeds(opRef: string, profile: string | undefined, seen = new Set<string>()): { path: string[]; file: string }[] {
+    const o = this.s.op(opRef);
+    if (typeof o === 'string' || o.port.native) return [];
+    const b = this.s.bindingFor(o.path, profile);
+    if (typeof b === 'string') return [];
+    const bop = b.doc.operations[o.opName];
+    if (!bop) return [];
+    if (bop.graph) return this.requestNeeds(this.s.canon(bop.graph), profile, seen);
+    return this.requestNeedsOf(this.quietResolvers(b.doc.resolvers), this.s.templateReads(bop.in), b.path);
+  }
+
+  /** The resolvers a document names, without refusing anything: the refusals were made where the document was judged. */
+  private quietResolvers(ref: string | undefined): Record<string, ResolverRead> {
+    const doc = ref ? this.s.get('resolvers', ref) : undefined;
+    return doc ? this.resolverReads.get(doc.path) ?? {} : {};
+  }
+
+  /** Every request.* path read under a graph: its own reads through its resolvers, and per node the one binding operation it reaches. */
   private requestNeeds(graphPath: string, profile: string | undefined, seen = new Set<string>()): { path: string[]; file: string }[] {
     if (seen.has(graphPath)) return []; seen.add(graphPath);
     const g = this.s.registry.get('graph', graphPath); if (!g) return [];
-    const out: { path: string[]; file: string }[] = [];
-    const reads = (resolvers: Resolvers | undefined, names: Iterable<string>, file: string) => {
-      for (const name of names) { const r = resolvers?.[name]; if (!r) continue; for (const p of this.s.templateReads(r.in ?? {})) if (p[0] === 'request') out.push({ path: p.slice(1), file }); }
-    };
-    reads(g.doc.resolvers, Object.keys(g.doc.resolvers ?? {}), g.path);
+    const reads = g.doc.nodes.flatMap(n => this.s.templateReads(isSwitch(n) ? n.in : isMap(n) ? [n.in ?? {}, n.over] : n.in ?? {}));
+    const out = this.requestNeedsOf(this.quietResolvers(g.doc.resolvers), reads, g.path);
     for (const n of g.doc.nodes) {
       if (isSwitch(n)) continue;
       const o = this.s.op(n.run);
       if (typeof o === 'string' || o.port.native) continue;
-      const b = this.s.bindingFor(o.path, profile);
-      if (typeof b === 'string') continue;
-      const bop = b.doc.operations[o.opName];
-      if (!bop) continue;
-      if (bop.graph) out.push(...this.requestNeeds(this.s.canon(bop.graph), profile, seen));
-      else reads(b.doc.resolvers, new Set(this.s.templateReads(bop.in).map(p => p[0])), b.path);
+      out.push(...this.opNeeds(n.run, profile, seen));
     }
     return out;
   }
@@ -587,3 +624,11 @@ function assignableWire(from: Type, to: Type): string | null {
   return assignable(from, to);
 }
 
+/** One resolver as judged: the segments below request, and the read's type and optionality. */
+interface ResolverRead { path: string[]; read: Read }
+
+/** A read continued below a typed root: the root's optionality carries into what is read beneath it. */
+function readAt(base: Read, path: string[]): Read | string {
+  const r = typeAt(base.type, path);
+  return typeof r === 'string' ? r : { type: r.type, optional: base.optional || r.optional };
+}

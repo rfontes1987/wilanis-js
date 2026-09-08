@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
   "title": "trigger",
-  "description": "A way in. Names its kind (a document a plugin grants: an http route, a cli command, a topic...), the settings that kind's contract judges, how its input is built from the kind's context, the edge types it takes and answers, and the domain graph it fires. Nothing here knows what a URL is; the kind does.",
+  "description": "A way in. Names its kind (a document a plugin grants: an http route, a cli command, a topic...), the settings that kind's contract judges, the edge types it takes and answers, and the run node it fires: a domain port operation, with its inputs read from the kind's context. Nothing here knows what a URL is; the kind does.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -16,6 +16,11 @@
       "type": "string",
       "minLength": 1
     },
+    "label": {
+      "description": "A short human name for this document, shown wherever a reader sees it instead of its path. Absent: the file name stands in.",
+      "type": "string",
+      "minLength": 1
+    },
     "kind": {
       "$ref": "common.schema.json#/$defs/path"
     },
@@ -26,15 +31,32 @@
     "in": {
       "$ref": "common.schema.json#/$defs/typeRef"
     },
-    "input": {
-      "description": "How in is built from the kind's context: a templated literal reading {{request.*}} (e.g. request.body.title, request.query.page, request.principal). Absent: in is the decoded body.",
-      "$ref": "common.schema.json#/$defs/value"
-    },
     "out": {
       "$ref": "common.schema.json#/$defs/typeRef"
     },
-    "graph": {
-      "$ref": "common.schema.json#/$defs/path"
+    "fire": {
+      "description": "What this trigger invokes: one run node. `run` names a domain port operation (path#operation) and `in` gives every value it takes, reading {{request.*}} from the kind's context. The node type is not written -- a trigger fires exactly one operation, so this schema is the declaration. A trigger never names a graph: it states what it wants done, and the port's binding decides how.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "label": {
+          "description": "A short human name for this call, shown wherever a reader sees it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "run": {
+          "$ref": "common.schema.json#/$defs/opRef"
+        },
+        "in": {
+          "$ref": "common.schema.json#/$defs/values"
+        }
+      },
+      "required": [
+        "run"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [
@@ -42,7 +64,7 @@
     "description",
     "kind",
     "settings",
-    "graph"
+    "fire"
   ],
   "additionalProperties": false
 }

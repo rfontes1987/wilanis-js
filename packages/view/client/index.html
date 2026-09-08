@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wilanis view</title>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #151a21; --panel-2: #1b222b; --panel-3: #222b36; --line: #2a333f; --text: #d7dee8; --muted: #8b97a7; --dim: #5d6876;
+    --accent: #6cb6ff; --ok: #7bd88f; --warn: #f0b350; --bad: #ff5370; --lit: #c3e88d; --type: #4ecdc4;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; --sans: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 var(--sans); }
+  a { color: var(--accent); text-decoration: none; cursor: pointer; } a:hover { text-decoration: underline; }
+  button { font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  button:hover { border-color: var(--muted); } button.on { border-color: var(--accent); color: var(--accent); }
+  input { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; outline: none; } input:focus { border-color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-size: 12px; }
+  #app { display: grid; grid-template-rows: 48px 1fr; grid-template-columns: 270px 1fr 340px; height: 100%; }
+  header { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header .brand { font-weight: 600; letter-spacing: .02em; color: var(--muted); margin-right: 6px; }
+  header .crumb { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap; }
+  header .title { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; }
+  header .path { font-family: var(--mono); font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+  header .status { color: var(--dim); font-size: 11px; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); background: var(--panel-2); white-space: nowrap; vertical-align: middle; }
+  .badge.kind-graph { color: var(--accent); } .badge.kind-trigger { color: var(--ok); } .badge.kind-port { color: #c792ea; } .badge.kind-binding { color: var(--warn); } .badge.kind-shape { color: var(--type); }
+  .badge.bad { color: var(--bad); border-color: var(--bad); } .badge.warn { color: var(--warn); } .badge.ok { color: var(--ok); }
+  aside { border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  aside .filter { padding: 10px; border-bottom: 1px solid var(--line); }
+  aside .list { overflow: auto; flex: 1; padding: 6px 0; }
+  aside h4 { margin: 10px 12px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
+  aside .doc { display: block; padding: 3px 12px 3px 18px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  aside .doc:hover { background: var(--panel-2); text-decoration: none; } aside .doc.active { background: #223042; color: #fff; }
+  aside .doc small { color: var(--dim); font-family: var(--mono); font-size: 10px; margin-left: 6px; }
+  main { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: var(--bg); }
+  main svg.canvas { width: 100%; height: 100%; display: block; cursor: grab; } main svg.canvas.panning { cursor: grabbing; }
+  main .grid { fill: url(#dots); }
+  main .toolbar { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; }
+  main .legend { position: absolute; left: 12px; bottom: 10px; display: flex; gap: 14px; color: var(--dim); font-size: 11px; align-items: center; }
+  main .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--muted); margin-right: 4px; vertical-align: -1px; } main .legend i.full { background: var(--muted); }
+  main .legend s { display: inline-block; width: 18px; border-top: 2px dashed var(--muted); vertical-align: 3px; margin-right: 4px; }
+  main .empty { padding: 40px; color: var(--muted); }
+  main .page { padding: 22px 28px 40px; overflow: auto; height: 100%; max-width: 1100px; }
+  .page h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; } .page h1 .badge { margin-left: 10px; }
+  .page .lead { color: var(--muted); margin: 0 0 6px; max-width: 80ch; } .page .file { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-bottom: 18px; }
+  .page h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; margin: 24px 0 8px; }
+  .page h3 { font-size: 14px; font-weight: 600; margin: 18px 0 4px; } .page h3 code { color: var(--dim); font-weight: 400; margin-left: 8px; }
+  .page p { margin: 0 0 8px; color: var(--muted); max-width: 80ch; }
+  .page table { border-collapse: collapse; width: 100%; margin: 4px 0 8px; } .page th { text-align: left; font-size: 11px; color: var(--dim); font-weight: 600; padding: 4px 10px 4px 0; border-bottom: 1px solid var(--line); }
+  .page td { padding: 5px 10px 5px 0; border-bottom: 1px solid #1d242d; vertical-align: top; } .page td.name { font-family: var(--mono); font-size: 12px; white-space: nowrap; } .page td.desc { color: var(--muted); }
+  .page td.type { font-family: var(--mono); font-size: 12px; color: var(--type); white-space: nowrap; } .page td.val { font-family: var(--mono); font-size: 12px; color: var(--lit); overflow-wrap: anywhere; }
+  .req::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); margin-right: 7px; vertical-align: 1px; }
+  .opt::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--dim); box-sizing: border-box; margin-right: 7px; vertical-align: 1px; }
+  .opt { color: var(--muted); } .opt::after { content: ' optional'; font-family: var(--sans); font-size: 10px; color: var(--dim); }
+  .tag { display: inline-block; font-size: 10px; padding: 0 5px; border-radius: 4px; background: var(--panel-3); color: var(--muted); margin-left: 6px; vertical-align: 1px; } .tag.secret { color: var(--bad); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+  .card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; } .card .k { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; } .card .v { font-size: 14px; margin-top: 2px; } .card .v small { display: block; color: var(--dim); font-family: var(--mono); font-size: 10px; margin-top: 3px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 6px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); margin: 0 6px 6px 0; color: var(--text); } .chip:hover { border-color: var(--muted); text-decoration: none; }
+  .chain { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0 10px; } .chain .arrow { color: var(--dim); }
+  .chain .step { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; min-width: 130px; } .chain .step .k { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); } .chain .step .v { font-size: 13px; margin-top: 2px; }
+  .source pre { font-family: var(--mono); font-size: 12px; line-height: 1.5; margin: 0; white-space: pre-wrap; } .source .k { color: var(--muted); } .source .s { color: var(--lit); } .source .n { color: #f78c6c; }
+  .details { border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 12px 14px; min-height: 0; }
+  .details h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; } .details h4 { margin: 16px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
+  .details p { margin: 0 0 8px; color: var(--muted); } .details .id { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-bottom: 8px; }
+  .details .row { display: grid; grid-template-columns: 110px 1fr; gap: 6px; padding: 3px 0; font-size: 12px; border-bottom: 1px solid #1d242d; }
+  .details .row .name { font-family: var(--mono); } .details .row .type { color: var(--type); font-family: var(--mono); } .details .row .val { color: var(--lit); font-family: var(--mono); overflow-wrap: anywhere; } .details .row .miss { color: var(--dim); font-style: italic; }
+  .details .row .from { color: var(--muted); font-family: var(--mono); } .details .row .from b { font-weight: 500; }
+  .details .desc { color: var(--dim); font-size: 11px; padding: 0 0 4px; }
+  .details .ref { display: block; padding: 4px 0; border-bottom: 1px solid #1d242d; } .details .ref .sub { display: block; color: var(--dim); font-size: 11px; font-family: var(--mono); } .details .ref .via { color: #c792ea; }
+  .details .refusal { border-left: 3px solid var(--bad); padding: 4px 8px; margin: 6px 0; font-size: 12px; } .details .refusal code { color: var(--bad); } .details .refusal .hint { color: var(--muted); }
+  .details .file { font-family: var(--mono); font-size: 11px; color: var(--dim); overflow-wrap: anywhere; }
+  .details .primary { display: inline-block; margin: 6px 0; padding: 5px 12px; border-radius: 6px; background: #223042; color: #fff; } .details .primary:hover { text-decoration: none; background: #2a3b52; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
+  /* nodes */
+  .node .box { fill: var(--panel-2); stroke: var(--line); stroke-width: 1; rx: 8; }
+  .node.selected .box { stroke: #fff; stroke-width: 1.5; }
+  .node .head { fill: #202935; rx: 8; }
+  .node .title { font: 600 12px var(--sans); fill: var(--text); }
+  .node .sub { font: 11px var(--sans); fill: var(--muted); }
+  .node .port { font: 11px var(--mono); fill: var(--text); } .node .port.opt { fill: var(--muted); } .node .port.type { fill: var(--dim); }
+  .node .port.lit { fill: var(--lit); } .node .port.miss { fill: var(--dim); font-style: italic; }
+  .node .pin { fill: var(--panel-2); stroke: var(--muted); stroke-width: 1.4; } .node .pin.req { fill: var(--muted); }
+  .node .go { font: 14px var(--sans); fill: var(--accent); cursor: pointer; } .node .go:hover { fill: #fff; }
+  .node .link { cursor: pointer; } .node .link:hover { fill: var(--accent); text-decoration: underline; }
+  .node .fx { font: 10px var(--sans); fill: var(--warn); }
+  .edge { fill: none; stroke-width: 1.6; opacity: .9; } .edge.route { stroke-dasharray: 5 4; }
+  .edge.dim { opacity: .12; } .edge.hot { stroke-width: 2.6; opacity: 1; }
+  .elabel { font: 10px var(--mono); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <span class="brand">wilanis</span>
+    <button id="back" title="back">&larr;</button>
+    <button id="fwd" title="forward">&rarr;</button>
+    <div class="crumb"><span id="kind" class="badge"></span><span id="title" class="title"></span><span id="role" class="badge" hidden></span><span id="refusals" class="badge bad" hidden></span><span id="path" class="path"></span></div>
+    <button id="source" title="show the JSON document">{ } source</button>
+    <span id="status" class="status"></span>
+  </header>
+  <aside>
+    <div class="filter"><input id="filter" placeholder="find a document"></div>
+    <div id="list" class="list"></div>
+  </aside>
+  <main id="main"></main>
+  <div id="details" class="details"></div>
+</div>
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const state = { index: null, view: null, selected: null, version: null, transform: { x: 40, y: 40, k: 1 }, current: null, fit: false, source: false };
+  const ARROW = '↗', ELLIPSIS = '…', SEP = ' › ', TO = ' → ', FROM = '← ';
+  const KIND_NAMES = { project: 'Project', feature: 'Features', trigger: 'Triggers', resolvers: 'Request reads', graph: 'Graphs', port: 'Ports', binding: 'Bindings', shape: 'Shapes', connection: 'Connections', scenario: 'Scenarios', plugin: 'Plugins', 'trigger-kind': 'Trigger kinds', 'connection-kind': 'Connection kinds', codec: 'Codecs' };
+  const KIND_ONE = { project: 'project', feature: 'feature', trigger: 'trigger', resolvers: 'request reads', graph: 'graph', port: 'port', binding: 'binding', shape: 'shape', connection: 'connection', scenario: 'scenario', plugin: 'plugin', 'trigger-kind': 'trigger kind', 'connection-kind': 'connection kind', codec: 'codec' };
+  /** A read path shown: request.headers['user-agent'] → request › headers › user-agent. */
+  const showRead = (read) => String(read).split(/\.|\[['"]|['"]\]/).filter(Boolean).join(SEP);
+  const PALETTE = ['#6cb6ff', '#f0b350', '#7bd88f', '#c792ea', '#ff8a65', '#4ecdc4', '#f78c6c', '#82aaff', '#e57fb3', '#b5d66a', '#ffd166', '#64d3ff'];
+
+  // ---- data --------------------------------------------------------------------------------------
+  async function api(path) { const r = await fetch(path, { cache: 'no-store' }); const j = await r.json(); if (!r.ok) throw Object.assign(new Error(j.error || r.statusText), { body: j }); return j; }
+  /** A reference made canonical: a project alias expanded (@shapes/X → @features/monitor/shapes/X); anything else as written. */
+  const canon = (ref) => { const m = /^(@[a-z][a-z0-9-]*)(\/.*)?$/.exec(String(ref)); if (!m || !state.index) return ref; const t = state.index.aliases[m[1]]; return t === undefined ? ref : t.replace(/\/$/, '') + (m[2] || ''); };
+  const docAt = (path) => state.index && state.index.docs.find(d => d.path === canon(path));
+  const isDocPath = (s) => !!docAt(s);
+  const stem = (path) => String(path).replace(/^.*\//, '').replace(/\.json$/, '').replace(/\.[a-z-]+$/, '');
+  const readable = (id) => { const w = String(id).replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').trim(); return w ? w[0].toUpperCase() + w.slice(1) : id; };
+  /** The label of a document by path: its own, or its file name made readable. */
+  const labelFor = (path) => { const d = docAt(path); return d ? d.label : readable(stem(path)); };
+  /** A type reference shown with labels: a shape path becomes its label, [] kept. */
+  const showType = (t) => t == null ? '' : String(t).startsWith('{') ? 'an object' + (String(t).endsWith('[]') ? ' list' : '') : String(t).replace(/@[\w./-]*?\.json/g, (m) => labelFor(m));
+  /** An operation reference shown as "Port label › operation". */
+  const showOp = (op) => { if (!op) return ''; const i = op.lastIndexOf('#'); return i < 0 ? labelFor(op) : labelFor(op.slice(0, i)) + SEP + op.slice(i + 1); };
+  /** A literal shown: a string that is a document path becomes its label. */
+  const showLit = (p) => { if (p.literal == null) return ''; if (p.ref) { const m = /((?:\[\])*)"?$/.exec(p.literal); return labelFor(p.ref) + (m ? m[1] : ''); } return p.literal; };
+
+  // ---- routing --------------------------------------------------------------------------------------
+  const go = (path) => { location.hash = '#' + path; };
+  const currentPath = () => decodeURIComponent(location.hash.slice(1));
+  window.addEventListener('hashchange', () => { void route(); });
+  $('back').onclick = () => history.back();
+  $('fwd').onclick = () => history.forward();
+  $('source').onclick = () => { state.source = !state.source; $('source').classList.toggle('on', state.source); renderMain(); };
+
+  async function route() {
+    const path = currentPath();
+    state.selected = null;
+    if (!path) {
+      const first = state.index && (state.index.docs.find(d => d.kind === 'trigger') || state.index.docs[0]);
+      if (first) { location.replace('#' + first.path); return; }
+      renderAll(); return;
+    }
+    if (state.current === path && state.view && state.view.path === path) { renderAll(); return; }
+    state.current = path;
+    try { state.view = await api('/api/doc?path=' + encodeURIComponent(path)); state.fit = true; }
+    catch (e) { state.view = { error: e.message, path, refusals: (e.body && e.body.refusals) || [] }; }
+    renderAll();
+  }
+
+  async function refresh(full) {
+    try {
+      const idx = await api('/api/index');
+      const changed = idx.version !== state.version;
+      state.version = idx.version; state.index = idx;
+      if (changed && state.current) state.view = await api('/api/doc?path=' + encodeURIComponent(state.current)).catch(e => ({ error: e.message, path: state.current, refusals: [] }));
+      if (full || changed) renderAll();
+      $('status').textContent = idx.project ? `${idx.docs.length} documents` + (idx.refusals.length ? ` / ${idx.refusals.length} refusal(s)` : '') : '';
+    } catch (e) { $('status').textContent = 'server unreachable'; }
+  }
+  setInterval(async () => { try { const v = await api('/api/version'); if (v.version !== state.version) await refresh(false); } catch { $('status').textContent = 'server unreachable'; } }, 1500);
+
+  // ---- dom helpers ---------------------------------------------------------------------------------
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function link(path, text, cls) { const a = el('a', cls || null, text == null ? labelFor(path) : text); a.href = '#' + canon(path); a.title = canon(path); return a; }
+  const badge = (kind, text) => el('span', 'badge kind-' + kind, text == null ? (KIND_ONE[kind] || kind) : text);
+  const frag = (...nodes) => { const f = document.createDocumentFragment(); for (const n of nodes) f.appendChild(typeof n === 'string' ? document.createTextNode(n) : n); return f; };
+
+  // ---- sidebar --------------------------------------------------------------------------------------
+  $('filter').oninput = renderList;
+  function renderList() {
+    const list = $('list'); list.textContent = '';
+    if (!state.index) return;
+    const q = $('filter').value.trim().toLowerCase();
+    const groups = new Map();
+    for (const d of state.index.docs) {
+      if (q && !d.label.toLowerCase().includes(q) && !d.path.toLowerCase().includes(q) && !d.description.toLowerCase().includes(q) && !d.kind.includes(q)) continue;
+      const key = d.native ? `${KIND_NAMES[d.kind] || d.kind} / ${labelFor(d.native + '/plugin.json')}` : (KIND_NAMES[d.kind] || d.kind);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(d);
+    }
+    const order = ['project', 'feature', 'trigger', 'resolvers', 'graph', 'port', 'binding', 'shape', 'connection', 'scenario'];
+    const rank = (k) => { const i = order.findIndex(o => k.startsWith(KIND_NAMES[o])); return (i < 0 ? 99 : i) + (k.includes(' / ') ? 50 : 0); };
+    const keys = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+    for (const k of keys) {
+      list.appendChild(el('h4', null, k));
+      for (const d of groups.get(k).slice().sort((a, b) => a.label.localeCompare(b.label))) {
+        const a = el('a', 'doc' + (d.path === state.current ? ' active' : '')); a.title = d.path + '\n' + d.description; a.href = '#' + d.path;
+        a.appendChild(document.createTextNode(d.label));
+        if (d.kind === 'trigger' || d.kind === 'graph') { const s = docAt(d.path); if (s && s.label !== readable(s.name)) a.appendChild(el('small', null, s.name)); }
+        list.appendChild(a);
+      }
+    }
+  }
+
+  // ---- render -------------------------------------------------------------------------------------
+  function renderAll() { renderList(); renderHeader(); renderMain(); renderDetails(); }
+
+  function renderHeader() {
+    const v = state.view;
+    $('title').textContent = v ? (v.label || v.path) : '';
+    $('path').textContent = v && v.label ? v.path : '';
+    $('kind').textContent = v && v.kind ? (KIND_ONE[v.kind] || v.kind) : (v && v.error ? 'missing' : '');
+    $('kind').className = 'badge' + (v && v.kind ? ' kind-' + v.kind : '');
+    const layer = v && v.layer ? { edge: 'edge: speaks the world', domain: 'domain: the rules', data: 'data: translates and reaches out' }[v.layer] : null;
+    $('role').hidden = !layer; if (layer) $('role').textContent = layer;
+    const n = v && v.refusals ? v.refusals.length : 0; $('refusals').hidden = !n; $('refusals').textContent = `${n} refusal${n === 1 ? '' : 's'}`;
+    $('source').hidden = !(v && !v.error);
+  }
+
+  function renderMain() {
+    const main = $('main'); main.textContent = '';
+    const v = state.view;
+    if (!v) { main.appendChild(el('div', 'empty', 'Pick a document.')); return; }
+    if (v.error) { main.appendChild(el('div', 'empty', v.error)); return; }
+    if (state.source) { const page = el('div', 'page source'); const pre = el('pre'); renderJson(pre, v.doc); page.appendChild(pre); main.appendChild(page); return; }
+    if (v.graph) { drawGraph(main, v.graph); return; }
+    const page = el('div', 'page'); renderDocPage(page, v); main.appendChild(page);
+  }
+
+  /** JSON with every string that names a document turned into a link. */
+  function renderJson(pre, doc) {
+    const text = JSON.stringify(doc, null, 2);
+    const re = /"(?:[^"\\]|\\.)*"(\s*:)?|-?\d+(?:\.\d+)?(?:e[+-]?\d+)?|true|false|null/g;
+    let last = 0;
+    for (const m of text.matchAll(re)) {
+      if (m.index > last) pre.appendChild(document.createTextNode(text.slice(last, m.index)));
+      const tok = m[0];
+      if (tok.startsWith('"')) {
+        if (m[1]) pre.appendChild(el('span', 'k', tok));
+        else {
+          const raw = JSON.parse(tok);
+          const target = typeof raw === 'string' ? raw.split('#')[0].replace(/(\[\])+$/, '') : '';
+          if (target.startsWith('@') && isDocPath(target)) { const a = el('a', null, tok); a.href = '#' + canon(target); pre.appendChild(a); }
+          else pre.appendChild(el('span', 's', tok));
+        }
+      } else pre.appendChild(el('span', 'n', tok));
+      last = m.index + tok.length;
+    }
+    if (last < text.length) pre.appendChild(document.createTextNode(text.slice(last)));
+  }
+
+  // ---- document pages ---------------------------------------------------------------------------------
+  /** The document a type reference names, canonical, or null: "@shapes/Entry.shape.json[]" → the Entry shape. */
+  const shapeOf = (t) => { if (typeof t !== 'string') return null; const base = t.replace(/(\[\])+$/, ''); return base.startsWith('@') && isDocPath(base) ? canon(base) : null; };
+  /** A type shown as an element with its shape linked; plain text when it names none. */
+  const typeLink = (t, cls) => { const s = el('span', cls || 'type'); const shape = shapeOf(t); if (shape) { s.appendChild(link(shape)); const m = /((?:\[\])+)$/.exec(t); if (m) s.appendChild(document.createTextNode(m[1])); } else s.textContent = showType(t); return s; };
+  /** A type as an element: a shape path becomes a link, an inline object is spelled out. */
+  function typeEl(t) {
+    if (t == null) return el('span', 'type', '');
+    if (typeof t === 'string') {
+      const m = /^(.*?)((?:\[\])*)$/.exec(t); const base = m[1], suffix = m[2];
+      if (base.startsWith('@') && isDocPath(base)) return frag(link(base), suffix);
+      return frag(t);
+    }
+    const parts = Object.entries(t.fields || {}).map(([k, f]) => frag(k + (f.required === false ? '?' : '') + ': ', typeEl(f.type)));
+    const out = el('span'); out.appendChild(document.createTextNode('{ '));
+    parts.forEach((p, i) => { if (i) out.appendChild(document.createTextNode(', ')); out.appendChild(p); });
+    if (t.open) out.appendChild(document.createTextNode((parts.length ? ', ' : '') + (t.open === true ? '...' : '...: ' + (typeof t.open === 'string' ? showType(t.open) : ''))));
+    out.appendChild(document.createTextNode(' }'));
+    return out;
+  }
+
+  /** A table of fields: name with the required mark, type, constraints, meaning. */
+  function fieldsTable(fields, opts) {
+    const t = el('table');
+    const head = el('tr'); for (const h of ['field', 'type', '', 'meaning']) head.appendChild(el('th', null, h)); t.appendChild(head);
+    for (const [name, f] of Object.entries(fields || {})) {
+      const tr = el('tr');
+      const req = f.required !== false;
+      tr.appendChild(el('td', 'name')).appendChild(el('span', req ? 'req' : 'opt', name));
+      const ty = el('td', 'type'); ty.appendChild(f.type === 'type' ? frag('a type reference' + (f.binds ? ' (binds ' + f.binds + ')' : '')) : typeEl(f.type)); tr.appendChild(ty);
+      const tags = el('td');
+      if (f.enum) tags.appendChild(el('span', 'tag', 'one of ' + f.enum.join(', ')));
+      if (f.static || f.type === 'type') tags.appendChild(el('span', 'tag', 'static: written, never read'));
+      if (f.secret) tags.appendChild(el('span', 'tag secret', 'secret'));
+      tr.appendChild(tags);
+      tr.appendChild(el('td', 'desc', f.description || ''));
+      t.appendChild(tr);
+    }
+    if (opts && opts.open) { const tr = el('tr'); tr.appendChild(el('td', 'name')).appendChild(el('span', 'opt', 'any other key')); tr.appendChild(el('td', 'type')).appendChild(opts.open === true ? frag('anything') : typeEl(opts.open)); tr.appendChild(el('td')); tr.appendChild(el('td', 'desc', 'the shape is open')); t.appendChild(tr); }
+    return t;
+  }
+
+  /** A table of written values: setting → value, with document paths linked and templates shown as reads. */
+  function valuesTable(values, heads) {
+    const t = el('table');
+    const head = el('tr'); for (const h of heads || ['setting', 'value']) head.appendChild(el('th', null, h)); t.appendChild(head);
+    for (const [k, v] of Object.entries(values || {})) {
+      const tr = el('tr'); tr.appendChild(el('td', 'name', k)); const td = el('td', 'val'); td.appendChild(valueEl(v)); tr.appendChild(td); t.appendChild(tr);
+    }
+    return t;
+  }
+  function valueEl(v) {
+    if (typeof v === 'string') {
+      const base = v.split('#')[0].replace(/(\[\])+$/, '');
+      if (v.startsWith('@') && isDocPath(base)) return frag(link(base, v.includes('#') ? showOp(v) : showType(v)));
+      const m = /^\{\{\s*([^}]+?)\s*\}\}$/.exec(v); if (m) return frag(el('span', 'from', FROM + m[1]));
+      return frag(JSON.stringify(v));
+    }
+    if (v && typeof v === 'object' && !Array.isArray(v)) { const t = el('table'); for (const [k, x] of Object.entries(v)) { const tr = el('tr'); tr.appendChild(el('td', 'name', k)); const td = el('td', 'val'); td.appendChild(valueEl(x)); tr.appendChild(td); t.appendChild(tr); } return t; }
+    return frag(JSON.stringify(v));
+  }
+  const chips = (paths, text) => { const d = el('div'); for (const p of paths || []) { const base = p.split('#')[0]; const c = link(base, null, 'chip'); c.textContent = ''; const kind = docAt(base) && docAt(base).kind; if (kind) c.appendChild(badge(kind)); c.appendChild(document.createTextNode(text ? text(p) : labelFor(base))); d.appendChild(c); } if (!(paths || []).length) d.appendChild(el('p', null, 'none')); return d; };
+  const step = (k, content) => { const s = el('div', 'step'); s.appendChild(el('div', 'k', k)); const v = el('div', 'v'); v.appendChild(content); s.appendChild(v); return s; };
+  const arrow = () => el('span', 'arrow', TO.trim());
+
+  function renderDocPage(page, v) {
+    const h1 = el('h1', null, v.label); h1.appendChild(badge(v.kind)); if (v.kind === 'shape') h1.appendChild(badge(v.kind, v.doc.layer === 'edge' ? 'edge: the world’s shape' : 'core: ours')); page.appendChild(h1);
+    page.appendChild(el('p', 'lead', v.description));
+    if (v.file) page.appendChild(el('div', 'file', v.file));
+    const d = v.doc;
+    switch (v.kind) {
+      case 'project': {
+        page.appendChild(el('h2', null, 'Plugins'));
+        const cards = el('div', 'cards');
+        for (const p of d.plugins || []) { const c = el('div', 'card'); c.appendChild(el('div', 'k', p.from ? 'from ' + p.from : 'built in')); const vv = el('div', 'v'); vv.appendChild(link(p.use + '/plugin.json')); vv.appendChild(el('small', null, p.use)); c.appendChild(vv); if (p.settings && Object.keys(p.settings).length) c.appendChild(valuesTable(p.settings)); cards.appendChild(c); }
+        page.appendChild(cards);
+        if (d.aliases && Object.keys(d.aliases).length) { page.appendChild(el('h2', null, 'Aliases')); page.appendChild(valuesTable(d.aliases, ['alias', 'stands for'])); }
+        if (d.secrets && Object.keys(d.secrets).length) { page.appendChild(el('h2', null, 'Secrets')); page.appendChild(valuesTable(d.secrets, ['secret', 'environment variable'])); }
+        if (d.profiles) { page.appendChild(el('h2', null, 'Profiles')); for (const [name, p] of Object.entries(d.profiles)) { const h = el('h3', null, name); page.appendChild(h); if (p.description) page.appendChild(el('p', null, p.description)); const t = el('table'); const hd = el('tr'); hd.appendChild(el('th', null, 'port')); hd.appendChild(el('th', null, 'bound to')); t.appendChild(hd); for (const [port, b] of Object.entries(p.bindings)) { const tr = el('tr'); tr.appendChild(el('td')).appendChild(link(port)); tr.appendChild(el('td')).appendChild(link(b)); t.appendChild(tr); } page.appendChild(t); } }
+        break;
+      }
+      case 'feature': {
+        page.appendChild(el('h2', null, 'Exports: what other features may name')); page.appendChild(chips(d.exports));
+        page.appendChild(el('h2', null, 'Effects: the operations its data layer may reach')); page.appendChild(chips(d.effects, showOp));
+        if (d.dependsOn && d.dependsOn.length) { page.appendChild(el('h2', null, 'Depends on')); page.appendChild(chips(d.dependsOn.map(f => `@features/${f}/feature.json`))); }
+        break;
+      }
+      case 'trigger': {
+        const f = v.fires;
+        const chain = el('div', 'chain');
+        chain.appendChild(step('fired by', link(d.kind)));
+        if (d.in) chain.appendChild(step('takes', typeEl(d.in)));
+        if (f) { const c = el('span'); c.appendChild(link(f.port, f.portLabel)); c.appendChild(document.createTextNode(SEP + f.opName)); chain.appendChild(step('fires the operation', c)); }
+        for (const b of (f && f.bindings) || []) {
+          if (b.graph) chain.appendChild(step('met by ' + b.label + ', which runs', link(b.graph, b.graphLabel)));
+          else if (b.run) chain.appendChild(step('met by ' + b.label + ', delegating to', link(b.run.split('#')[0], showOp(b.run))));
+          else chain.appendChild(step('met by', link(b.path, b.label)));
+        }
+        if (f && f.bindings && !f.bindings.length) chain.appendChild(step('met by', frag('no binding yet')));
+        if (d.out) chain.appendChild(step('answers', typeEl(d.out)));
+        const withArrows = el('div', 'chain'); [...chain.children].forEach((c, i) => { if (i) withArrows.appendChild(arrow()); withArrows.appendChild(c); });
+        page.appendChild(withArrows);
+        page.appendChild(el('h2', null, 'Settings the kind judges')); page.appendChild(valuesTable(d.settings));
+        page.appendChild(el('h2', null, 'What the operation is given'));
+        if (d.fire && d.fire.in) { page.appendChild(el('p', null, 'Each input, read from what the kind hands as request.*:')); page.appendChild(valuesTable(d.fire.in, ['input', 'read from'])); }
+        else page.appendChild(el('p', null, d.in ? 'The decoded body, judged as the input type, field for field.' : 'Nothing: the operation takes no input.'));
+        break;
+      }
+      case 'resolvers': {
+        page.appendChild(el('p', null, 'Values a data graph or a binding reads straight from the request, by name. Nothing runs: each is a path into what the trigger kind hands.'));
+        page.appendChild(el('h2', null, 'Reads'));
+        const t = el('table'); const hd = el('tr'); for (const h of ['name', 'reads', 'meaning']) hd.appendChild(el('th', null, h)); t.appendChild(hd);
+        for (const [name, r] of Object.entries(d.resolvers)) {
+          const tr = el('tr'); const n = el('td'); n.appendChild(frag(r.label || readable(name))); n.appendChild(el('div', 'desc mono', '{{' + name + '}}')); tr.appendChild(n);
+          tr.appendChild(el('td', 'val', showRead(r.read))); tr.appendChild(el('td', 'desc', r.description || '')); t.appendChild(tr);
+        }
+        page.appendChild(t);
+        break;
+      }
+      case 'port': {
+        const impls = v.implementations || [];
+        page.appendChild(el('h2', null, impls.length ? `Implemented by ${impls.length === 1 ? 'one binding' : impls.length + ' bindings'}` : (v.native ? 'A native port: the plugin implements it' : 'No binding implements this port yet')));
+        if (impls.length) page.appendChild(chips(impls.map(i => i.path)));
+        page.appendChild(el('h2', null, 'Operations'));
+        for (const [name, op] of Object.entries(d.operations)) {
+          const h = el('h3', null, readable(name)); h.appendChild(el('code', null, '#' + name)); if (op.pure) h.appendChild(el('span', 'badge ok', 'pure')); else if (v.native) h.appendChild(el('span', 'badge warn', 'effect')); page.appendChild(h);
+          page.appendChild(el('p', null, op.description));
+          if (op.accepts && Object.keys(op.accepts).length) page.appendChild(fieldsTable(op.accepts)); else page.appendChild(el('p', null, 'Takes nothing.'));
+          const r = el('p'); r.appendChild(frag('Answers ')); r.appendChild(op.returns ? typeEl(op.returns) : frag('nothing')); page.appendChild(r);
+          for (const i of impls) { const o = i.operations[name]; if (!o) continue; const p = el('p'); p.appendChild(frag(i.label + ': ')); if (o.graph) { p.appendChild(frag('runs the graph ')); p.appendChild(link(o.graph)); } else if (o.run) { p.appendChild(frag('delegates to ')); p.appendChild(link(o.run.split('#')[0], showOp(o.run))); } page.appendChild(p); }
+        }
+        break;
+      }
+      case 'binding': {
+        const chain = el('div', 'chain'); chain.appendChild(step('meets the port', link(d.port))); page.appendChild(chain);
+        if (d.resolvers) { const p = el('p'); p.appendChild(frag('Delegations may read the request through ')); p.appendChild(link(d.resolvers)); p.appendChild(frag('.')); page.appendChild(p); }
+        page.appendChild(el('h2', null, 'Operations'));
+        const t = el('table'); const hd = el('tr'); for (const h of ['operation', 'how it is met', 'inputs given']) hd.appendChild(el('th', null, h)); t.appendChild(hd);
+        for (const [name, op] of Object.entries(d.operations)) {
+          const tr = el('tr'); tr.appendChild(el('td', 'name', name));
+          const how = el('td'); if (op.graph) { how.appendChild(frag('runs the graph ')); how.appendChild(link(op.graph)); } else if (op.run) { how.appendChild(frag('delegates to ')); how.appendChild(link(op.run.split('#')[0], showOp(op.run))); } if (op.description) how.appendChild(el('div', 'desc', op.description)); tr.appendChild(how);
+          const given = el('td'); if (op.in) given.appendChild(valueEl(op.in)); else given.appendChild(el('span', 'desc', op.graph ? 'the caller’s, by name' : 'the caller’s, by name')); tr.appendChild(given);
+          t.appendChild(tr);
+        }
+        page.appendChild(t);
+        break;
+      }
+      case 'shape': {
+        page.appendChild(el('h2', null, 'Fields')); page.appendChild(fieldsTable(d.fields, { open: d.open }));
+        break;
+      }
+      case 'connection': {
+        const chain = el('div', 'chain'); chain.appendChild(step('a channel of kind', link(d.kind))); page.appendChild(chain);
+        page.appendChild(el('h2', null, 'Settings')); page.appendChild(valuesTable(d.settings));
+        break;
+      }
+      case 'scenario': {
+        const chain = el('div', 'chain'); chain.appendChild(step('replays', link(d.graph))); chain.appendChild(arrow()); chain.appendChild(step('expects', frag(d.expect.status))); page.appendChild(chain);
+        page.appendChild(el('h2', null, 'Seed ' + d.seed));
+        if (d.in !== undefined) { page.appendChild(el('h2', null, 'Input')); const pre = el('pre', 'mono', JSON.stringify(d.in, null, 2)); page.appendChild(pre); }
+        page.appendChild(el('h2', null, 'Expected per node'));
+        const t = el('table'); const hd = el('tr'); for (const h of ['node', 'status', 'routes to', 'answers']) hd.appendChild(el('th', null, h)); t.appendChild(hd);
+        for (const [id, n] of Object.entries(d.expect.nodes || {})) { const tr = el('tr'); tr.appendChild(el('td', 'name', id)); tr.appendChild(el('td', null, n.status)); tr.appendChild(el('td', 'name', n.selected || '')); tr.appendChild(el('td', 'val', n.out === undefined ? '' : JSON.stringify(n.out))); t.appendChild(tr); }
+        page.appendChild(t);
+        break;
+      }
+      case 'plugin': {
+        if (d.settings) { page.appendChild(el('h2', null, 'Settings a project gives it')); page.appendChild(fieldsTable(d.settings.fields, { open: d.settings.open })); }
+        page.appendChild(el('h2', null, 'Grants'));
+        for (const [k, label] of [['ports', 'Ports'], ['triggerKinds', 'Trigger kinds'], ['connectionKinds', 'Connection kinds'], ['codecs', 'Codecs']]) if (d.grants && d.grants[k] && d.grants[k].length) { page.appendChild(el('h3', null, label)); page.appendChild(chips(d.grants[k])); }
+        break;
+      }
+      case 'trigger-kind': {
+        page.appendChild(el('h2', null, 'Settings a trigger of this kind writes')); page.appendChild(fieldsTable(d.settings.fields, { open: d.settings.open }));
+        page.appendChild(el('h2', null, 'Context it hands: what request.* holds')); page.appendChild(fieldsTable(d.context.fields, { open: d.context.open }));
+        break;
+      }
+      case 'connection-kind': {
+        page.appendChild(el('h2', null, 'Settings a connection of this kind writes')); page.appendChild(fieldsTable(d.settings.fields, { open: d.settings.open }));
+        break;
+      }
+      case 'codec': {
+        const p = el('p'); p.appendChild(frag('Decodes bodies into ')); p.appendChild(d.yields === 'declared' ? frag('the type declared where it is used') : typeEl(d.yields)); page.appendChild(p);
+        break;
+      }
+      default: { const pre = el('pre', 'mono'); renderJson(pre, d); page.appendChild(pre); }
+    }
+  }
+
+
+  // ---- details -----------------------------------------------------------------------------------------
+  function renderDetails() {
+    const box = $('details'); box.textContent = '';
+    const v = state.view;
+    if (!v || v.error) { if (v && v.refusals && v.refusals.length) { box.appendChild(el('h4', null, 'refusals')); for (const r of v.refusals) box.appendChild(refusalEl(r)); } return; }
+    const node = state.selected && v.graph ? v.graph.nodes.find(n => n.id === state.selected) : null;
+    if (node) { renderNodeDetails(box, node, v); return; }
+    box.appendChild(el('h3', null, v.label));
+    box.appendChild(el('p', null, v.description || ''));
+    if (v.file) box.appendChild(el('div', 'file', v.file));
+    if (v.refusals.length) { box.appendChild(el('h4', null, 'refusals')); for (const r of v.refusals) box.appendChild(refusalEl(r)); }
+    const callers = v.callers.filter(c => c.kind !== 'project' || v.kind !== 'feature');
+    if (v.kind === 'trigger') { box.appendChild(el('h4', null, 'a way in')); box.appendChild(el('p', null, 'A trigger is where a run starts: nothing in the tree calls it.')); }
+    else {
+      box.appendChild(el('h4', null, v.kind === 'graph' ? `reached from (${callers.length})` : `used by (${callers.length})`));
+      if (!callers.length) box.appendChild(el('p', null, v.kind === 'graph' ? 'no trigger or binding reaches this graph' : 'nothing names this document'));
+      for (const c of callers) box.appendChild(refEl(c, true));
+    }
+    const seen = new Set(); const refs = v.refs.filter(r => { if (seen.has(r.path)) return false; seen.add(r.path); return true; });
+    box.appendChild(el('h4', null, `uses (${refs.length})`));
+    for (const r of refs) box.appendChild(refEl(r, false));
+  }
+
+  function refEl(r, caller) {
+    const d = el('div', 'ref');
+    d.appendChild(badge(r.kind)); d.appendChild(document.createTextNode(' '));
+    d.appendChild(link(r.path, r.label));
+    const sub = [];
+    if (caller && r.at) sub.push(atText(r.at));
+    if (r.via) { const s = el('span', 'sub'); s.appendChild(frag('through ')); s.appendChild(el('span', 'via', showOp(r.via))); if (sub.length) s.appendChild(frag(', ' + sub[0])); d.appendChild(s); }
+    else if (sub.length) d.appendChild(el('span', 'sub', sub[0]));
+    return d;
+  }
+  /** A JSON pointer said plainly: /nodes/0/run → "node 0, run"; /operations/get/graph → "operation get". */
+  function atText(at) {
+    const p = at.replace(/^\//, '').split('/');
+    if (p[0] === 'nodes') return 'node ' + (p[1] || '') + (p[2] ? ', ' + p[2] : '');
+    if (p[0] === 'operations') return 'operation ' + (p[1] || '');
+    if (p[0] === 'resolvers') return 'resolver ' + (p[1] || '');
+    if (p[0] === 'profiles') return 'profile ' + (p[1] || '');
+    return p.join(SEP);
+  }
+
+  function refusalEl(r) {
+    const d = el('div', 'refusal');
+    d.appendChild(el('code', null, r.code + ' '));
+    d.appendChild(document.createTextNode((r.at ? r.at + ': ' : '') + r.message));
+    if (r.hint) d.appendChild(el('div', 'hint', TO.trim() + ' ' + r.hint));
+    return d;
+  }
+
+  function renderNodeDetails(box, n, v) {
+    const color = nodeColors(v.graph).get(n.id);
+    const h = el('h3'); const sw = el('span', 'swatch'); sw.style.background = color; h.appendChild(sw); h.appendChild(document.createTextNode(n.label + ' ')); h.appendChild(badge(n.kind, { run: 'operation', map: 'for each', switch: 'decision', in: 'input', out: 'output', const: 'constants', request: 'request' }[n.kind])); box.appendChild(h);
+    box.appendChild(el('div', 'id', n.id));
+    if (n.opens) { const p = el('p'); p.appendChild(frag('Read through ')); p.appendChild(link(n.opens)); box.appendChild(p); }
+    if (n.type) { const p = el('p'); p.appendChild(frag(n.kind === 'in' ? 'The graph takes ' : 'The graph answers ')); p.appendChild(typeLink(n.type)); box.appendChild(p); }
+    if (n.description) box.appendChild(el('p', null, n.description));
+    if (n.target) {
+      const t = n.target;
+      box.appendChild(el('h4', null, 'runs'));
+      const p = el('p'); p.appendChild(link(t.port, t.portLabel + SEP + t.opName)); p.appendChild(document.createTextNode(t.native ? (t.effect ? ' (a native effect)' : ' (pure, native)') : ' (a domain port)')); box.appendChild(p);
+      if (!t.native) {
+        box.appendChild(el('h4', null, 'implemented by'));
+        if (!t.bindings || !t.bindings.length) box.appendChild(el('p', null, 'no binding meets this port'));
+        for (const b of t.bindings || []) {
+          const d = el('div', 'ref');
+          if (b.graph) { d.appendChild(link(b.graph, b.graphLabel, 'primary')); d.appendChild(el('span', 'sub', 'the graph behind ' + b.label)); }
+          else if (b.run) { d.appendChild(link(b.path, b.label, 'primary')); d.appendChild(el('span', 'sub', 'delegates to ' + showOp(b.run))); }
+          else d.appendChild(link(b.path, b.label));
+          box.appendChild(d);
+        }
+      }
+    }
+    if (n.inputs.length) {
+      box.appendChild(el('h4', null, n.kind === 'switch' ? 'decides on' : 'inputs'));
+      for (const p of n.inputs) {
+        const r = el('div', 'row'); r.appendChild(el('span', 'name ' + (p.required === false ? 'opt' : 'req'), p.name));
+        const cell = el('span');
+        if (p.literal != null) { if (p.ref) cell.appendChild(link(p.ref, showLit(p), 'val')); else cell.appendChild(el('span', 'val', showLit(p))); }
+        else if (p.text != null) cell.appendChild(el('span', 'val', p.text));
+        else if (p.missing) cell.appendChild(el('span', 'miss', 'not given'));
+        else { const from = incoming(v.graph, n.id, p.name); if (from.length) { const f = el('span', 'from'); f.appendChild(frag(FROM)); from.forEach((x, i) => { if (i) f.appendChild(frag(', ')); const b = el('b', null, x.text); b.style.color = nodeColors(v.graph).get(x.node); f.appendChild(b); }); cell.appendChild(f); } }
+        if (p.type) { const ty = typeLink(p.type); ty.style.marginLeft = '8px'; cell.appendChild(ty); }
+        r.appendChild(cell); box.appendChild(r);
+        if (p.description) box.appendChild(el('div', 'desc', p.description));
+      }
+    }
+    if (n.rules) {
+      box.appendChild(el('h4', null, 'routes'));
+      for (const r of n.rules) { const d = el('div', 'row'); d.appendChild(el('span', 'val', r.when)); const t = el('span', 'from'); t.appendChild(frag(TO)); const b = el('b', null, labelOfNode(v.graph, r.to)); b.style.color = nodeColors(v.graph).get(r.to); t.appendChild(b); d.appendChild(t); box.appendChild(d); }
+      const d = el('div', 'row'); d.appendChild(el('span', 'miss', 'otherwise')); const t = el('span', 'from'); t.appendChild(frag(TO)); const b = el('b', null, labelOfNode(v.graph, n.else)); b.style.color = nodeColors(v.graph).get(n.else); t.appendChild(b); d.appendChild(t); box.appendChild(d);
+    }
+    if (n.bind) { box.appendChild(el('h4', null, 'each item is read as')); for (const [k, p] of Object.entries(n.bind)) box.appendChild(el('div', 'row', `${k} ${FROM}item${p ? '.' + p : ''}`)); }
+    if (n.outputs.length) {
+      box.appendChild(el('h4', null, n.kind === 'switch' ? 'routes to' : n.kind === 'in' ? 'fields' : 'answers'));
+      for (const p of n.outputs) {
+        const r = el('div', 'row'); const nm = el('span', 'name ' + (p.required === false ? 'opt' : 'req'), p.name === '' ? (n.kind === 'switch' ? '' : 'the whole value') : (p.label || p.name.split('.').pop()));
+        if (p.depth) nm.style.paddingLeft = (p.depth * 12) + 'px';
+        if (p.label) nm.title = p.name;
+        r.appendChild(nm); r.appendChild(p.type ? typeLink(p.type) : el('span', 'type', p.description || '')); box.appendChild(r);
+        if (p.label) box.appendChild(el('div', 'desc', showRead('request.' + p.name) + (p.description ? ' - ' + p.description : '')));
+      }
+    }
+    if (n.fields && n.fields.length) { box.appendChild(el('h4', null, 'fields of the answer')); for (const p of n.fields) { const r = el('div', 'row'); r.appendChild(el('span', 'name ' + (p.required === false ? 'opt' : 'req'), p.name)); r.appendChild(typeLink(p.type)); box.appendChild(r); } }
+    const used = v.graph.edges.filter(e => e.from === n.id && e.kind !== 'route');
+    if (used.length) { box.appendChild(el('h4', null, 'read by')); for (const e of used) { const d = el('div', 'row'); const b = el('b', null, labelOfNode(v.graph, e.to)); b.style.color = nodeColors(v.graph).get(e.to); const f = el('span', 'from'); f.appendChild(b); d.appendChild(f); d.appendChild(el('span', 'type', e.toPort ? e.toPort : (e.kind === 'out' ? (e.label || 'the answer') : ''))); box.appendChild(d); } }
+    const back = el('button', null, 'back to the graph'); back.style.marginTop = '16px';
+    back.onclick = () => { state.selected = null; renderDetails(); for (const x of $('main').querySelectorAll('.node')) x.classList.remove('selected'); };
+    box.appendChild(back);
+  }
+
+  const labelOfNode = (g, id) => { const n = g.nodes.find(x => x.id === id); return n ? n.label : id; };
+  const incoming = (g, id, port) => g.edges.filter(e => e.to === id && e.toPort === port && e.kind === 'data').map(e => ({ node: e.from, text: labelOfNode(g, e.from) + (e.fromPort ? '.' + e.fromPort : '') + (e.label ? '.' + e.label : '') }));
+  const colorCache = new WeakMap();
+  /** One colour per node, in graph order, stable for the life of the view. */
+  function nodeColors(g) { let m = colorCache.get(g); if (!m) { m = new Map(g.nodes.map((n, i) => [n.id, PALETTE[i % PALETTE.length]])); colorCache.set(g, m); } return m; }
+
+  // ---- layout ----------------------------------------------------------------------------------------
+  const W = 280, HEAD = 42, ROW = 18, PAD = 8, GAPX = 120, GAPY = 30;
+  const rowsOf = (n) => Math.max(n.inputs.length, n.outputs.length, (n.fields || []).length, 1);
+  /** Layered left to right: a node sits one column after the last node it reads; in/const/request first, out last. */
+  function layout(g) {
+    const nodes = g.nodes, byId = new Map(nodes.map(n => [n.id, n]));
+    const preds = new Map(nodes.map(n => [n.id, []]));
+    for (const e of g.edges) if (byId.has(e.from) && byId.has(e.to) && e.from !== e.to) preds.get(e.to).push(e.from);
+    const rank = new Map(), visiting = new Set();
+    const rankOf = (id) => {
+      if (rank.has(id)) return rank.get(id);
+      if (visiting.has(id)) return 0;
+      visiting.add(id);
+      let r = 0;
+      if (!['in', 'const', 'request'].includes(byId.get(id).kind)) for (const p of preds.get(id)) r = Math.max(r, rankOf(p) + 1);
+      visiting.delete(id); rank.set(id, r); return r;
+    };
+    for (const n of nodes) rankOf(n.id);
+    const maxRank = Math.max(0, ...rank.values());
+    for (const n of nodes) if (n.kind === 'out') rank.set(n.id, maxRank + (preds.get(n.id).some(p => rank.get(p) === maxRank) ? 1 : 0));
+    const cols = []; for (const n of nodes) { const r = rank.get(n.id); (cols[r] = cols[r] || []).push(n); }
+    for (let i = 0; i < cols.length; i++) cols[i] = cols[i] || [];
+    const pos = new Map(); cols.forEach(c => c.forEach((n, i) => pos.set(n.id, i)));
+    for (let sweep = 0; sweep < 3; sweep++) for (let r = 1; r < cols.length; r++) {
+      const bary = new Map(cols[r].map(n => { const ps = preds.get(n.id).filter(p => rank.get(p) < r); return [n.id, ps.length ? ps.reduce((s, p) => s + pos.get(p), 0) / ps.length : pos.get(n.id)]; }));
+      cols[r].sort((a, b) => bary.get(a.id) - bary.get(b.id) || pos.get(a.id) - pos.get(b.id));
+      cols[r].forEach((n, i) => pos.set(n.id, i));
+    }
+    const height = (n) => HEAD + rowsOf(n) * ROW + PAD;
+    const colH = cols.map(c => c.reduce((s, n) => s + height(n), 0) + Math.max(0, c.length - 1) * GAPY);
+    const total = Math.max(0, ...colH);
+    const boxes = new Map();
+    cols.forEach((c, r) => { let y = (total - colH[r]) / 2; for (const n of c) { boxes.set(n.id, { x: r * (W + GAPX), y, w: W, h: height(n) }); y += height(n) + GAPY; } });
+    return { boxes, width: cols.length * (W + GAPX) - GAPX, height: total };
+  }
+
+  // ---- canvas ----------------------------------------------------------------------------------------
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = (tag, attrs, cls) => { const e = document.createElementNS(NS, tag); for (const k in attrs || {}) e.setAttribute(k, attrs[k]); if (cls) e.setAttribute('class', cls); return e; };
+  const txt = (x, y, s, cls, attrs) => { const t = svg('text', Object.assign({ x, y }, attrs || {}), cls); t.textContent = s; return t; };
+  const withTitle = (e, s) => { const t = svg('title'); t.textContent = s; e.appendChild(t); return e; };
+  /** A canvas text that opens a document when clicked: a shape named by a type, a connection named by a literal. */
+  const opens = (e, path) => { if (!path) return e; e.classList.add('link'); e.addEventListener('click', ev => { ev.stopPropagation(); go(canon(path)); }); e.addEventListener('dblclick', ev => ev.stopPropagation()); return e; };
+  const trunc = (s, n) => s.length > n ? s.slice(0, n - 1) + ELLIPSIS : s;
+  const CH = 6.6; // monospace advance at 11px
+  const subOf = (n) => {
+    if (n.kind === 'switch') return 'decision';
+    if (n.kind === 'in' || n.kind === 'out') return showType(n.type);
+    if (n.kind === 'const') return 'typed literals';
+    if (n.kind === 'request') return 'what the trigger kind hands';
+    const op = n.target ? n.target.portLabel + SEP + n.target.opName : showOp(n.op);
+    return (n.kind === 'map' ? 'for each: ' : '') + op;
+  };
+
+  function drawGraph(main, g) {
+    main.textContent = '';
+    const colors = nodeColors(g);
+    const root = svg('svg', {}, 'canvas');
+    const defs = svg('defs');
+    const pat = svg('pattern', { id: 'dots', width: 24, height: 24, patternUnits: 'userSpaceOnUse' }); pat.appendChild(svg('circle', { cx: 1, cy: 1, r: 1, fill: '#242c37' })); defs.appendChild(pat);
+    root.appendChild(defs);
+    root.appendChild(svg('rect', { width: '100%', height: '100%' }, 'grid'));
+    const world = svg('g'); root.appendChild(world);
+    const { boxes, width, height } = layout(g);
+    const byId = new Map(g.nodes.map(n => [n.id, n]));
+    const rowY = (b, i) => b.y + HEAD + Math.max(0, i) * ROW + ROW / 2;
+    const inY = (id, port) => rowY(boxes.get(id), byId.get(id).inputs.findIndex(p => p.name === port));
+    const outY = (id, port) => rowY(boxes.get(id), byId.get(id).outputs.findIndex(p => p.name === port));
+    const usedIn = new Set(g.edges.filter(e => e.kind === 'data').map(e => e.to + ' ' + e.toPort));
+
+    const edgesG = svg('g'); world.appendChild(edgesG);
+    const edgeEls = [];
+    for (const e of g.edges) {
+      const a = boxes.get(e.from), b = boxes.get(e.to); if (!a || !b) continue;
+      const x1 = a.x + a.w, y1 = outY(e.from, e.fromPort);
+      const toHead = e.kind === 'route' || e.toPort === '';
+      const x2 = b.x, y2 = toHead ? b.y + HEAD / 2 : inY(e.to, e.toPort);
+      const dx = Math.max(40, Math.abs(x2 - x1) / 2);
+      const color = colors.get(e.to);
+      const p = svg('path', { d: `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`, stroke: color }, 'edge ' + e.kind);
+      p.dataset.from = e.from; p.dataset.to = e.to; edgesG.appendChild(p); edgeEls.push(p);
+      // labels sit a third of the way along, where the curve is still near its source and clear of the target box
+      if (e.label) edgesG.appendChild(withTitle(txt(x1 + (x2 - x1) * 0.33, y1 + (y2 - y1) * 0.18 - 5, trunc(e.label, 28), 'elabel', { 'text-anchor': 'middle', fill: color }), e.label));
+    }
+    for (const n of g.nodes) {
+      const b = boxes.get(n.id), color = colors.get(n.id);
+      const gn = svg('g', { transform: `translate(${b.x},${b.y})` }, 'node kind-' + n.kind + (state.selected === n.id ? ' selected' : '')); gn.dataset.id = n.id;
+      gn.appendChild(svg('rect', { width: b.w, height: b.h }, 'box'));
+      gn.appendChild(svg('rect', { width: b.w, height: HEAD }, 'head'));
+      gn.appendChild(svg('rect', { x: 0, y: 8, width: 4, height: b.h - 16, rx: 2, fill: color }));
+      gn.appendChild(withTitle(txt(14, 17, trunc(n.label, 30), 'title'), n.label + (n.description ? '\n' + n.description : '')));
+      const sub = subOf(n);
+      if (sub) gn.appendChild(opens(withTitle(txt(14, 32, trunc(sub, 36), 'sub'), n.op || n.type || sub), n.type ? shapeOf(n.type) : null));
+      if (n.target && n.target.effect) gn.appendChild(withTitle(txt(b.w - (n.target ? 32 : 14), 32, 'effect', 'fx', { 'text-anchor': 'end' }), 'reaches outside the process'));
+      const goto = n.target ? n.target.implementation : n.opens;
+      if (goto) {
+        const go_ = withTitle(txt(b.w - 20, 19, ARROW, 'go'), 'open ' + labelFor(goto));
+        go_.addEventListener('click', ev => { ev.stopPropagation(); go(goto); });
+        gn.appendChild(go_);
+      }
+      n.inputs.forEach((p, i) => {
+        const y = HEAD + i * ROW + ROW / 2;
+        const used = usedIn.has(n.id + ' ' + p.name);
+        const req = p.required !== false;
+        const pin = svg('circle', { cx: 0, cy: y, r: 3.8 }, 'pin' + (req ? ' req' : ''));
+        if (used) { pin.setAttribute('stroke', color); if (req) pin.setAttribute('fill', color); }
+        gn.appendChild(pin);
+        const val = p.literal != null ? ' = ' + showLit(p) : p.text != null ? ' = ' + p.text : '';
+        const nameLen = Math.min(14, p.name.length);
+        const room = n.outputs.length ? 22 : 36; // characters the left column may use when the right one is in use
+        const hint = p.name + (req ? '' : ' (optional)') + (p.type ? ': ' + showType(p.type) : '') + (p.description ? '\n' + p.description : '');
+        gn.appendChild(withTitle(txt(12, y + 4, trunc(p.name, 14), 'port' + (p.missing ? ' miss' : req ? '' : ' opt')), hint));
+        if (val) gn.appendChild(opens(withTitle(txt(12 + (nameLen + 1) * CH, y + 4, trunc(val, room - nameLen), 'port lit'), p.name + val), p.ref));
+        else if (p.missing) gn.appendChild(txt(12 + (nameLen + 1) * CH, y + 4, 'not given', 'port miss'));
+        else if (p.type && n.outputs.length === 0) gn.appendChild(opens(withTitle(txt(12 + (nameLen + 1) * CH, y + 4, trunc(showType(p.type), room - 1 - nameLen), 'port type'), p.name + ': ' + showType(p.type)), shapeOf(p.type)));
+      });
+      const usedOut = new Set(g.edges.filter(e => e.from === n.id).map(e => e.fromPort));
+      n.outputs.forEach((p, i) => {
+        const y = HEAD + i * ROW + ROW / 2;
+        const req = p.required !== false;
+        const isRoute = n.kind === 'switch';
+        const depth = p.depth || 0;
+        const parentOnly = depth === 0 && !usedOut.has(p.name) && n.outputs.some(o => o.depth && o.name.startsWith(p.name + '.'));
+        if (!parentOnly) {
+          const pin = svg('circle', { cx: b.w, cy: y, r: 3.8 }, 'pin' + (req ? ' req' : ''));
+          if (isRoute) { pin.setAttribute('stroke', colors.get(p.name) || color); pin.setAttribute('fill', colors.get(p.name) || color); }
+          gn.appendChild(pin);
+        }
+        const leaf = p.name.split('.').pop();
+        const label = isRoute ? labelOfNode(g, p.name) : p.name === '' ? (p.type ? showType(p.type) : 'the value') : (p.label || leaf);
+        const hint = isRoute ? (p.description === 'else' ? 'otherwise' : 'when ' + p.description) + TO + labelOfNode(g, p.name)
+          : (p.label ? p.label + ': ' : '') + (n.kind === 'request' ? showRead('request.' + p.name) : (p.name || 'the whole value')) + (req ? '' : ' (optional)') + (p.type ? ': ' + showType(p.type) : '') + (p.description ? '\n' + p.description : '');
+        const room = (n.inputs.length ? 14 : 30) - depth * 2;
+        const t = txt(b.w - 12 - depth * 12, y + 4, trunc(label, room), 'port' + (p.name === '' ? ' type' : parentOnly ? ' type' : req ? '' : ' opt'), { 'text-anchor': 'end' });
+        if (isRoute) t.setAttribute('fill', colors.get(p.name) || color);
+        gn.appendChild(opens(withTitle(t, hint), p.name === '' ? shapeOf(p.type) : null));
+        if (depth) gn.appendChild(svg('path', { d: `M${b.w - 12 - depth * 12 - 4},${y - 6} v6 h-3`, stroke: 'var(--dim)', fill: 'none', 'stroke-width': 1 }));
+      });
+      (n.fields || []).forEach((p, i) => {
+        const y = HEAD + i * ROW + ROW / 2;
+        const req = p.required !== false;
+        gn.appendChild(withTitle(txt(14, y + 4, trunc(p.name, 16), 'port' + (req ? '' : ' opt')), p.name + (req ? '' : ' (optional)') + ': ' + showType(p.type)));
+        gn.appendChild(opens(withTitle(txt(b.w - 12, y + 4, trunc(showType(p.type), 18), 'port type', { 'text-anchor': 'end' }), showType(p.type)), shapeOf(p.type)));
+      });
+      gn.addEventListener('click', ev => { ev.stopPropagation(); state.selected = n.id; for (const x of world.querySelectorAll('.node')) x.classList.toggle('selected', x.dataset.id === n.id); renderDetails(); });
+      gn.addEventListener('dblclick', ev => { ev.stopPropagation(); if (goto) go(goto); });
+      gn.addEventListener('mouseenter', () => { for (const p of edgeEls) { const hot = p.dataset.from === n.id || p.dataset.to === n.id; p.classList.toggle('hot', hot); p.classList.toggle('dim', !hot); } });
+      gn.addEventListener('mouseleave', () => { for (const p of edgeEls) { p.classList.remove('hot'); p.classList.remove('dim'); } });
+      world.appendChild(gn);
+    }
+    // pan and zoom
+    const apply = () => { const t = state.transform; world.setAttribute('transform', `translate(${t.x},${t.y}) scale(${t.k})`); };
+    const fit = () => {
+      const r = main.getBoundingClientRect();
+      // never smaller than readable: a wide graph starts at its input and is panned, not shrunk into a strip
+      const k = Math.min(1.25, Math.max(0.7, Math.min((r.width - 80) / Math.max(width, 1), (r.height - 100) / Math.max(height, 1))));
+      state.transform = { k, x: width * k > r.width - 80 ? 40 : (r.width - width * k) / 2, y: (r.height - height * k) / 2 }; apply();
+    };
+    if (state.fit) { state.fit = false; fit(); } else apply();
+    let drag = null;
+    root.addEventListener('mousedown', ev => { if (ev.button !== 0) return; drag = { x: ev.clientX, y: ev.clientY, tx: state.transform.x, ty: state.transform.y }; root.classList.add('panning'); });
+    root.addEventListener('mousemove', ev => { if (!drag) return; state.transform.x = drag.tx + ev.clientX - drag.x; state.transform.y = drag.ty + ev.clientY - drag.y; apply(); });
+    root.addEventListener('mouseup', () => { drag = null; root.classList.remove('panning'); });
+    root.addEventListener('mouseleave', () => { drag = null; root.classList.remove('panning'); });
+    root.addEventListener('wheel', ev => {
+      ev.preventDefault();
+      const r = root.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
+      const t = state.transform, k = Math.min(3, Math.max(0.15, t.k * Math.exp(-ev.deltaY * 0.0015)));
+      t.x = mx - (mx - t.x) * (k / t.k); t.y = my - (my - t.y) * (k / t.k); t.k = k; apply();
+    }, { passive: false });
+    root.addEventListener('click', () => { if (state.selected !== null) { state.selected = null; for (const x of world.querySelectorAll('.node')) x.classList.remove('selected'); renderDetails(); } });
+    main.appendChild(root);
+    const bar = el('div', 'toolbar');
+    const fitBtn = el('button', null, 'fit'); fitBtn.onclick = fit; bar.appendChild(fitBtn);
+    const one = el('button', null, '100%'); one.onclick = () => { state.transform.k = 1; apply(); }; bar.appendChild(one);
+    main.appendChild(bar);
+    const legend = el('div', 'legend');
+    const a = el('span'); a.appendChild(el('i', 'full')); a.appendChild(frag('required')); legend.appendChild(a);
+    const b2 = el('span'); b2.appendChild(el('i')); b2.appendChild(frag('optional')); legend.appendChild(b2);
+    const c = el('span'); c.appendChild(el('s')); c.appendChild(frag('a decision routes')); legend.appendChild(c);
+    legend.appendChild(el('span', null, 'an edge has the colour of the node it feeds'));
+    legend.appendChild(el('span', null, ARROW + ' or double-click opens the implementation'));
+    main.appendChild(legend);
+  }
+
+  // ---- start ------------------------------------------------------------------------------------------
+  (async () => { await refresh(true); await route(); })();
+})();
+</script>
+</body>
+</html>

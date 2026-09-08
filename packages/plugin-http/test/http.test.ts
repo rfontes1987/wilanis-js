@@ -27,7 +27,7 @@ function localCopy(): string {
   const edit = (rel: string, f: (doc: any) => void) => { const p = join(d, rel); const doc = JSON.parse(readFileSync(p, 'utf8')); f(doc); writeFileSync(p, JSON.stringify(doc)); };
   edit('connections/monitor-api.connection.json', c => { c.settings.baseUrl = `http://localhost:${UPSTREAM}/api/v1`; });
   edit('project.json', p => { p.plugins.find((x: any) => x.use === '@http').settings.jwt = { secret: '{{secrets.jwt}}', rolesClaim: 'role' }; p.secrets = { jwt: 'MONITOR_JWT_SECRET' }; });
-  edit('features/monitor/triggers/record-entry.trigger.json', t => { t.settings.access = { roles: ['recorder'] }; });
+  edit('features/monitor/edge/record-entry.trigger.json', t => { t.settings.access = { roles: ['recorder'] }; });
   return d;
 }
 

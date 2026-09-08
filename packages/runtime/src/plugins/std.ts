@@ -1,5 +1,5 @@
 /**
- * @std: the pure native operations every graph may use in any layer. No effects, no connections.
+ * @std: the pure native operations every graph may use in any layer: objects, text, lists, outcomes. No effects, no connections.
  * Result types are declared, never inferred: an operation whose result depends on its use takes a `type` field, a literal where it is called.
  */
 import { fileURLToPath } from 'node:url';
@@ -21,10 +21,10 @@ export const std: PluginModule = {
   root: '@std',
   docs: fileURLToPath(new URL('../../docs/std', import.meta.url)),
   handlers: {
-    '@std/data.port.json#object': async ({ in: i, ctx }) => declared(i.value, i.type, ctx.env),
-    '@std/data.port.json#merge': async ({ in: i, ctx }) => declared({ ...obj(i.base, 'base'), ...obj(i.over, 'over') }, i.type, ctx.env),
-    '@std/flow.port.json#fail': async ({ in: i }) => { throw new Error(str(i.message, 'message')); },
-    '@std/text.port.json#format': async ({ in: i }) => str(i.template, 'template').replace(/\{([A-Za-z0-9_.]+)\}/g, (_, p: string) => { const v = readPath(i.values, p.split('.')); return v === undefined ? '' : String(v); }),
+    '@std/object.port.json#make': async ({ in: i, ctx }) => declared(i.value, i.type, ctx.env),
+    '@std/object.port.json#merge': async ({ in: i, ctx }) => declared({ ...obj(i.base, 'base'), ...obj(i.over, 'over') }, i.type, ctx.env),
+    '@std/outcome.port.json#refuse': async ({ in: i }) => { throw new Error(str(i.message, 'message')); },
+    '@std/text.port.json#fill': async ({ in: i }) => str(i.template, 'template').replace(/\{([A-Za-z0-9_.]+)\}/g, (_, p: string) => { const v = readPath(i.values, p.split('.')); return v === undefined ? '' : String(v); }),
     '@std/text.port.json#split': async ({ in: i }) => str(i.text, 'text').split(str(i.separator, 'separator')),
     '@std/text.port.json#join': async ({ in: i }) => arr(i.parts, 'parts').map(String).join(str(i.separator, 'separator')),
     '@std/text.port.json#replace': async ({ in: i }) => str(i.text, 'text').split(str(i.find, 'find')).join(str(i.with, 'with')),

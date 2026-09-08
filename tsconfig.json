@@ -5,6 +5,7 @@
     { "path": "packages/core" },
     { "path": "packages/compiler" },
     { "path": "packages/runtime" },
-    { "path": "packages/plugin-http" }
+    { "path": "packages/plugin-http" },
+    { "path": "packages/view" }
   ]
 }

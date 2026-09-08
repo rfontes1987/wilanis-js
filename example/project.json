@@ -1,10 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/project.schema.json",
+  "label": "Monitor",
   "name": "monitor",
   "description": "A monitor of observed HTTP calls: the routes talk to a REST API (mockapi.io). Plugins come from npm packages named by \"from\". No secrets: the API is public.",
   "aliases": {
-    "@monitor": "@features/monitor",
-    "@shapes": "@features/monitor/shapes"
+    "@monitor": "@features/monitor"
   },
   "plugins": [
     {
@@ -28,7 +28,7 @@
     "live": {
       "description": "The real monitor API.",
       "bindings": {
-        "@monitor/monitor.port.json": "@monitor/monitor-rest.binding.json"
+        "@monitor/domain/monitor.port.json": "@monitor/data/monitor-rest.binding.json"
       }
     }
   }

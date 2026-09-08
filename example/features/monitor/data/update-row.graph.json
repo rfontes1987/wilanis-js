@@ -1,0 +1,84 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "label": "Update a row",
+  "description": "Data graph behind monitor.update: PUT the new call. 200 is the updated entry, 404 is the declared refusal for an id that does not exist, anything else is a failure.",
+  "in": "@monitor/domain/EntryUpdate.shape.json",
+  "out": {
+    "type": "@monitor/domain/Entry.shape.json",
+    "from": [
+      "row",
+      "missing",
+      "failed"
+    ]
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "asked",
+      "label": "PUT the row",
+      "run": "@http/http.port.json#request",
+      "in": {
+        "body": {
+          "url": "{{in.url}}",
+          "method": "{{in.method}}"
+        },
+        "connection": "@connections/monitor-api.connection.json",
+        "method": "PUT",
+        "path": "/monitor/{{in.id}}",
+        "consumes": "application/json",
+        "produces": "application/json",
+        "returns": "@monitor/edge/EntryRow.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/switch.schema.json",
+      "id": "route",
+      "label": "What did the API say?",
+      "in": {
+        "status": "{{asked.status}}",
+        "body": "{{asked.body}}"
+      },
+      "rules": [
+        {
+          "when": "status == 404",
+          "to": "missing"
+        },
+        {
+          "when": "status == 200 && has(body)",
+          "to": "row"
+        }
+      ],
+      "else": "failed"
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "row",
+      "label": "The updated row",
+      "run": "@std/object.port.json#make",
+      "in": {
+        "value": "{{asked.body}}",
+        "type": "@monitor/edge/EntryRow.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "missing",
+      "label": "No such entry",
+      "run": "@std/outcome.port.json#refuse",
+      "in": {
+        "message": "no entry {{in.id}}",
+        "type": "@monitor/domain/Entry.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "failed",
+      "label": "Unexpected answer",
+      "run": "@std/outcome.port.json#refuse",
+      "in": {
+        "message": "the monitor API answered {{asked.status}}",
+        "type": "@monitor/domain/Entry.shape.json"
+      }
+    }
+  ]
+}

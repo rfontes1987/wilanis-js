@@ -1,0 +1,125 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "label": "Entry storage",
+  "description": "What the domain needs from entry storage. Bound by monitor-rest.binding.json; a test double binds the same contract.",
+  "operations": {
+    "listAll": {
+      "description": "Every entry.",
+      "returns": "@monitor/domain/Entry.shape.json[]"
+    },
+    "listByMethod": {
+      "description": "Entries of one HTTP method.",
+      "accepts": {
+        "method": {
+          "type": "string"
+        }
+      },
+      "returns": "@monitor/domain/Entry.shape.json[]"
+    },
+    "get": {
+      "description": "One entry by id. Fails when there is no such entry.",
+      "accepts": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "returns": "@monitor/domain/Entry.shape.json"
+    },
+    "record": {
+      "description": "Store a new entry and answer it with its id.",
+      "accepts": {
+        "url": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        "ua": {
+          "type": "string"
+        }
+      },
+      "returns": "@monitor/domain/Entry.shape.json"
+    },
+    "update": {
+      "description": "Replace the call of one entry. Fails when there is no such entry.",
+      "accepts": {
+        "id": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        }
+      },
+      "returns": "@monitor/domain/Entry.shape.json"
+    },
+    "remove": {
+      "description": "Delete one entry and answer what was deleted. Fails when there is no such entry.",
+      "accepts": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "returns": "@monitor/domain/Entry.shape.json"
+    },
+    "submit": {
+      "description": "Record an observed call, attributing it to this API rather than the client.",
+      "accepts": {
+        "url": {
+          "type": "string",
+          "description": "the URL that was called"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ],
+          "description": "the method it was called with"
+        }
+      },
+      "returns": "@monitor/domain/Entry.shape.json"
+    },
+    "list": {
+      "description": "Every entry, narrowed to one method when a method is given.",
+      "accepts": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ],
+          "required": false,
+          "description": "narrow to this method; absent for everything"
+        }
+      },
+      "returns": "@monitor/domain/Entry.shape.json[]"
+    },
+    "digest": {
+      "description": "Every entry counted and listed as one digest.",
+      "returns": "@monitor/domain/Digest.shape.json"
+    }
+  }
+}

@@ -1,5 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/codec.schema.json",
+  "label": "Multipart form",
   "description": "multipart/form-data: text fields as strings, file fields as @http/Part.shape.json (name, contentType, size, content as base64).",
   "yields": "declared"
 }

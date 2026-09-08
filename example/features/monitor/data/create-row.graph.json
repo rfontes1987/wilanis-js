@@ -1,0 +1,70 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "label": "Create a row",
+  "description": "Data graph behind monitor.record: POST the record, take the row the API answers with 201. The caller's own user agent is forwarded to the API as a header; the row itself is attributed to the recorder the domain chose.",
+  "resolvers": "@monitor/edge/request.resolvers.json",
+  "in": "@monitor/domain/EntryRecord.shape.json",
+  "out": {
+    "type": "@monitor/domain/Entry.shape.json",
+    "from": [
+      "row",
+      "failed"
+    ]
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "asked",
+      "label": "POST the record",
+      "run": "@http/http.port.json#request",
+      "in": {
+        "body": "{{in}}",
+        "connection": "@connections/monitor-api.connection.json",
+        "method": "POST",
+        "path": "/monitor",
+        "headers": {
+          "x-forwarded-user-agent": "{{agent}}"
+        },
+        "consumes": "application/json",
+        "produces": "application/json",
+        "returns": "@monitor/edge/EntryRow.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/switch.schema.json",
+      "id": "route",
+      "label": "What did the API say?",
+      "in": {
+        "status": "{{asked.status}}",
+        "body": "{{asked.body}}"
+      },
+      "rules": [
+        {
+          "when": "status == 201 && has(body)",
+          "to": "row"
+        }
+      ],
+      "else": "failed"
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "row",
+      "label": "The created row",
+      "run": "@std/object.port.json#make",
+      "in": {
+        "value": "{{asked.body}}",
+        "type": "@monitor/edge/EntryRow.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "failed",
+      "label": "Unexpected answer",
+      "run": "@std/outcome.port.json#refuse",
+      "in": {
+        "message": "the monitor API answered {{asked.status}}",
+        "type": "@monitor/domain/Entry.shape.json"
+      }
+    }
+  ]
+}

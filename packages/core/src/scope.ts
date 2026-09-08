@@ -12,8 +12,26 @@ import { TypeResolver, type Type, UNKNOWN, STRING, typeAt, typeOfValue, substitu
 /** The {name} placeholders of a templated string setting, such as an http route. */
 export const PLACEHOLDER = /\{([A-Za-z0-9_]+)\}/g;
 
-export const TEMPLATE = /\{\{\s*([a-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*)\s*\}\}/g;
-export const WHOLE_TEMPLATE = /^\{\{\s*([a-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*)\s*\}\}$/;
+/**
+ * A read path: a root, then segments. A segment is `.name` for an identifier, or a quoted key in brackets
+ * for a name that is not one: request.headers['user-agent']. Single or double quotes; single needs no
+ * escaping inside a JSON string.
+ */
+const ROOT = String.raw`[a-z][A-Za-z0-9_]*`;
+const SEGMENT = String.raw`(?:\.[A-Za-z0-9_]+|\[(?:'[^'\]]*'|"[^"\]]*")\])`;
+export const TEMPLATE = new RegExp(String.raw`\{\{\s*(${ROOT}${SEGMENT}*)\s*\}\}`, 'g');
+export const WHOLE_TEMPLATE = new RegExp(String.raw`^\{\{\s*(${ROOT}${SEGMENT}*)\s*\}\}$`);
+/** A bare read path, the way a resolver writes it. */
+export const READ_PATH = new RegExp(String.raw`^${ROOT}${SEGMENT}*$`);
+const SEGMENTS = new RegExp(String.raw`^(${ROOT})|\.([A-Za-z0-9_]+)|\[(?:'([^'\]]*)'|"([^"\]]*)")\]`, 'g');
+/** The root and segments of a read path, quotes stripped: request.headers['user-agent'] → ['request', 'headers', 'user-agent']. */
+export function splitPath(t: string): string[] {
+  const out: string[] = [];
+  for (const m of t.matchAll(SEGMENTS)) out.push(m[1] ?? m[2] ?? m[3] ?? m[4] ?? '');
+  return out;
+}
+/** Segments written back as a read path: an identifier as .name, anything else quoted in brackets. */
+export const joinPath = (segs: string[]) => segs.map((x, i) => (i === 0 ? x : /^[A-Za-z0-9_]+$/.test(x) ? `.${x}` : `['${x}']`)).join('');
 
 export type GraphRole = 'domain' | 'data';
 
@@ -75,22 +93,13 @@ export class Scope {
 
   // ---- graph roles --------------------------------------------------------------------------
 
-  /** domain: fired by a trigger (or unreferenced); data: bound by a binding. Both is a refusal. */
-  graphRoles(): Map<string, { roles: Set<GraphRole>; by: string[] }> {
-    const m = new Map<string, { roles: Set<GraphRole>; by: string[] }>();
-    const mark = (ref: string, role: GraphRole, by: string) => {
-      const path = this.canon(ref);
-      const e = m.get(path) ?? { roles: new Set(), by: [] };
-      e.roles.add(role); e.by.push(by); m.set(path, e);
-    };
-    for (const t of this.registry.all('trigger')) mark(t.doc.graph, 'domain', t.path);
-    for (const b of this.registry.all('binding')) for (const op of Object.values(b.doc.operations)) if (op.graph) mark(op.graph, 'data', b.path);
-    return m;
-  }
-
-  roleOf(graphPath: string, roles = this.graphRoles()): GraphRole {
-    const e = roles.get(graphPath);
-    return !e || e.roles.has('domain') ? 'domain' : 'data';
+  /**
+   * A graph's role is the layer directory it sits in, not who references it: `domain/` holds business
+   * rules, `data/` translates and carries the effects. Declared, so adding a reference can never
+   * reclassify a graph underneath the rules that judge it.
+   */
+  roleOf(graphPath: string): GraphRole {
+    return this.get('graph', graphPath)?.layer === 'data' ? 'data' : 'domain';
   }
 
   // ---- types ---------------------------------------------------------------------------------
@@ -134,10 +143,10 @@ export class Scope {
   valueRead(value: unknown, resolve: (root: string, path: string[]) => Read | string | undefined): Read | string | undefined {
     if (typeof value === 'string') {
       const whole = WHOLE_TEMPLATE.exec(value);
-      if (whole) { const p = whole[1].split('.'); return resolve(p[0], p.slice(1)); }
+      if (whole) { const p = splitPath(whole[1]); return resolve(p[0], p.slice(1)); }
       let optional = false;
       for (const m of value.matchAll(TEMPLATE)) {
-        const p = m[1].split('.');
+        const p = splitPath(m[1]);
         const r = resolve(p[0], p.slice(1));
         if (typeof r !== 'object') return r;
         if (!['string', 'number', 'boolean', 'unknown'].includes(r.type.kind)) return `{{${m[1]}}} is ${r.type.kind}; only scalars interpolate into text`;
@@ -170,7 +179,7 @@ export class Scope {
 
   /** All template roots+paths a value reads. */
   templateReads(value: unknown, out: string[][] = []): string[][] {
-    if (typeof value === 'string') for (const m of value.matchAll(TEMPLATE)) out.push(m[1].split('.'));
+    if (typeof value === 'string') for (const m of value.matchAll(TEMPLATE)) out.push(splitPath(m[1]));
     else if (Array.isArray(value)) value.forEach(v => this.templateReads(v, out));
     else if (value && typeof value === 'object') Object.values(value as Record<string, unknown>).forEach(v => this.templateReads(v, out));
     return out;

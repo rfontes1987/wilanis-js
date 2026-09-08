@@ -1,5 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger-kind.schema.json",
+  "label": "HTTP route",
   "description": "A route. The body is decoded by the consumes codec into request.body (typed by settings.body); query, route placeholders (request.params, each one required), headers and the principal are in the context too. The trigger's input mapping picks what the graph gets; access is checked before the graph runs; the answer is encoded by the produces codec with the status the response block chooses.",
   "settings": {
     "fields": {

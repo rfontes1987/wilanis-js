@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/resolvers.schema.json",
+  "label": "Request context",
+  "description": "What this feature reads from the HTTP request beyond its body and route: the caller's user agent, forwarded to the API on a recording.",
+  "resolvers": {
+    "agent": {
+      "label": "The caller's user agent",
+      "read": "request.headers['user-agent']",
+      "description": "absent when the caller sent none; the header is then not forwarded"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "label": "DELETE /monitor/{id}",
+  "description": "DELETE /monitor/{id} \u2192 the entry that was removed.",
+  "settings": {
+    "route": "/monitor/{id}",
+    "method": "DELETE",
+    "produces": "application/json",
+    "access": {
+      "open": true
+    }
+  },
+  "in": "@monitor/edge/IdRequest.shape.json",
+  "out": "@monitor/edge/EntryView.shape.json",
+  "kind": "@http/http.trigger-kind.json",
+  "fire": {
+    "run": "@monitor/domain/monitor.port.json#remove",
+    "in": {
+      "id": "{{request.params.id}}"
+    }
+  }
+}

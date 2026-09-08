@@ -1,5 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/codec.schema.json",
+  "label": "JSON",
   "description": "JSON: an object, a list, or a scalar, judged against the declared type.",
   "yields": "declared"
 }

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "label": "Digest",
+  "description": "Every entry counted and listed, composed into one Digest: the count from one node, the text from another.",
+  "out": {
+    "type": "@monitor/domain/Digest.shape.json",
+    "from": "digest"
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "all",
+      "label": "Every entry",
+      "run": "@monitor/domain/monitor.port.json#listAll"
+    },
+    {
+      "type": "@wilanis/node/map.schema.json",
+      "id": "lines",
+      "label": "One line per entry",
+      "run": "@std/text.port.json#fill",
+      "over": "{{all}}",
+      "bind": {
+        "values": ""
+      },
+      "in": {
+        "template": "- {method} {url}"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "joined",
+      "label": "The lines as text",
+      "run": "@std/text.port.json#join",
+      "in": {
+        "parts": "{{lines}}",
+        "separator": "\n"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "count",
+      "label": "How many",
+      "run": "@std/list.port.json#count",
+      "in": {
+        "list": "{{all}}"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "digest",
+      "label": "The digest",
+      "run": "@std/object.port.json#make",
+      "in": {
+        "value": {
+          "count": "{{count}}",
+          "text": "{{joined}}"
+        },
+        "type": "@monitor/domain/Digest.shape.json"
+      }
+    }
+  ]
+}

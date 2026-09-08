@@ -1,0 +1,38 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/binding.schema.json",
+  "label": "REST storage",
+  "description": "monitor.port.json over the REST API: one data graph per operation, each a declared request plus the decision of what its status means.",
+  "port": "@monitor/domain/monitor.port.json",
+  "operations": {
+    "listAll": {
+      "graph": "@monitor/data/list-rows.graph.json"
+    },
+    "listByMethod": {
+      "graph": "@monitor/data/list-rows-by-method.graph.json"
+    },
+    "get": {
+      "graph": "@monitor/data/get-row.graph.json"
+    },
+    "record": {
+      "graph": "@monitor/data/create-row.graph.json"
+    },
+    "update": {
+      "graph": "@monitor/data/update-row.graph.json"
+    },
+    "remove": {
+      "graph": "@monitor/data/delete-row.graph.json"
+    },
+    "submit": {
+      "description": "The business graph that attributes and records.",
+      "graph": "@monitor/domain/record-entry.graph.json"
+    },
+    "list": {
+      "description": "The business graph that routes on the filter.",
+      "graph": "@monitor/domain/list-entries.graph.json"
+    },
+    "digest": {
+      "description": "The business graph that composes the digest.",
+      "graph": "@monitor/domain/digest.graph.json"
+    }
+  }
+}

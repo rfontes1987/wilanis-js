@@ -123,33 +123,8 @@
         "$ref": "#/$defs/field"
       }
     },
-    "resolvers": {
-      "description": "name -> an operation whose result is read as {{name.path}}. A resolver's in reads other resolvers, and in a binding or a data graph also request.* (the trigger kind's context); a domain graph's resolvers never read request.",
-      "type": "object",
-      "propertyNames": {
-        "$ref": "#/$defs/ident"
-      },
-      "additionalProperties": {
-        "type": "object",
-        "properties": {
-          "run": {
-            "$ref": "#/$defs/opRef"
-          },
-          "in": {
-            "$ref": "#/$defs/values"
-          },
-          "description": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "run"
-        ],
-        "additionalProperties": false
-      }
-    },
     "value": {
-      "description": "A value where an operation is called. Literals are written as they are: a string, a number, a boolean, a list or an object of values. A string may carry {{root.path}} templates: alone it takes that value and its type; embedded in text it is interpolated (scalars only). Roots in a graph node: in (the graph's input), const (a constant), a node id, a resolver name. In a resolver's in: request and other resolvers. In a binding delegation's in: in (the operation's accepts) and resolvers. In a trigger's input: request."
+      "description": "A value where an operation is called. Literals are written as they are: a string, a number, a boolean, a list or an object of values. A string may carry {{root.path}} templates: alone it takes that value and its type; embedded in text it is interpolated (scalars only). A path segment is .name, or ['a key'] for a key that is not an identifier. Roots in a graph node: in (the graph's input), const (a constant), a node id, a resolver name. In a binding delegation's in: in (the operation's accepts) and resolvers. In a trigger's fire.in: request."
     },
     "values": {
       "type": "object",

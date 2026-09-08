@@ -9,7 +9,7 @@ here reads a secret and `serve` runs with no environment.
 npm install
 npm run check            # wilanis check .
 npm run rehearse         # every trigger, every branch of every switch, effects stubbed
-npm run digest           # wilanis run @monitor/triggers/digest.trigger.json .  -- one line per entry, for real
+npm run digest           # wilanis run @monitor/edge/digest.trigger.json .  -- the count and one line per entry, for real
 npm run serve            # GET /monitor[?method=], POST /monitor on :8080
 ```
 

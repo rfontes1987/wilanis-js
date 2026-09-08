@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "Entry update",
+  "layer": "core",
+  "description": "A replacement for one entry: its id and the new call.",
+  "fields": {
+    "id": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ]
+    }
+  }
+}

@@ -20,7 +20,8 @@ const USAGE = `wilanis -- declarative dataflow, judged by a compiler, run by a s
   wilanis ls       [root] [kind]                   every document, or those of one kind
   wilanis describe <path> [root]                   a document, with its contract laid out
   wilanis map      [root]                          trigger → graph → port → binding → graph
-  wilanis new      <kind> <name|path> [root] [--layer edge] [--port p] [--graph g] [--kind k]
+  wilanis new      <kind> <name|path> [root] [--layer edge|data] [--port p] [--run p#op] [--kind k]
+                   kinds: project feature shape port graph binding trigger resolvers
   wilanis init     [root]                          write CLAUDE.md and agent hooks into a tree
 
 Every path is @-rooted (@features/tasks/tasks.port.json) or through a project alias.

@@ -11,7 +11,7 @@ import { SCHEMAS_DIR, validateDocument } from '../src/validate.js';
  * deviation, not only the deepest). The smallest conforming document of each kind is the baseline.
  */
 
-const run = (id: string, extra: Record<string, unknown> = {}) => ({ type: NODE_RUN, id, run: '@std/data.port.json#object', in: { value: {}, type: 'string' }, ...extra });
+const run = (id: string, extra: Record<string, unknown> = {}) => ({ type: NODE_RUN, id, run: '@std/object.port.json#make', in: { value: {}, type: 'string' }, ...extra });
 
 const minimal: Record<Kind, Record<string, unknown>> = {
   project: { name: 'p', plugins: [{ use: '@std' }] },
@@ -19,14 +19,15 @@ const minimal: Record<Kind, Record<string, unknown>> = {
   port: { operations: { get: { description: 'one' } } },
   binding: { port: '@features/f/f.port.json', operations: { get: { graph: '@features/f/graphs/g.graph.json' } } },
   graph: { nodes: [run('a')] },
-  trigger: { kind: '@cli/cli.trigger-kind.json', settings: {}, graph: '@features/f/graphs/g.graph.json' },
+  trigger: { kind: '@cli/cli.trigger-kind.json', settings: {}, fire: { run: '@features/f/domain/f.port.json#get' } },
   'trigger-kind': { settings: { fields: {} }, context: { fields: {} } },
   'connection-kind': { settings: { fields: {} } },
   connection: { kind: '@http/http.connection-kind.json', settings: {} },
   codec: { yields: 'declared' },
   feature: {},
   shape: { layer: 'core', fields: {} },
-  scenario: { graph: '@features/f/graphs/g.graph.json', seed: 1, expect: { status: 'done', nodes: {} } },
+  scenario: { trigger: '@features/f/edge/t.trigger.json', seed: 1, expect: { status: 'done', nodes: {} } },
+  resolvers: { resolvers: { caller: { read: "request.headers['user-agent']" } } },
 };
 const doc = (kind: Kind, body: Record<string, unknown> = {}, schema = schemaRef(kind)) => ({ $schema: schema, description: 'd', ...minimal[kind], ...body });
 
@@ -85,7 +86,7 @@ describe('the envelope', () => {
     expect(refused(doc(kind, { params: {} }))).toEqual([at(undefined, "unknown property 'params'")]);
   });
   it('every missing required property is reported, not only the first', () => {
-    expect(refused({ $schema: schemaRef('trigger'), description: 'd', settings: {} })).toEqual([at(undefined, "missing 'kind'"), at(undefined, "missing 'graph'")]);
+    expect(refused({ $schema: schemaRef('trigger'), description: 'd', settings: {} })).toEqual([at(undefined, "missing 'kind'"), at(undefined, "missing 'fire'")]);
   });
 });
 
@@ -104,8 +105,8 @@ describe('graph', () => {
     ]);
   });
   it('identifiers, operation references and paths follow the shared grammar, quoted in the refusal', () => {
-    expect(refused(doc('graph', { nodes: [run('a', { run: 'data.port.json#object' })] }))).toEqual([at('nodes/0/run', 'path#operation')]);
-    expect(refused(doc('graph', { nodes: [run('a', { run: '@std/data.port.json' })] }))).toEqual([at('nodes/0/run', 'path#operation')]);
+    expect(refused(doc('graph', { nodes: [run('a', { run: 'object.port.json#make' })] }))).toEqual([at('nodes/0/run', 'path#operation')]);
+    expect(refused(doc('graph', { nodes: [run('a', { run: '@std/object.port.json' })] }))).toEqual([at('nodes/0/run', 'path#operation')]);
     expect(refused(doc('graph', { nodes: [run('a', { in: { 'bad key': 1 } })] }))).toEqual([at('nodes/0/in', "property name 'bad key'", 'identifier')]);
     expect(refused(doc('graph', { nodes: [run('a', { in: { x: 1 } }), { type: NODE_SWITCH, id: 's', in: {}, rules: [{ when: 'x', to: 'Not-Ident' }], else: 'a' }] }))).toEqual([at('nodes/1/rules/0/to', 'identifier')]);
   });
@@ -169,18 +170,37 @@ describe('port and binding', () => {
     expect(refused(doc('binding', { operations: { get: { run: '@y/p.json#op', in: { a: '{{in.a}}' } } } }))).toEqual([]);
     expect(refused(doc('binding', { operations: { get: { run: '@y/p.json#op', params: {} } } }))).toEqual([at('operations/get', "unknown property 'params'")]);
   });
-  it('resolvers run an operation; their in is values', () => {
-    expect(refused(doc('binding', { resolvers: { caller: { in: {} } } }))).toEqual([at('resolvers/caller', "missing 'run'")]);
-    expect(refused(doc('graph', { resolvers: { caller: { run: 'not-a-ref' } } }))).toEqual([at('resolvers/caller/run', 'path#operation')]);
+  it('a binding names its resolvers document by path', () => {
+    expect(refused(doc('binding', { resolvers: '@features/f/edge/r.resolvers.json' }))).toEqual([]);
+    expect(refused(doc('binding', { resolvers: { caller: { read: 'request.params.id' } } }))).toEqual([at('resolvers', 'must be string')]);
+  });
+});
+
+describe('resolvers', () => {
+  it('a resolver reads a path into the request; a key that is not an identifier is quoted in brackets', () => {
+    expect(refused(doc('resolvers', { resolvers: { a: { read: 'request.params.id' } } }))).toEqual([]);
+    expect(refused(doc('resolvers', { resolvers: { a: { read: 'request.headers["user-agent"]' } } }))).toEqual([]);
+    expect(refused(doc('resolvers', { resolvers: { a: { read: 'params.id' } } }))).toEqual([at('resolvers/a/read', 'A path into the request')]);
+    expect(refused(doc('resolvers', { resolvers: { a: { read: 'request' } } }))).toEqual([at('resolvers/a/read', 'A path into the request')]);
+    expect(refused(doc('resolvers', { resolvers: { a: { run: '@std/text.port.json#fill' } } }))).toEqual([at('resolvers/a', "missing 'read'"), at('resolvers/a', "unknown property 'run'")]);
+    expect(refused(doc('resolvers', { resolvers: {} }))).toEqual([at('resolvers', 'must NOT have fewer than 1 properties')]);
+  });
+  it('a graph or binding names the resolvers document by path', () => {
+    expect(refused(doc('graph', { resolvers: '@features/f/edge/r.resolvers.json' }))).toEqual([]);
+    expect(refused(doc('graph', { resolvers: { a: { read: 'request.params.id' } } }))).toEqual([at('resolvers', 'must be string')]);
   });
 });
 
 describe('trigger, kinds, connection, codec', () => {
-  it('a trigger names a kind and a graph by path, and its settings are an object', () => {
+  it('a trigger names a kind by path and fires one port operation; its settings are an object', () => {
     expect(refused(doc('trigger', { kind: 'http' }))).toEqual([at('kind', 'A document path')]);
     expect(refused(doc('trigger', { settings: [] }))).toEqual([at('settings', 'must be object')]);
     expect(refused(doc('trigger', { in: { fields: {} } }))).toEqual([at('in', 'must be string')]);
-    expect(refused(doc('trigger', { input: { id: '{{request.params.id}}' } }))).toEqual([]);
+    expect(refused(doc('trigger', { fire: { run: '@features/f/domain/f.port.json#get', in: { id: '{{request.params.id}}' } } }))).toEqual([]);
+    // the node type is the schema's declaration, never restated on the document
+    expect(refused(doc('trigger', { fire: { type: NODE_RUN, run: '@features/f/domain/f.port.json#get' } }))).toEqual([at('fire', "unknown property 'type'")]);
+    // a trigger fires an operation, never a graph
+    expect(refused(doc('trigger', { fire: { run: '@features/f/data/g.graph.json' } }))).toEqual([at('fire/run', 'path#operation: one operation of a port')]);
   });
   it('a trigger kind has settings and context as inline objects', () => {
     expect(refused(doc('trigger-kind', { context: 'string' }))).toEqual([at('context', 'must be object')]);

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "label": "Objects",
+  "description": "Objects. `make` gives a value written in place -- or a value another node answered -- a declared type, so other nodes can read its fields; `merge` lays one object over another.",
+  "operations": {
+    "make": {
+      "description": "The value, as the declared type. Write the object in place: \"in\": { \"value\": { \"count\": \"{{count}}\", \"text\": \"{{joined}}\" }, \"type\": \"@features/f/domain/Digest.shape.json\" }; or hand it a value another node answered, to give it a type. The checker verifies the value fits the type; at run time the value is judged against it.",
+      "accepts": {
+        "value": {
+          "type": "$T",
+          "description": "the object, written in place or read from a node"
+        },
+        "type": {
+          "type": "type",
+          "binds": "$T",
+          "description": "the declared type of the result"
+        }
+      },
+      "returns": "$T",
+      "pure": true
+    },
+    "merge": {
+      "description": "over laid on top of base -- every key of over wins -- as the declared type. Like Object.assign({}, base, over).",
+      "accepts": {
+        "base": {
+          "type": {
+            "fields": {},
+            "open": true
+          }
+        },
+        "over": {
+          "type": {
+            "fields": {},
+            "open": true
+          }
+        },
+        "type": {
+          "type": "type",
+          "binds": "$T",
+          "description": "the declared type of the result"
+        }
+      },
+      "returns": "$T",
+      "pure": true
+    }
+  }
+}

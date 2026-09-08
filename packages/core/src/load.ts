@@ -6,7 +6,7 @@
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, relative, sep } from 'node:path';
-import { RefusalList, Registry, type AnyDoc, type Loaded, type ProjectDoc } from './model.js';
+import { layerOf, RefusalList, Registry, type AnyDoc, type Kind, type Layer, type Loaded, type ProjectDoc, type Refusal } from './model.js';
 import { validateDocument } from './validate.js';
 import type { PluginModule } from './plugin.js';
 
@@ -40,6 +40,46 @@ export function makeResolver(aliases: Record<string, string>, pluginRoots: Set<s
     const target = aliases[alias];
     if (target !== undefined) return target.replace(/\/$/, '') + (rest ?? '');
     return ref;
+  };
+}
+
+/**
+ * Where a kind may live. A feature's documents sit in one of three layer directories and the layer is the
+ * rule: `edge/` speaks the world, `domain/` holds the business rules, `data/` translates and carries the
+ * effects. A connection is a channel shared across features, so it stays at the tree's root.
+ */
+const HOME: Partial<Record<Kind, { layers?: Layer[]; dir?: string; why: string }>> = {
+  trigger: { layers: ['edge'], why: 'a trigger is a way in: it speaks the world\'s vocabulary' },
+  graph: { layers: ['domain', 'data'], why: 'a graph is business rules (domain/) or a translation (data/)' },
+  binding: { layers: ['data'], why: 'a binding says how a domain port is met, which is the data layer\'s job' },
+  port: { layers: ['domain'], why: 'a domain port is the contract the business offers' },
+  shape: { layers: ['edge', 'domain'], why: 'a shape is the world\'s (edge/) or ours (domain/)' },
+  resolvers: { layers: ['edge'], why: 'a resolvers document names what is read from the request, which is the world\'s vocabulary' },
+  connection: { dir: 'connections', why: 'a connection is a channel to an external system, shared across features' },
+  scenario: { dir: 'scenarios', why: 'a scenario is a recorded run' },
+};
+
+/** The refusal for a document that is not where its kind lives, or null when it is home. */
+function misplaced(kind: Kind, file: string, feature: string | undefined, doc: unknown): Refusal | null {
+  const home = HOME[kind];
+  if (!home) return null;
+  if (home.dir) {
+    if (file.split('/')[0] === home.dir) return null;
+    return { code: 'D008', file, message: `a ${kind} lives under ${home.dir}/`, hint: `${home.why}; move it to ${home.dir}/${stem(file)}.${kind}.json` };
+  }
+  const layers = home.layers!;
+  if (!feature) return { code: 'D008', file, message: `a ${kind} lives inside a feature, under ${layers.map(l => `${l}/`).join(' or ')}`, hint: `${home.why}; move it to features/<name>/${layers[0]}/` };
+  const layer = layerOf(`@${file}`);
+  // a shape says its layer twice -- in `layer` and in the directory. They must agree, and the directory wins.
+  if (kind === 'shape' && layer) {
+    const declared = (doc as { layer?: string }).layer === 'edge' ? 'edge' : 'domain';
+    if (declared !== layer) return { code: 'D008', file, at: 'layer', message: `shape declares layer '${(doc as { layer?: string }).layer}' but sits in ${layer}/`, hint: `a shape's layer is where it lives; move it to features/${feature}/${declared}/, or set "layer": "${layer === 'edge' ? 'edge' : 'core'}"` };
+  }
+  if (layer && layers.includes(layer)) return null;
+  return {
+    code: 'D008', file,
+    message: layer ? `a ${kind} may not live in the ${layer} layer` : `a ${kind} must sit in a layer directory (${layers.join(', ')})`,
+    hint: `${home.why}; move it to features/${feature}/${layers[0]}/${stem(file)}.${kind}.json`,
   };
 }
 
@@ -94,7 +134,9 @@ export function loadTree(root: string, available: Record<string, PluginModule>):
     if (kind === 'project') { refusals.add({ code: 'D003', file, message: 'the project document is project.json at the root' }); continue; }
     if (kind === 'feature' && file !== `features/${feature}/feature.json`) { refusals.add({ code: 'D003', file, message: 'a feature lives at features/<name>/feature.json' }); continue; }
     if (['plugin', 'trigger-kind', 'connection-kind', 'codec'].includes(kind)) { refusals.add({ code: 'D004', file, message: `${kind} documents are shipped by plugins, never authored in a tree` }); continue; }
-    registry.add({ doc, kind, path: `@${file}`, name: kind === 'feature' ? feature! : stem(file), feature, file: abs });
+    const bad = misplaced(kind, file, feature, doc);
+    if (bad) { refusals.add(bad); continue; }
+    registry.add({ doc, kind, path: `@${file}`, name: kind === 'feature' ? feature! : stem(file), feature, layer: layerOf(`@${file}`), file: abs });
   }
 
   for (const mod of plugins) {

@@ -5,11 +5,11 @@
 
 export type Kind =
   | 'project' | 'plugin' | 'port' | 'binding' | 'graph' | 'trigger'
-  | 'trigger-kind' | 'connection-kind' | 'connection' | 'codec' | 'feature' | 'shape' | 'scenario';
+  | 'trigger-kind' | 'connection-kind' | 'connection' | 'codec' | 'feature' | 'shape' | 'scenario' | 'resolvers';
 
 export const KINDS: Kind[] = [
   'project', 'plugin', 'port', 'binding', 'graph', 'trigger',
-  'trigger-kind', 'connection-kind', 'connection', 'codec', 'feature', 'shape', 'scenario',
+  'trigger-kind', 'connection-kind', 'connection', 'codec', 'feature', 'shape', 'scenario', 'resolvers',
 ];
 
 /** The short alias a document may use as its $schema: @wilanis/<kind>.schema.json. */
@@ -30,11 +30,27 @@ export function kindOfSchema(s: unknown): Kind | undefined {
   return m && (KINDS as string[]).includes(m[1]) ? (m[1] as Kind) : undefined;
 }
 
+/**
+ * The three layers of a feature, named by the directory a document sits in. A document's layer is where it
+ * lives, not what it is: `edge/` speaks the world's vocabulary, `domain/` holds the business rules, `data/`
+ * translates and carries the effects. The layer is read off the path so a rule can be checked structurally,
+ * never inferred from who happens to reference a document.
+ */
+export type Layer = 'edge' | 'domain' | 'data';
+export const LAYERS: Layer[] = ['edge', 'domain', 'data'];
+
+/** The layer a path declares: @features/<f>/<layer>/... -> that layer; anything else -> undefined. */
+export function layerOf(path: string): Layer | undefined {
+  const m = /^@features\/[^/]+\/([a-z]+)\//.exec(path);
+  return m && (LAYERS as string[]).includes(m[1]) ? (m[1] as Layer) : undefined;
+}
+
 export const NODE_RUN = '@wilanis/node/run.schema.json';
 export const NODE_SWITCH = '@wilanis/node/switch.schema.json';
 export const NODE_MAP = '@wilanis/node/map.schema.json';
 
-export interface Envelope { $schema: string; description: string }
+/** Every document: its kind, what it is for, and optionally a short human name a reader sees instead of its path. */
+export interface Envelope { $schema: string; description: string; label?: string }
 
 export type TypeRef = string;
 export interface InlineObject { fields: Record<string, Field>; open?: boolean | TypeRef; description?: string }
@@ -51,8 +67,10 @@ export type Fields = Record<string, Field>;
 export type Value = unknown;
 export type Values = Record<string, Value>;
 
-export interface ResolverSpec { run: string; in?: Values; description?: string }
-export type Resolvers = Record<string, ResolverSpec>;
+/** One resolver: a named read of the trigger kind's context, request.params.id or request.headers['user-agent']. Nothing runs. */
+export interface ResolverRead { read: string; label?: string; description?: string }
+/** The resolvers a feature reads from the request, in one edge document a data graph or a binding names. */
+export interface ResolversDoc extends Envelope { resolvers: Record<string, ResolverRead> }
 
 export interface ProjectDoc extends Envelope {
   name: string;
@@ -69,23 +87,27 @@ export interface PluginDoc extends Envelope {
 export interface Operation { description: string; accepts?: Fields; returns?: TypeSpec; pure?: boolean }
 export interface PortDoc extends Envelope { operations: Record<string, Operation> }
 export interface BindingOp { graph?: string; run?: string; in?: Values; description?: string }
-export interface BindingDoc extends Envelope { port: string; resolvers?: Resolvers; operations: Record<string, BindingOp> }
+/** How a domain port is met. `resolvers` names the resolvers document whose reads a delegation may use. */
+export interface BindingDoc extends Envelope { port: string; resolvers?: string; operations: Record<string, BindingOp> }
 
-export interface RunNode { type: typeof NODE_RUN; id: string; description?: string; run: string; in?: Values }
-export interface SwitchNode { type: typeof NODE_SWITCH; id: string; description?: string; in: Values; rules: { when: string; to: string; description?: string }[]; else: string }
-export interface MapNode { type: typeof NODE_MAP; id: string; description?: string; run: string; over: Value; in?: Values; bind?: Record<string, string>; onItemFailure?: 'fail' | 'collect' }
+export interface RunNode { type: typeof NODE_RUN; id: string; label?: string; description?: string; run: string; in?: Values }
+export interface SwitchNode { type: typeof NODE_SWITCH; id: string; label?: string; description?: string; in: Values; rules: { when: string; to: string; description?: string }[]; else: string }
+export interface MapNode { type: typeof NODE_MAP; id: string; label?: string; description?: string; run: string; over: Value; in?: Values; bind?: Record<string, string>; onItemFailure?: 'fail' | 'collect' }
 export type Node = RunNode | SwitchNode | MapNode;
 export const isRun = (n: Node): n is RunNode => n.type === NODE_RUN;
 export const isSwitch = (n: Node): n is SwitchNode => n.type === NODE_SWITCH;
 export const isMap = (n: Node): n is MapNode => n.type === NODE_MAP;
 
 export interface GraphDoc extends Envelope {
-  resolvers?: Resolvers;
+  /** The resolvers document whose reads this graph may use as {{name}}; data graphs only. */
+  resolvers?: string;
   constants?: Record<string, { type: TypeSpec; value: unknown; description?: string }>;
   in?: TypeRef; out?: { type: TypeRef; from: string | string[]; description?: string };
   nodes: Node[];
 }
-export interface TriggerDoc extends Envelope { kind: string; settings: Record<string, unknown>; in?: TypeRef; input?: unknown; out?: TypeRef; graph: string }
+/** What a trigger fires: one run node. The node type is implicit -- trigger.schema.json declares it. */
+export interface FireNode { description?: string; label?: string; run: string; in?: Values }
+export interface TriggerDoc extends Envelope { kind: string; settings: Record<string, unknown>; in?: TypeRef; out?: TypeRef; fire: FireNode }
 export interface TriggerKindDoc extends Envelope { settings: InlineObject; context: InlineObject }
 export interface ConnectionKindDoc extends Envelope { settings: InlineObject }
 export interface ConnectionDoc extends Envelope { kind: string; settings: Record<string, unknown> }
@@ -93,14 +115,14 @@ export interface CodecDoc extends Envelope { yields: 'declared' | TypeRef }
 export interface FeatureDoc extends Envelope { dependsOn?: string[]; exports?: string[]; effects?: string[] }
 export interface ShapeDoc extends Envelope { layer: 'edge' | 'core'; fields: Fields; open?: boolean | TypeRef }
 export interface ScenarioDoc extends Envelope {
-  graph: string; seed: number; in?: unknown; request?: Record<string, unknown>; stubs?: Record<string, unknown>;
+  trigger: string; seed: number; in?: unknown; request?: Record<string, unknown>; stubs?: Record<string, unknown>;
   expect: { status: 'done' | 'failed' | 'blocked'; output?: unknown; nodes: Record<string, { status: string; out?: unknown; selected?: string }> };
 }
 
 export interface DocByKind {
   project: ProjectDoc; plugin: PluginDoc; port: PortDoc; binding: BindingDoc; graph: GraphDoc; trigger: TriggerDoc;
   'trigger-kind': TriggerKindDoc; 'connection-kind': ConnectionKindDoc; connection: ConnectionDoc; codec: CodecDoc;
-  feature: FeatureDoc; shape: ShapeDoc; scenario: ScenarioDoc;
+  feature: FeatureDoc; shape: ShapeDoc; scenario: ScenarioDoc; resolvers: ResolversDoc;
 }
 export type AnyDoc = DocByKind[Kind];
 
@@ -114,6 +136,8 @@ export interface Loaded<T extends AnyDoc = AnyDoc> {
   name: string;
   /** The feature folder it sits in, if any. */
   feature?: string;
+  /** The layer directory it sits in: what a rule reads instead of inferring from who references it. */
+  layer?: Layer;
   /** The plugin alias that shipped it, if native. */
   native?: string;
   /** Where it is on disk, so a reader can open it: under the tree, or under the plugin's package. */

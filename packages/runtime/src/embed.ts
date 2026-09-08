@@ -9,12 +9,12 @@ import type { TriggerDoc } from '@wilanis/core';
 import type { PluginModule, Codecs } from '@wilanis/core';
 import type { Scope } from '@wilanis/core';
 import { conforms, type Type } from '@wilanis/core';
-import { TEMPLATE, WHOLE_TEMPLATE } from '@wilanis/core';
+import { TEMPLATE, WHOLE_TEMPLATE, splitPath } from '@wilanis/core';
 import { readPath } from '@wilanis/engine';
 
 /** Fill a templated literal from roots (request, ...). Whole templates take the value; embedded ones interpolate. */
 export function fillTemplates(value: unknown, roots: Record<string, unknown>): unknown {
-  const read = (t: string) => { const [root, ...path] = t.split('.'); return readPath(roots[root], path); };
+  const read = (t: string) => { const [root, ...path] = splitPath(t); return readPath(roots[root], path); };
   if (typeof value === 'string') {
     const whole = WHOLE_TEMPLATE.exec(value);
     if (whole) return read(whole[1]);
@@ -51,6 +51,14 @@ export class Embedder {
     return c;
   }
 
+  /** The compiled binding behind a trigger's port operation. Compiled once per operation, like a graph. */
+  operation(opRef: string): Compiled {
+    const key = `op:${this.scope.canon(opRef.split('#')[0])}#${opRef.split('#')[1] ?? ''}`;
+    let c = this.compiled.get(key);
+    if (!c) { c = this.compiler.operation(opRef); this.compiled.set(key, c); }
+    return c;
+  }
+
   types(trigger: TriggerDoc): { in?: Type; out?: Type } {
     return { in: trigger.in ? this.scope.types.ref(trigger.in) : undefined, out: trigger.out ? this.scope.types.ref(trigger.out) : undefined };
   }
@@ -73,7 +81,7 @@ export class Embedder {
   inputFor(trigger: TriggerDoc, request: Record<string, unknown>): { input: unknown } | { error: string } {
     const t = this.types(trigger).in;
     if (!t) return { input: undefined };
-    const raw = trigger.input !== undefined ? fillTemplates(trigger.input, { request }) : request.body;
+    const raw = trigger.fire.in !== undefined ? fillTemplates(trigger.fire.in, { request }) : request.body;
     const input = t.kind === 'object' && raw && typeof raw === 'object' && !Array.isArray(raw)
       ? Object.fromEntries(Object.entries(raw as Record<string, unknown>).map(([k, v]) => [k, t.fields[k] ? coerceWire(v, t.fields[k].type) : v]))
       : raw;
@@ -82,10 +90,9 @@ export class Embedder {
   }
 
   async fire(trigger: TriggerDoc, input: unknown, request: Record<string, unknown>, opts: FireOptions = {}): Promise<Report> {
-    const g = this.scope.get('graph', trigger.graph)!.doc;
-    const compiled = this.graph(trigger.graph);
+    const compiled = this.operation(trigger.fire.run);
     const initial: Record<string, unknown> = { request };
-    if (g.in) initial.in = input;
+    if (input !== undefined) initial.in = input;
     const report = await runGraph(compiled, { initial, stubs: opts.stubs, signal: opts.signal, env: this.env });
     if (report.status === 'done' && trigger.out) {
       const t = this.types(trigger).out!;

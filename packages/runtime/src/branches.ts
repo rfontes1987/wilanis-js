@@ -409,6 +409,8 @@ export interface FoundSwitch {
   at: string;
   /** The prefix under which the switch's sibling nodes are stubbed. */
   prefix: string[];
+  /** True while every enclosing frame forwards `in` unchanged, so the trigger's input still steers this switch. */
+  fromTriggerIn?: boolean;
   node: KSwitchLike;
   /**
    * The nodes enclosing this switch, outermost first: each is a call whose graph the switch lives in.
@@ -444,19 +446,30 @@ export function switchesOf(
   prefix: string[] = [],
   seen = new Set<string>(),
   via: string[] = [],
+  fromTriggerIn = true,
 ): FoundSwitch[] {
   const out: FoundSwitch[] = [];
   for (const [id, raw] of Object.entries(spec.nodes)) {
     const n = raw as Record<string, unknown>;
-    if (n.kind === 'switch') { out.push({ at: [...prefix, id].join('.'), prefix, node: n as unknown as KSwitchLike, via }); continue; }
+    if (n.kind === 'switch') { out.push({ at: [...prefix, id].join('.'), prefix, node: n as unknown as KSwitchLike, via, fromTriggerIn }); continue; }
     const handler = typeof n.handler === 'string' ? n.handler : undefined;
     if (!handler || seen.has(handler)) continue;
     const sub = nested(handler);
     if (!sub) continue;
     // a handler is walked once per branch position; recursion through the same handler would not terminate
-    out.push(...switchesOf(sub, nested, [...prefix, id], new Set([...seen, handler]), [...via, [...prefix, id].join('.')]));
+    out.push(...switchesOf(sub, nested, [...prefix, id], new Set([...seen, handler]), [...via, [...prefix, id].join('.')], fromTriggerIn && forwardsIn(n)));
   }
   return out;
+}
+
+/** Does this call hand its callee the caller's `in` untouched, field for field? Then the trigger's input still reaches inside. */
+function forwardsIn(n: Record<string, unknown>): boolean {
+  const given = n.in as Record<string, unknown> | undefined;
+  if (!given || typeof given !== 'object') return false;
+  return Object.entries(given).every(([k, v]) => {
+    const src = v as { ref?: string; path?: string[] } | undefined;
+    return src?.ref === 'in' && Array.isArray(src.path) && src.path.length === 1 && src.path[0] === k;
+  });
 }
 
 /**
@@ -473,6 +486,7 @@ export function casesFor(
   inType?: Type,
 ): Case[] {
   const { node, prefix } = found;
+  const steerable = found.fromTriggerIn ?? !prefix.length;
   const branches = branchesOf(node.rules.map(r => ({ when: r.label, to: r.to })), node.else);
   return branches.map(branch => {
     const stubs: Record<string, unknown> = {};
@@ -484,7 +498,7 @@ export function casesFor(
         const src = sourceOf(node.in[inputName]);
         if (!src) { unreachable.push(dotted); continue; }
         // a switch in the top-level graph reading `in` is steered by the trigger's input, not a stub
-        if (src.ref === 'in' && !prefix.length) {
+        if (src.ref === 'in' && steerable) {
           const full = [...src.path, ...within];
           input.push({ path: full, value: satisfy(domain, getPath(inputSeed, full), typeAtPath(inType, full), seed) });
           continue;

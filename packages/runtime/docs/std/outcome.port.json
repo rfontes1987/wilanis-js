@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "label": "Outcomes",
+  "description": "Outcomes dataflow alone cannot state. `refuse` ends the graph on purpose: the branch a decision routed here is a declared refusal, not a bug.",
+  "operations": {
+    "refuse": {
+      "description": "Refuse: the graph fails on purpose with message, {{templates}} in it reading what any value may. Answers nothing, but declares a type so it can stand as an out.from candidate opposite the node that answers. A rehearsal reports it as refused on purpose.",
+      "accepts": {
+        "message": {
+          "type": "string",
+          "description": "what is said to the caller"
+        },
+        "type": {
+          "type": "type",
+          "binds": "$T",
+          "description": "the type the answering candidate has"
+        }
+      },
+      "returns": "$T",
+      "pure": true
+    }
+  }
+}
