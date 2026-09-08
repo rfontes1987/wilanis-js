@@ -64,6 +64,24 @@ npm install @wilanis/access @wilanis/plugin-auth @wilanis/plugin-http
 - `wilanis run @access/edge/issue-otp.trigger.json --challenge-id=XXXX-XXXX`: gives an open challenge its code
   and prints it. A production profile binds `access.port.json#deliverCode` to whatever delivers the code instead.
 
+## The session, file by file
+
+- **What it holds:** `features/access/domain/Session.shape.json` -- `displayName`, `realm`, an optional `theme`.
+  The host names this shape in the `@auth` settings (`"session"`), so every write is judged against it, at
+  `wilanis check` (X103) and at run time.
+- **Where it is born:** the `issued` node of `domain/sign-in-employee.graph.json` and `sign-in-customer.graph.json`
+  calls `identity.port.json#issue` with the token's subject, realm and roles and an `attributes` object -- the
+  session's first contents: `displayName` from the directory, `realm` from the graph's constant. The binding
+  delegates `issue` to `@auth/token.port.json#issue`, which opens the session and signs the token that names it.
+- **How a graph finds it:** `edge/session.resolvers.json` reads `request.session.id` as `{{sid}}`, declared
+  `required` because the `signed-in` policy proves the session is there.
+- **How it is updated:** `data/write-theme.graph.json` runs `@auth/session.port.json#set` with `session: {{sid}}`,
+  `values: { "theme": "{{in.theme}}" }` and the shape as `type`. Copy that node to write any attribute; `#remove`
+  drops attributes, `#end` ends the session (`data/end-session.graph.json`), `#get` reads it
+  (`data/read-session.graph.json`).
+- **Who writes what:** `wilanis describe @access/domain/Session.shape.json` lists every writer and the attributes
+  it gives.
+
 ## On its own
 
 This directory is a complete tree: `features/access-dev` binds `identity.port.json` to the directories written in

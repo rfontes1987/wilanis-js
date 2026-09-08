@@ -220,7 +220,9 @@ operation to fire and where its inputs come from, and the policies that gate it.
 (`request.principal`, `request.session`, an answered challenge), and its graph allows by answering or refuses
 with a reason the policy calls a denial or a challenge. Where a trigger attaches a policy it says where the
 credential sits (`"in": { "token": "{{request.headers.authorization}}" }`); verifying it is the auth plugin's
-job, never a graph's. A trigger with no policies is public.
+job, never a graph's. A trigger with no policies is public. A session is opened when a token is issued and
+carries attributes of a shape the project names; a graph reads and writes them through `@auth/session.port.json`,
+keyed by `request.session.id`, and `wilanis describe` on the shape lists who writes what.
 
 **Feature.** A directory with three subdirectories, and the directory is the layer: `edge/` holds
 triggers, policies, edge shapes and resolvers; `domain/` holds the port, core shapes and business graphs;
