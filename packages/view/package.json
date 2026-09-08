@@ -45,7 +45,8 @@
   },
   "devDependencies": {
     "@wilanis/plugin-http": "0.1.0",
-    "@wilanis/plugin-blob": "0.1.0"
+    "@wilanis/plugin-blob": "0.1.0",
+    "@wilanis/plugin-auth": "0.1.0"
   },
   "publishConfig": {
     "access": "public"

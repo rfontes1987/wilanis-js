@@ -26,7 +26,7 @@
   header .path { font-family: var(--mono); font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
   header .status { color: var(--dim); font-size: 11px; }
   .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); background: var(--panel-2); white-space: nowrap; vertical-align: middle; }
-  .badge.kind-graph { color: var(--accent); } .badge.kind-trigger { color: var(--ok); } .badge.kind-port { color: #c792ea; } .badge.kind-binding { color: var(--warn); } .badge.kind-shape { color: var(--type); }
+  .badge.kind-graph { color: var(--accent); } .badge.kind-trigger { color: var(--ok); } .badge.kind-policy { color: var(--ok); } .badge.kind-port { color: #c792ea; } .badge.kind-binding { color: var(--warn); } .badge.kind-shape { color: var(--type); }
   .badge.bad { color: var(--bad); border-color: var(--bad); } .badge.warn { color: var(--warn); } .badge.ok { color: var(--ok); }
   aside { border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
   aside .filter { padding: 10px; border-bottom: 1px solid var(--line); }
@@ -120,8 +120,8 @@
   const $ = (id) => document.getElementById(id);
   const state = { index: null, view: null, selected: null, version: null, transform: { x: 40, y: 40, k: 1 }, current: null, fit: false, source: false };
   const ARROW = '↗', ELLIPSIS = '…', SEP = ' › ', TO = ' → ', FROM = '← ';
-  const KIND_NAMES = { project: 'Project', feature: 'Features', trigger: 'Triggers', resolvers: 'Request reads', graph: 'Graphs', port: 'Ports', binding: 'Bindings', shape: 'Shapes', connection: 'Connections', scenario: 'Scenarios', plugin: 'Plugins', 'trigger-kind': 'Trigger kinds', 'connection-kind': 'Connection kinds', codec: 'Codecs' };
-  const KIND_ONE = { project: 'project', feature: 'feature', trigger: 'trigger', resolvers: 'request reads', graph: 'graph', port: 'port', binding: 'binding', shape: 'shape', connection: 'connection', scenario: 'scenario', plugin: 'plugin', 'trigger-kind': 'trigger kind', 'connection-kind': 'connection kind', codec: 'codec' };
+  const KIND_NAMES = { project: 'Project', feature: 'Features', trigger: 'Triggers', policy: 'Policies', resolvers: 'Request reads', graph: 'Graphs', port: 'Ports', binding: 'Bindings', shape: 'Shapes', connection: 'Connections', scenario: 'Scenarios', plugin: 'Plugins', 'trigger-kind': 'Trigger kinds', 'connection-kind': 'Connection kinds', codec: 'Codecs' };
+  const KIND_ONE = { project: 'project', feature: 'feature', trigger: 'trigger', policy: 'policy', resolvers: 'request reads', graph: 'graph', port: 'port', binding: 'binding', shape: 'shape', connection: 'connection', scenario: 'scenario', plugin: 'plugin', 'trigger-kind': 'trigger kind', 'connection-kind': 'connection kind', codec: 'codec' };
   /** A read path shown: request.headers['user-agent'] → request › headers › user-agent. */
   const showRead = (read) => String(read).split(/\.|\[['"]|['"]\]/).filter(Boolean).join(SEP);
   const PALETTE = ['#6cb6ff', '#f0b350', '#7bd88f', '#c792ea', '#ff8a65', '#4ecdc4', '#f78c6c', '#82aaff', '#e57fb3', '#b5d66a', '#ffd166', '#64d3ff'];
@@ -209,7 +209,7 @@
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(d);
     }
-    const order = ['project', 'feature', 'trigger', 'resolvers', 'graph', 'port', 'binding', 'shape', 'connection', 'scenario'];
+    const order = ['project', 'feature', 'trigger', 'policy', 'resolvers', 'graph', 'port', 'binding', 'shape', 'connection', 'scenario'];
     const rank = (k) => { const i = order.findIndex(o => k.startsWith(KIND_NAMES[o])); return (i < 0 ? 99 : i) + (k.includes(' / ') ? 50 : 0); };
     const keys = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
     for (const k of keys) {
@@ -357,6 +357,7 @@
   function renderDocPage(page, v) {
     const h1 = el('h1', null, v.label); h1.appendChild(schemaBadge(v.kind, null, v.kind + '.schema.json')); if (v.kind === 'shape') h1.appendChild(badge(v.kind, v.doc.layer === 'edge' ? 'edge: the world’s shape' : 'core: ours')); page.appendChild(h1);
     page.appendChild(el('p', 'lead', v.description));
+    if (v.included) page.appendChild(el('p', 'lead', 'Included from ' + v.included + ': another tree\u2019s document, loaded as if it sat here and judged by every rule. Edit it there.'));
     if (v.file) page.appendChild(el('div', 'file', v.file));
     const d = v.doc;
     switch (v.kind) {
@@ -392,6 +393,11 @@
         if (d.out) chain.appendChild(step('answers', typeEl(d.out)));
         const withArrows = el('div', 'chain'); [...chain.children].forEach((c, i) => { if (i) withArrows.appendChild(arrow()); withArrows.appendChild(c); });
         page.appendChild(withArrows);
+        if (v.policies) {
+          page.appendChild(el('h2', null, 'Gated by, in order'));
+          page.appendChild(el('p', null, 'Each policy decides over what the kind and the guard hand; the first that does not allow answers, and the operation never fires.'));
+          for (const [i, pol] of v.policies.entries()) { const c = el('div', 'card'); c.appendChild(el('div', 'k', String(i + 1))); const vv = el('div', 'v'); vv.appendChild(link(pol.path, pol.label)); if (pol.gives) vv.appendChild(el('small', null, 'gives the guard: ' + Object.keys(pol.gives).join(', '))); if (pol.decide) { vv.appendChild(el('small', null, 'decides through ')); vv.appendChild(link(pol.decide.split('#')[0], showOp(pol.decide))); } c.appendChild(vv); page.appendChild(c); }
+        }
         page.appendChild(el('h2', null, 'Settings the kind judges')); page.appendChild(valuesTable(d.settings));
         if (v.answers) {
           page.appendChild(el('h2', null, 'Refusals it answers'));
@@ -412,6 +418,32 @@
         page.appendChild(el('h2', null, 'What the operation is given'));
         if (d.fire && d.fire.in) { page.appendChild(el('p', null, 'Each input, read from what the kind hands as request.*:')); page.appendChild(valuesTable(d.fire.in, ['input', 'read from'])); }
         else page.appendChild(el('p', null, d.in ? 'The decoded body, judged as the input type, field for field.' : 'Nothing: the operation takes no input.'));
+        break;
+      }
+      case 'policy': {
+        const f = v.decides;
+        const chain = el('div', 'chain');
+        if (f) { const c = el('span'); c.appendChild(link(f.port, f.portLabel)); c.appendChild(document.createTextNode(SEP + f.opName)); chain.appendChild(step('decides through', c)); }
+        for (const b of (f && f.bindings) || []) {
+          if (b.graph) chain.appendChild(step('met by ' + b.label + ', which runs', link(b.graph, b.graphLabel)));
+          else if (b.run) chain.appendChild(step('met by ' + b.label + ', delegating to', link(b.run.split('#')[0], showOp(b.run))));
+          else chain.appendChild(step('met by', link(b.path, b.label)));
+        }
+        if (f && f.bindings && !f.bindings.length) chain.appendChild(step('met by', frag('no binding yet')));
+        const withArrows = el('div', 'chain'); [...chain.children].forEach((c, i) => { if (i) withArrows.appendChild(arrow()); withArrows.appendChild(c); });
+        page.appendChild(withArrows);
+        page.appendChild(el('h2', null, 'What the decision is given'));
+        if (d.decide && d.decide.in) { page.appendChild(el('p', null, 'Each input, read from what the kind and the guard hand as request.*:')); page.appendChild(valuesTable(d.decide.in, ['input', 'read from'])); }
+        else page.appendChild(el('p', null, 'Nothing: the decision takes no input.'));
+        page.appendChild(el('h2', null, 'Outcomes'));
+        page.appendChild(el('p', null, 'Allow is the decision answering. Each reason the graph can refuse with means one of these: deny ends the run; challenge opens a challenge through the guard, and the caller is told how to answer it.'));
+        const t = el('table'); const hd = el('tr'); for (const h of ['reason', 'effect', 'method', 'meaning']) hd.appendChild(el('th', null, h)); t.appendChild(hd);
+        for (const [reason, o] of Object.entries(v.outcomes || {})) { const tr = el('tr'); tr.appendChild(el('td', 'name', reason)); tr.appendChild(el('td', o.effect === 'challenge' ? 'warn' : 'val', o.effect)); tr.appendChild(el('td', 'mono', o.method || '')); tr.appendChild(el('td', 'desc', o.description || '')); t.appendChild(tr); }
+        page.appendChild(t);
+        if (v.proves && v.proves.length) { page.appendChild(el('h2', null, 'Proves')); page.appendChild(el('p', null, 'Present once this policy allows, so a resolver declared required may lean on it.')); const p = el('p'); v.proves.forEach((x, i) => { if (i) p.appendChild(frag(', ')); p.appendChild(el('code', null, x)); }); page.appendChild(p); }
+        page.appendChild(el('h2', null, 'Gates'));
+        if (!v.gates || !v.gates.length) page.appendChild(el('p', null, 'Nothing names this policy yet: list it under a trigger\'s policies.'));
+        else for (const g of v.gates) { const r = el('div', 'ref'); r.appendChild(badge('trigger')); r.appendChild(document.createTextNode(' ')); r.appendChild(link(g.path, g.label)); page.appendChild(r); }
         break;
       }
       case 'resolvers': {
@@ -476,7 +508,7 @@
       case 'plugin': {
         if (d.settings) { page.appendChild(el('h2', null, 'Settings a project gives it')); page.appendChild(fieldsTable(d.settings.fields, { open: d.settings.open })); }
         page.appendChild(el('h2', null, 'Grants'));
-        for (const [k, label] of [['ports', 'Ports'], ['triggerKinds', 'Trigger kinds'], ['connectionKinds', 'Connection kinds'], ['codecs', 'Codecs']]) if (d.grants && d.grants[k] && d.grants[k].length) { page.appendChild(el('h3', null, label)); page.appendChild(chips(d.grants[k])); }
+        for (const [k, label] of [['ports', 'Ports'], ['triggerKinds', 'Trigger kinds'], ['connectionKinds', 'Connection kinds'], ['codecs', 'Codecs'], ['shapes', 'Shapes']]) if (d.grants && d.grants[k] && d.grants[k].length) { page.appendChild(el('h3', null, label)); page.appendChild(chips(d.grants[k])); }
         break;
       }
       case 'trigger-kind': {
@@ -518,6 +550,7 @@
     if (v.refusals.length) { box.appendChild(el('h4', null, 'refusals')); for (const r of v.refusals) box.appendChild(refusalEl(r)); }
     const callers = v.callers.filter(c => c.kind !== 'project' || v.kind !== 'feature');
     if (v.kind === 'trigger') { box.appendChild(el('h4', null, 'a way in')); box.appendChild(el('p', null, 'A trigger is where a run starts: nothing in the tree calls it.')); }
+    else if (v.kind === 'policy') { box.appendChild(el('h4', null, `gates (${(v.gates || []).length})`)); if (!(v.gates || []).length) box.appendChild(el('p', null, 'no trigger names this policy')); for (const g of v.gates || []) { const r = el('div', 'ref'); r.appendChild(badge('trigger')); r.appendChild(document.createTextNode(' ')); r.appendChild(link(g.path, g.label)); box.appendChild(r); } }
     else {
       box.appendChild(el('h4', null, v.kind === 'graph' ? `reached from (${callers.length})` : `used by (${callers.length})`));
       if (!callers.length) box.appendChild(el('p', null, v.kind === 'graph' ? 'no trigger or binding reaches this graph' : 'nothing names this document'));

@@ -30,7 +30,6 @@ a public API, shown without its `$schema` line and description:
     "route": "/monitor/{id}",
     "method": "GET",
     "produces": "application/json",
-    "access": { "open": true },
     "response": { "refusals": { "missing": 404, "upstream": 502 } }
   },
   "in": "@monitor/edge/IdRequest.shape.json",
@@ -42,7 +41,7 @@ a public API, shown without its `$schema` line and description:
 }
 ```
 
-Read it top to bottom: a GET on `/monitor/{id}`, open to anyone, answering JSON. It takes an `IdRequest`
+Read it top to bottom: a GET on `/monitor/{id}`, open to anyone since it names no policy, answering JSON. It takes an `IdRequest`
 and answers an `EntryView`; both are shapes declared in their own files. It runs the `get` operation of
 the `monitor` port with the id from the URL. If the operation refuses with reason `missing`, the client
 gets a 404; with `upstream`, a 502.
@@ -122,7 +121,7 @@ features/monitor/data/get-row  switch 'route'  3/3 branches
   ok  when status == 200 && has(body)  answered from 'row'
   ok  anything else                    refused on purpose at 'failed' as upstream: "the monitor API answered 500"
 
-every branch settled -- 17 branch(es), 7 decision(s), 7 graph(s).
+every branch settled -- 37 branch(es), 15 decision(s), 15 graph(s).
 ```
 
 A rule that no input can satisfy is reported as `NEVER RUN`: dead logic, or a hole in your routing,
@@ -140,12 +139,14 @@ right says who reaches this graph and what it uses; double-clicking a node opens
 
 ## Why this is worth switching for
 
-**There is almost no code, so there is almost nothing to test.** The example service has six routes, a
-CLI command, batch deletion and a rate-limited upstream connection. It is about forty JSON files and zero
-lines of JavaScript or TypeScript. The code that exists is generic and small: the engine that runs graphs
-is a few hundred lines, the standard library of pure operations is one file under forty lines, the HTTP
-plugin a few hundred more. None of it knows anything about your business. It is tested once, here, and you
-never touch it.
+**There is almost no code, so there is almost nothing to test.** The example service has fourteen routes and
+two CLI commands: a REST resource with batch deletion and a rate-limited upstream connection, CSV import and
+export, sign-in against two directories, a session, role-based policies over every write, and a command
+gated by a one-time code. It is about ninety JSON files of its own plus the fifty it includes, and zero lines
+of JavaScript or TypeScript. The code that exists is generic and small: the engine that runs graphs is a
+few hundred lines, the standard library of pure operations is one file under forty lines, the HTTP and auth
+plugins a few hundred more each. None of it knows anything about your business. It is tested once, here,
+and you never touch it.
 
 **Small code has few reasons to change.** Code changes because the world changes: a new field, a new
 route, a partner API that now returns 410 instead of 404. In wilanis every one of those is an edit to a
@@ -170,16 +171,19 @@ verified. `wilanis init` writes a `CLAUDE.md` into your project that tells the a
 
 ## Try it
 
-Run the example, which talks to a public test API and needs no key:
+Run the example, which talks to a public test API and needs no key. The one secret is the key its own
+tokens are signed with:
 
 ```
 git clone https://github.com/rfontes1987/wilanis-js && cd wilanis-js
 npm install && npm run build
 npx wilanis check example          # is the tree consistent?
-npx wilanis rehearse example       # run every branch of every route, world stubbed
-npx wilanis map example            # how does a request flow?
+npx wilanis rehearse example       # run every branch of every route and policy, world stubbed
+npx wilanis map example            # how does a request flow, and what gates it?
 npx wilanis-view example           # draw it, on http://127.0.0.1:4400/
+export MONITOR_JWT_SECRET=$(openssl rand -base64 32)
 npx wilanis start example          # run what its startup declares: on :8080
+npx wilanis run @hello/edge/hello-gated.trigger.json example   # challenged until you answer with a one-time code
 ```
 
 Start your own project:
@@ -210,16 +214,24 @@ list (`map`). A node runs when its inputs are ready; independent nodes run concu
 reference: `{{asked.body}}` is the body of the node called `asked`.
 
 **Trigger.** An entry point: an HTTP route, a CLI command, whatever a plugin offers. It names the port
-operation to fire and where its inputs come from. A trigger never names a graph.
+operation to fire and where its inputs come from, and the policies that gate it. A trigger never names a graph.
+
+**Policy.** A gate on a trigger: it fires a port operation over what the guard established about the caller
+(`request.principal`, `request.session`, an answered challenge), and its graph allows by answering or refuses
+with a reason the policy calls a denial or a challenge. Where a trigger attaches a policy it says where the
+credential sits (`"in": { "token": "{{request.headers.authorization}}" }`); verifying it is the auth plugin's
+job, never a graph's. A trigger with no policies is public.
 
 **Feature.** A directory with three subdirectories, and the directory is the layer: `edge/` holds
-triggers, edge shapes and resolvers; `domain/` holds the port, core shapes and business graphs; `data/`
-holds the binding and the graphs that reach the world. `feature.json` lists the effects the feature may
-use.
+triggers, policies, edge shapes and resolvers; `domain/` holds the port, core shapes and business graphs;
+`data/` holds the binding and the graphs that reach the world. `feature.json` lists the effects the feature
+may use. A project may include features from another package (`@wilanis/access` ships sign-in, sessions and
+the policies above) and bind the ports they leave open.
 
 **Plugin.** An npm package exposing a `PluginModule`: the ports, trigger kinds and codecs it grants, each
 as a JSON file you can open, and a handler function per operation. `@std` and `@cli` ship with the
-runtime; `@http` is `@wilanis/plugin-http`. A project names its plugins in `project.json`.
+runtime; `@http` is `@wilanis/plugin-http`, `@auth` is `@wilanis/plugin-auth`, the one plugin that identifies
+callers. A project names its plugins in `project.json`.
 
 ## Packages
 
@@ -229,12 +241,14 @@ runtime; `@http` is `@wilanis/plugin-http`. A project names its plugins in `proj
 | `@wilanis/core` | The document language: JSON Schemas, TypeScript model, type system, loader, Scope, plugin contract | engine, ajv |
 | `@wilanis/compiler` | `checkTree` judges a loaded tree; `Compiler` lowers graphs to engine specs | core, engine |
 | `@wilanis/runtime` | Embedder, gates (`rehearse`, `fuzz`, `regress`), discovery, serve, plugin packages, the `wilanis` CLI. Ships `@std` and `@cli` | core, engine, compiler |
-| `@wilanis/plugin-http` | The `@http` plugin: routes with JWT access, outbound requests, connections, body codecs (files as blobs) | core, engine, jose |
+| `@wilanis/plugin-http` | The `@http` plugin: routes, outbound requests, connections, body codecs (files as blobs), cookies | core, engine |
 | `@wilanis/plugin-blob` | The `@blob` plugin: stored files read as CSV rows or text, and written back, through the blob registry | core, engine |
+| `@wilanis/plugin-auth` | The `@auth` plugin: the guard that identifies callers -- our own tokens issued at sign-in against a directory, sessions with typed attributes, one-time challenges | core, engine, jose |
 | `@wilanis/view` | The `wilanis-view` viewer: every graph drawn as a canvas of nodes, typed ports and edges, callers one click away. Read-only; it grants nothing and runs nothing | core, compiler, runtime |
+| `@wilanis/access` | Not a toolchain package but a tree to include: sign-in against directories that all end in the tree's own token, sessions with typed attributes, the policies (signed in, employees only, a role, a one-time code) and the command that issues a code. Pure JSON | plugin-auth, plugin-http at run time |
 
-A project installs `@wilanis/runtime` and the plugin packages it uses. Nothing else. `@wilanis/view` is a
-development tool for whoever wants to see the tree drawn.
+A project installs `@wilanis/runtime`, the plugin packages it uses, and the trees it includes. Nothing else.
+`@wilanis/view` is a development tool for whoever wants to see the tree drawn.
 
 ## Reference: the model in one page
 
@@ -252,7 +266,9 @@ Skip this on a first read. It is the compact statement of the rules the checker 
 - **No absence.** Required unless `required: false`; optional cannot feed required; a missing key stays missing.
 - **Files are blobs.** A `blob` is a type: the value is a handle (id, contentType, size, filename) and the bytes live once, on disk, in the runtime's blob registry (`project.json → blobs.dir`). An upload streams into the registry through a content type mapped to `@http/codecs/blob.codec.json` and the graph gets the handle; a download is a trigger whose `out` is `blob`, streamed back out. `@blob/csv.port.json` reads a blob as rows of a declared shape and writes rows as one; every such operation is an effect, in a data graph. Nothing of a file passes through the engine. A run's blobs are released once the trigger has answered.
 - **Triggers are generic.** A trigger names its kind (http route, cli command, ...), the settings that kind judges, edge `in`/`out` types, and `fire`: the domain port operation it runs, with its inputs read from the kind's context (`{{request.body.title}}`). A trigger never names a graph; the port's binding decides how the operation is met.
-- **Resolvers are reads.** A `resolvers` document in a feature's `edge/` names what the data layer takes from the request (`request.headers['user-agent']`); a data graph or a binding names the document and reads `{{agent}}`. `request.*` is legal in a trigger's `fire.in` and a resolver's `read`; nowhere else.
+- **Access is a trigger's declaration, and a policy's decision.** A trigger attaches the policies that gate it, in order, and where it attaches one it gives the guard the credentials it verifies, read from the kind's context like any input: `{ "policy": "@access/edge/employees-only.policy.json", "in": { "token": ["{{request.headers.authorization}}", "{{request.cookies.session}}"] } }` -- a list is the places a credential may sit, the first present wins; a later policy written bare reuses what an earlier one gave. A **policy** lives in `edge/` and fires a domain operation the way a trigger does, reading what the guard hands: `request.principal`, `request.session`, `request.challenge`. Its graph allows by answering and refuses with a reason; `outcomes` says whether a reason is a `deny` or a `challenge`, and the trigger maps every reason it can reach, the policies' included (T005). Validating a credential happens in the guarding plugin, before any policy, never in a graph, and the guard's `plugin.json` says which credentials it verifies (`token`, `challenge`) and what each yields; a trigger with no policies is public. `has(principal) && 'recorder' in principal.roles` is a rule: `in` looks into a list, and what `has()` proves on the left of `&&` may be read on the right.
+- **A tree includes trees.** `project.json → includes` names npm packages whose `features/` load as if they sat here -- the same paths, the same rules, visible through `exports` and `dependsOn`, bound by bindings and profiles -- and whose aliases come along. Connections, plugins, settings, startup and profiles are the host's; a port the include leaves unbound is the host's to bind. `@wilanis/access` is such a tree: sign-in, sessions, policies and one-time codes, with `identity.port.json` for the host to bind to its directories.
+- **Resolvers are reads.** A `resolvers` document in a feature's `edge/` names what the data layer takes from the request (`request.headers['user-agent']`); a data graph or a binding names the document and reads `{{agent}}`. `request.*` is legal in a trigger's `fire.in`, a policy's `decide.in` and a resolver's `read`; nowhere else. A resolver declared `required` is read as present, and every trigger reaching it must guarantee it: its kind hands the path always, or a policy of the trigger lists it under `proves` (A006).
 - **Effects are explicit.** `http.request` answers status, headers, body. Whether 404 is a failure is a `switch`'s decision: the body is judged against `returns` only on a 2xx, so an error body reaches the switch. A node fails only on the unexpected.
 - **Engine.** Stateless, clockless; runs all ready nodes concurrently; `blocked` + `needs` when input is missing; any node's value can be pre-supplied (replay); nested reports for binding graphs; secret redaction.
 
@@ -270,9 +286,23 @@ Skip this on a first read. It is the compact statement of the rules the checker 
 project's own `node_modules`. It is a package name and nothing else: a JSON document can never point at a
 file on disk. `@std` and `@cli` are built into the runtime and take no `from`.
 
-A plugin package exports its `PluginModule` as the default export. Two hooks on it:
+```json
+"includes": [{ "from": "@wilanis/access", "features": ["access"] }]
+```
+
+An include is the same idea for documents: a package that is a wilanis tree, whose named features load as
+if they sat in this one. Its aliases come along (D007 on a collision), a feature both here and there is
+refused (D009), and a package that is not a tree, or one using a plugin this project does not name, is D010.
+`wilanis describe` and the viewer say `included from @wilanis/access` and name the file under `node_modules`.
+
+A plugin package exports its `PluginModule` as the default export. Three hooks on it:
 
 - `check(ctx)` adds the plugin's own rules (the `X` codes) to `wilanis check`.
+- `guard` -- on the one plugin that identifies callers, declared in its `plugin.json` -- is called by the
+  runtime around every fire of a trigger that attaches a policy, for every trigger kind alike:
+  `identify` reads and verifies the credential and hands `request.principal`, `request.session`,
+  `request.challenge`; `challenge` opens a challenge a policy asked for; `settle` spends what was single-use.
+  The stubbed gates never call it.
 - `postLoad(ctx)` runs once after the tree is loaded and judged, before any trigger starts, with the
   plugin's settings (secrets substituted), the registry, the scope and the environment. Open connections,
   warm caches, register parsers here. It may hand back a teardown, run when the runtime stops. `start`
@@ -337,7 +367,7 @@ in `graph.schema.json`.
 ## Developing this repository
 
 It is an npm workspace. `npm run build` builds every package through TypeScript project references,
-`npm test` builds and runs the tests, `npm run release` publishes the seven packages in dependency order.
+`npm test` builds and runs the tests, `npm run release` publishes every package in dependency order.
 `CLAUDE.md` describes the layout and the rules for changing it.
 
 ## License

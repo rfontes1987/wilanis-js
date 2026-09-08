@@ -9,10 +9,10 @@
  * For every kind, the references the document makes and the documents that make references to it, so a
  * reader can walk the tree in both directions. Nothing here draws; it answers JSON a page lays out.
  */
-import { Scope, expr, show, splitPath, substitute, hasVars, isRun, isSwitch, isMap, typeAt, TEMPLATE, WHOLE_TEMPLATE } from '@wilanis/core';
-import type { Kind, Layer, Loaded, LoadResult, GraphDoc, Operation, Refusal, TriggerDoc, Type, Values } from '@wilanis/core';
+import { policyPath, Scope, expr, show, splitPath, substitute, hasVars, isRun, isSwitch, isMap, typeAt, TEMPLATE, WHOLE_TEMPLATE } from '@wilanis/core';
+import type { Kind, Layer, Loaded, LoadResult, GraphDoc, Operation, Outcome, PolicyDoc, Refusal, TriggerDoc, Type, Values } from '@wilanis/core';
 import { SCHEMA_BASE, WILANIS } from '@wilanis/core';
-import { bindings, checkTree, refusalsReachable } from '@wilanis/compiler';
+import { bindings, checkTree, refusalsOfTrigger } from '@wilanis/compiler';
 
 export interface VPort {
   /** The port's name; an attribute port is its path below the parent, joined with dots (body.id). */
@@ -147,6 +147,8 @@ export interface DocView {
   feature?: string;
   layer?: Layer;
   native?: string;
+  /** The package this document was included from, when it is another tree's. */
+  included?: string;
   /** On a native document: the npm package that ships the plugin, absent for the runtime's builtins. */
   from?: string;
   file?: string;
@@ -164,6 +166,16 @@ export interface DocView {
   fires?: VTarget;
   /** On a trigger whose kind maps refusals: every reason it can reach or maps, how it is answered, and the nodes that refuse with it. */
   answers?: VAnswer[];
+  /** On a trigger: the policies that gate it, in order, the operation each decides through, and the credentials the attachment gives the guard. */
+  policies?: { path: string; label: string; decide: string; gives?: Record<string, unknown> }[];
+  /** On a policy: the port operation it decides through, and where that leads. */
+  decides?: VTarget;
+  /** On a policy: what each reason its decision can refuse with means. */
+  outcomes?: Record<string, Outcome>;
+  /** On a policy: the request.* paths present once it allows. */
+  proves?: string[];
+  /** On a policy: every trigger that names it. */
+  gates?: { path: string; label: string }[];
 }
 
 /** One refusal reason at a trigger: how the trigger answers it (absent: not mapped), and where it comes from (empty: nothing reaches it). */
@@ -171,7 +183,7 @@ export interface VAnswer { reason: string; answer?: unknown; from: { graph: stri
 /** A trigger that reaches a refusing node: how it answers that node's reason. `maps` is false when the kind answers every refusal alike. */
 export interface VAnsweredBy { trigger: string; triggerLabel: string; maps: boolean; answer?: unknown }
 
-export interface IndexEntry { path: string; kind: Kind; name: string; label: string; feature?: string; layer?: Layer; native?: string; file?: string; description: string }
+export interface IndexEntry { path: string; kind: Kind; name: string; label: string; feature?: string; layer?: Layer; native?: string; included?: string; file?: string; description: string }
 
 /** A document's label, or its file name made readable (get-row → Get row). */
 export function labelOf(doc: Loaded | undefined): string { return doc?.doc.label ?? readable(doc?.name ?? ''); }
@@ -184,7 +196,7 @@ export function readable(id: string): string {
 export interface TreeIndex {
   root: string;
   project?: string;
-  /** The project's aliases, so a page can canonicalise a reference written through one. */
+  /** Every alias in force -- the project's and the includes' -- so a page can canonicalise a reference written through one. */
   aliases: Record<string, string>;
   /** Where the schemas are published, so a page can recognise a $schema written as a URL. */
   schemaBase: string;
@@ -198,7 +210,7 @@ export function indexOf(load: LoadResult): TreeIndex {
   const docs = load.registry.files
     .slice().sort((a, b) => a.kind.localeCompare(b.kind) || a.path.localeCompare(b.path))
     .map(f => ({ path: f.path, kind: f.kind, name: f.name, label: labelOf(f), feature: f.feature, layer: f.layer, native: f.native, file: f.file, description: f.doc.description }));
-  return { root: load.root, project: load.registry.project?.doc.name, aliases: load.registry.project?.doc.aliases ?? {}, schemaBase: SCHEMA_BASE, docs, refusals };
+  return { root: load.root, project: load.registry.project?.doc.name, aliases: load.aliases, schemaBase: SCHEMA_BASE, docs, refusals };
 }
 
 // ---- schemas --------------------------------------------------------------------------------------
@@ -251,7 +263,7 @@ export function viewOf(load: LoadResult, ref: string): DocView | undefined {
   const index = referenceIndex(load, scope);
   const refusals = checkTree(load).items.filter(r => r.file === doc.path || `@${r.file}` === doc.path);
   const view: DocView = {
-    path: doc.path, kind: doc.kind, name: doc.name, label: labelOf(doc), feature: doc.feature, layer: doc.layer, native: doc.native,
+    path: doc.path, kind: doc.kind, name: doc.name, label: labelOf(doc), feature: doc.feature, layer: doc.layer, native: doc.native, included: doc.included,
     from: doc.native ? scope.project?.plugins.find(p => p.use === doc.native)?.from : undefined, file: doc.file,
     description: doc.doc.description, doc: doc.doc,
     refs: index.filter(r => r.from === doc.path).map(r => ({ path: r.to, label: labelOf(scope.registry.any(r.to)), kind: r.kind, at: r.at })),
@@ -263,7 +275,18 @@ export function viewOf(load: LoadResult, ref: string): DocView | undefined {
     path: b.path, label: labelOf(b),
     operations: Object.fromEntries(Object.entries(b.doc.operations).map(([op, bop]) => { const g = bop.graph ? scope.get('graph', bop.graph) : undefined; return [op, { graph: g?.path, graphLabel: g ? labelOf(g) : undefined, run: bop.run }]; })),
   }));
-  if (doc.kind === 'trigger') { view.fires = targetOf(scope, (doc.doc as { fire: { run: string } }).fire.run).target; view.answers = answersOf(scope, doc as Loaded<TriggerDoc>); }
+  if (doc.kind === 'trigger') {
+    const t = doc.doc as TriggerDoc;
+    view.fires = targetOf(scope, t.fire.run).target; view.answers = answersOf(scope, doc as Loaded<TriggerDoc>);
+    if (t.policies?.length) view.policies = t.policies.map(use => { const ref = policyPath(use); const p = scope.get('policy', ref); return { path: p?.path ?? scope.canon(ref), label: p ? labelOf(p) : readable(stemOf(ref)), decide: p?.doc.decide.run ?? '', ...(typeof use !== 'string' && use.in ? { gives: use.in } : {}) }; });
+  }
+  if (doc.kind === 'policy') {
+    const p = doc.doc as PolicyDoc;
+    view.decides = targetOf(scope, p.decide.run).target;
+    view.outcomes = p.outcomes;
+    if (p.proves?.length) view.proves = p.proves;
+    view.gates = scope.registry.all('trigger').filter(t => (t.doc.policies ?? []).some(ref => scope.canon(policyPath(ref)) === doc.path)).map(t => ({ path: t.path, label: labelOf(t) }));
+  }
   return view;
 }
 
@@ -287,8 +310,9 @@ function answersOf(scope: Scope, t: Loaded<TriggerDoc>): VAnswer[] | undefined {
   if (!declared) return undefined;
   const byReason = new Map<string, VAnswer>();
   const answer = (reason: string) => { let a = byReason.get(reason); if (!a) { a = { reason, answer: declared.map[reason], from: [] }; byReason.set(reason, a); } return a; };
+  // what the trigger fires, what its policies decide through, and the guard's own reasons (a plugin.json, node 'identify': no graph node to point at)
   for (const prof of profilesOf(scope)) {
-    for (const r of refusalsReachable(scope, t.doc.fire.run, prof)) {
+    for (const r of refusalsOfTrigger(scope, t.doc, prof)) {
       const a = answer(r.reason);
       if (a.from.some(f => f.graph === r.file && f.node === r.node)) continue;
       const g = scope.registry.get('graph', r.file);
@@ -304,7 +328,7 @@ function answersOf(scope: Scope, t: Loaded<TriggerDoc>): VAnswer[] | undefined {
 function answeredBy(scope: Scope, graphPath: string, node: string): VAnsweredBy[] {
   const out: VAnsweredBy[] = [];
   for (const t of scope.registry.all('trigger')) {
-    const hit = profilesOf(scope).flatMap(p => refusalsReachable(scope, t.doc.fire.run, p)).find(r => r.file === graphPath && r.node === node);
+    const hit = profilesOf(scope).flatMap(p => refusalsOfTrigger(scope, t.doc, p)).find(r => r.file === graphPath && r.node === node);
     if (!hit) continue;
     const declared = refusalMapOf(scope, t);
     out.push({ trigger: t.path, triggerLabel: labelOf(t), maps: Boolean(declared), ...(declared ? { answer: declared.map[hit.reason] } : {}) });

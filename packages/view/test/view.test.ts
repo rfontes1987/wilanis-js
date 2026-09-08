@@ -21,7 +21,7 @@ describe('the view model of the example', () => {
     expect(idx.refusals).toEqual([]);
     expect(idx.docs.map(d => d.kind)).toEqual(idx.docs.map(d => d.kind).slice().sort());
     expect(idx.docs.some(d => d.path === '@http/http.port.json' && d.native === '@http')).toBe(true);
-    expect(idx.aliases).toEqual({ '@monitor': '@features/monitor' });
+    expect(idx.aliases).toEqual({ '@monitor': '@features/monitor', '@access': '@features/access', '@hello': '@features/hello' });
   });
 
   it('labels every document: its own label, or its file name made readable', async () => {
@@ -192,6 +192,23 @@ describe('the view model of the example', () => {
     ]));
     // a node that answers has no such list
     expect((await view(GET_ROW)).graph!.nodes.find(n => n.id === 'row')!.answeredBy).toBeUndefined();
+  });
+  it('views a policy: what it decides through, its outcomes, what it proves, and the triggers it gates', async () => {
+    const v = await view('@features/access/edge/employees-only.policy.json');
+    expect(v.kind).toBe('policy');
+    expect(v.decides).toMatchObject({ op: '@features/access/domain/access.port.json#requireEmployee', opName: 'requireEmployee', native: false, implementation: '@features/access/domain/require-employee.graph.json' });
+    expect(v.outcomes?.forbidden).toMatchObject({ effect: 'deny' });
+    expect(v.proves).toEqual(['request.principal', 'request.session']);
+    expect(v.gates?.map(g => g.path)).toEqual(expect.arrayContaining(['@features/monitor/edge/record-entry.trigger.json', '@features/monitor/edge/update-entry.trigger.json', '@features/monitor/edge/delete-entry.trigger.json']));
+    // the trigger attaches its policies in order, giving the guard the token where it may sit, and answers the reasons they reach and the guard's own
+    const t = await view('@features/monitor/edge/record-entry.trigger.json');
+    expect(t.policies).toHaveLength(2);
+    expect(t.policies![0]).toMatchObject({ path: '@features/access/edge/employees-only.policy.json', label: 'Employees only', decide: '@access/domain/access.port.json#requireEmployee', gives: { token: ['{{request.headers.authorization}}', '{{request.cookies.session}}'] } });
+    expect(t.policies![1].gives).toBeUndefined();
+    const reasons = t.answers!.map(a => a.reason);
+    expect(reasons).toEqual(expect.arrayContaining(['forbidden', 'anonymous', 'invalid_credential', 'upstream']));
+    expect(t.answers!.find(a => a.reason === 'invalid_credential')).toMatchObject({ answer: 401, from: [{ graph: '@auth/plugin.json', node: 'identify' }] });
+    expect(t.answers!.find(a => a.reason === 'forbidden')?.from.map(f => f.graph)).toEqual(expect.arrayContaining(['@features/access/domain/require-employee.graph.json', '@features/access/domain/require-recorder.graph.json']));
   });
   it('composes two nodes into one output: the digest', async () => {
     const v = await view('@features/monitor/domain/digest.graph.json');
