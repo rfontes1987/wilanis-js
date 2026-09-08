@@ -10,7 +10,7 @@ import { runGraph, type EffectInfo } from '@wilanis/compiler';
 import type { Handler, Report } from '@wilanis/engine';
 import { generate, rng, substitute, hasVars, show, type Type } from '@wilanis/core';
 import { schemaUrl, splitOp, type Kind, type Loaded, type ScenarioDoc, type TriggerDoc, type TriggerKindDoc, type PortDoc, type GraphDoc, type BindingDoc, type AnyDoc } from '@wilanis/core';
-import { casesFor, setPath, switchesOf, type FoundSwitch } from './branches.js';
+import { casesFor, nonEmpty, setPath, switchesOf, type FoundSwitch } from './branches.js';
 
 // ---- stubbing ---------------------------------------------------------------------------------------
 
@@ -67,22 +67,34 @@ export function generatedFire(emb: Embedder, t: Loaded<TriggerDoc>, seed: number
   return { input: undefined, request };
 }
 
-/** The innermost failed node of a report, through nested runs. */
-export function failedLeaf(report: Report): (Report['nodes'][string] & { id: string }) | undefined {
+type FailedNode = Report['nodes'][string] & { id: string };
+
+/** The innermost failed node of a report, through nested runs and through the elements of a map. */
+export function failedLeaf(report: Report): FailedNode | undefined {
   for (const [id, n] of Object.entries(report.nodes)) {
     if (n.status !== 'failed') continue;
-    if (n.sub) { const deeper = failedLeaf(n.sub); if (deeper) return deeper; }
-    return { ...n, id };
+    return failedBelow(id, n) ?? { ...n, id };
   }
   return undefined;
 }
 
+/** The failure strictly inside a failed node: in the graph it ran, or in the element of a map that failed. */
+export function failedBelow(id: string, n: Report['nodes'][string]): FailedNode | undefined {
+  if (n.sub) return failedLeaf(n.sub);
+  const i = n.items?.findIndex(e => e.status === 'failed') ?? -1;
+  if (i < 0) return undefined;
+  const e = n.items![i];
+  return (e.sub && failedLeaf(e.sub)) || { ...e, id: `${id}.${i}` };
+}
+
 export function summarize(report: Report, indent = ''): string {
   const lines = [`${indent}${report.graph}: ${report.status}${report.needs?.length ? ` needs ${report.needs.join(', ')}` : ''}`];
-  for (const [id, n] of Object.entries(report.nodes)) {
-    lines.push(`${indent}  ${id}: ${n.status}${n.selected ? ` → ${n.selected}` : ''}${n.error ? ` -- ${n.error}` : ''}`);
-    if (n.sub) lines.push(summarize(n.sub, indent + '    '));
-  }
+  const node = (id: string, n: Report['nodes'][string], depth: string) => {
+    lines.push(`${depth}${id}: ${n.status}${n.selected ? ` → ${n.selected}` : ''}${n.error ? ` -- ${n.error}` : ''}`);
+    if (n.sub) lines.push(summarize(n.sub, depth + '  '));
+    n.items?.forEach((e, i) => node(`${id}.${i}`, e, depth + '  '));
+  };
+  for (const [id, n] of Object.entries(report.nodes)) node(id, n, indent + '  ');
   return lines.join('\n');
 }
 
@@ -106,12 +118,13 @@ interface Settled {
   misrouted?: string;
 }
 
-/** The report of the graph at a dotted node path, or the whole report at the top. */
+/** The report of the graph at a dotted node path, or the whole report at the top. A map node is followed by the index of the element to read. */
 function reportAt(report: Report, prefix: string[]): Report | undefined {
   let cur: Report | undefined = report;
-  for (const seg of prefix) {
-    const n: Report['nodes'][string] | undefined = cur?.nodes?.[seg];
+  for (let i = 0; i < prefix.length; i++) {
+    const n: Report['nodes'][string] | undefined = cur?.nodes?.[prefix[i]];
     if (!n) return undefined;
+    if (n.items) { cur = n.items[Number(prefix[++i])]?.sub; continue; }
     cur = n.sub;
   }
   return cur;
@@ -138,7 +151,7 @@ function settle(report: Report, sw: FoundSwitch, aim: string): Settled {
   // a fail node in THIS graph is a declared outcome; a failure that arrived from a graph this one calls
   // is that graph's declared outcome surfacing here, and naming it as ours would credit the wrong document
   if (n.handler?.endsWith('#refuse')) { out.declared = n.error ?? ''; return out; }
-  const deeper = n.sub ? failedLeaf(n.sub) : undefined;
+  const deeper = failedBelow(id, n);
   if (deeper?.handler?.endsWith('#refuse')) { out.propagated = { node: id, error: deeper.error ?? '' }; return out; }
   out.error = `${id}: ${n.error}`;
   return out;
@@ -320,6 +333,12 @@ async function rehearseTrigger(load: LoadResult, t: Loaded<TriggerDoc>, seed: nu
   const reach = (sw: FoundSwitch): { stubs: Record<string, unknown>; input: { path: string[]; value: unknown }[] } => {
     const stubs: Record<string, unknown> = {};
     const patches: { path: string[]; value: unknown }[] = [];
+    // a switch inside a mapped operation runs only when the list it maps over has an element to run for
+    for (const list of sw.lists) {
+      const need = nonEmpty(list, path => record[path], path => types[path], seed, input, inType);
+      Object.assign(stubs, need.stubs);
+      patches.push(...need.input);
+    }
     for (const ancestorAt of sw.via) {
       // the enclosing call is `<...>.<node>`; the switch governing it is a sibling in the same spec
       const segs = ancestorAt.split('.');

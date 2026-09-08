@@ -418,6 +418,21 @@ export interface FoundSwitch {
    * case for a nested switch must first satisfy its ancestors.
    */
   via: string[];
+  /**
+   * The map nodes enclosing this switch, outermost first. A switch inside a mapped operation runs once per
+   * element and is rehearsed through the first one, so each enclosing list must hold at least one element.
+   */
+  lists: FoundList[];
+}
+
+/** A map node on the way to a switch: where it sits, what it iterates, and whether the trigger's input still steers that list. */
+export interface FoundList {
+  /** Dotted node path of the map itself. */
+  at: string;
+  /** The lowered source of `over`. */
+  over: unknown;
+  /** True when `over` reading `in` reads the trigger's own input. */
+  fromTriggerIn: boolean;
 }
 
 /** The shape of a lowered switch this module needs; `label` carries the rule's source text. */
@@ -447,19 +462,54 @@ export function switchesOf(
   seen = new Set<string>(),
   via: string[] = [],
   fromTriggerIn = true,
+  lists: FoundList[] = [],
 ): FoundSwitch[] {
   const out: FoundSwitch[] = [];
   for (const [id, raw] of Object.entries(spec.nodes)) {
     const n = raw as Record<string, unknown>;
-    if (n.kind === 'switch') { out.push({ at: [...prefix, id].join('.'), prefix, node: n as unknown as KSwitchLike, via, fromTriggerIn }); continue; }
+    if (n.kind === 'switch') { out.push({ at: [...prefix, id].join('.'), prefix, node: n as unknown as KSwitchLike, via, fromTriggerIn, lists }); continue; }
     const handler = typeof n.handler === 'string' ? n.handler : undefined;
     if (!handler || seen.has(handler)) continue;
     const sub = nested(handler);
     if (!sub) continue;
+    const here = [...prefix, id].join('.');
     // a handler is walked once per branch position; recursion through the same handler would not terminate
-    out.push(...switchesOf(sub, nested, [...prefix, id], new Set([...seen, handler]), [...via, [...prefix, id].join('.')], fromTriggerIn && forwardsIn(n)));
+    if (n.kind === 'map') {
+      // the operation runs once per element, each under the element's index; the first element stands for all,
+      // and what it receives is the element, never the trigger's input
+      out.push(...switchesOf(sub, nested, [...prefix, id, '0'], new Set([...seen, handler]), [...via, here], false, [...lists, { at: here, over: n.over, fromTriggerIn }]));
+      continue;
+    }
+    out.push(...switchesOf(sub, nested, [...prefix, id], new Set([...seen, handler]), [...via, here], fromTriggerIn && forwardsIn(n), lists));
   }
   return out;
+}
+
+/**
+ * What it takes for a mapped operation to run at all: its list holds at least one element. A demand on the
+ * trigger's input when the list is read from it, a stub of the node it is read from otherwise; nothing when
+ * the list is composed or literal, since a literal list is already what it is.
+ */
+export function nonEmpty(
+  list: FoundList,
+  generated: (nodePath: string) => unknown,
+  typeOf: (nodePath: string) => Type | undefined,
+  seed: number,
+  inputSeed?: unknown,
+  inType?: Type,
+): { stubs: Record<string, unknown>; input: { path: string[]; value: unknown }[] } {
+  const src = sourceOf(list.over);
+  const want: Domain = { minLen: 1, present: true };
+  if (!src) return { stubs: {}, input: [] };
+  if (src.ref === 'in') {
+    if (!list.fromTriggerIn) return { stubs: {}, input: [] };
+    return { stubs: {}, input: [{ path: src.path, value: satisfy(want, getPath(inputSeed, src.path), typeAtPath(inType, src.path), seed) }] };
+  }
+  if (src.ref === 'request' || src.ref === 'const') return { stubs: {}, input: [] };
+  const prefix = list.at.split('.').slice(0, -1);
+  const target = [...prefix, src.ref].join('.');
+  const base = generated(target);
+  return { stubs: { [target]: setPath(base, src.path, satisfy(want, getPath(base, src.path), typeAtPath(typeOf(target), src.path), seed)) }, input: [] };
 }
 
 /** Does this call hand its callee the caller's `in` untouched, field for field? Then the trigger's input still reaches inside. */

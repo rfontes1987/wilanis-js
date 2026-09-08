@@ -12,6 +12,7 @@ import type { Type } from '@wilanis/core';
 import { readPath } from '@wilanis/engine';
 import type { PluginCheckContext } from '@wilanis/core';
 import { form, json, multipart, text } from './codecs.js';
+import { throttleFor, type ThrottleSettings } from './throttle.js';
 
 const ROOT = '@http';
 const P = (f: string) => `${ROOT}/${f}`;
@@ -20,7 +21,7 @@ const DOCS = fileURLToPath(new URL('../docs', import.meta.url));
 
 // ---- http.port.json#request -------------------------------------------------------------------------
 
-type Conn = { kind: string; settings: { baseUrl: string; headers?: Record<string, string>; timeoutMs?: number } };
+type Conn = { kind: string; settings: { baseUrl: string; headers?: Record<string, string>; timeoutMs?: number; throttle?: ThrottleSettings } };
 
 function codecTable(env: Record<string, unknown>): Codecs {
   const table = ((env.plugins as Record<string, Record<string, unknown>>)?.[ROOT]?.codecs ?? {}) as Record<string, string>;
@@ -47,11 +48,13 @@ async function request({ in: i, ctx }: { in: Record<string, unknown>; ctx: { env
     init.body = new Uint8Array(enc.bytes); headers['content-type'] ??= enc.contentType;
   }
   if (i.produces) headers.accept ??= String(i.produces);
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), Number(conn.settings.timeoutMs ?? 30000));
-  init.signal = ac.signal;
-  let res: Response;
-  try { res = await fetch(url, init); } finally { clearTimeout(timer); }
+  // the connection's throttle paces every request made against it; the timeout counts from the moment the request is let through
+  const res = await throttleFor(ctx.env, canon(String(i.connection)), conn.settings.throttle).run(async () => {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), Number(conn.settings.timeoutMs ?? 30000));
+    init.signal = ac.signal;
+    try { return await fetch(url, init); } finally { clearTimeout(timer); }
+  });
   const bytes = Buffer.from(await res.arrayBuffer());
   const outHeaders: Record<string, string> = {};
   res.headers.forEach((v, k) => { outHeaders[k] = v; });
@@ -182,8 +185,15 @@ const runtime: TriggerRuntime = {
   },
 };
 
-/** Plugin-specific rules: content types are in the table, the table names real codecs. */
+/** Plugin-specific rules: content types are in the table, the table names real codecs, a throttle can let something through. */
 function check({ scope, settings, refuse }: PluginCheckContext) {
+  for (const c of scope.registry.all('connection')) {
+    if (scope.canon(c.doc.kind) !== P('http.connection-kind.json')) continue;
+    const th = (c.doc.settings as { throttle?: Record<string, unknown> }).throttle;
+    if (!th) continue;
+    if ('concurrency' in th && !(Number.isInteger(th.concurrency) && (th.concurrency as number) >= 1)) refuse('X003', c.path, `throttle.concurrency is ${JSON.stringify(th.concurrency)}; it is the number of requests in flight at once, a whole number of 1 or more`, 'settings/throttle/concurrency', 'set it to 1 or more, or drop it for no limit');
+    if ('perSecond' in th && !(typeof th.perSecond === 'number' && th.perSecond > 0)) refuse('X003', c.path, `throttle.perSecond is ${JSON.stringify(th.perSecond)}; it is the number of requests started per second, above 0`, 'settings/throttle/perSecond', 'set it above 0, or drop it for no limit');
+  }
   const table = (settings.codecs ?? {}) as Record<string, string>;
   for (const [ct, path] of Object.entries(table)) if (!scope.get('codec', path)) refuse('X001', '@project.json', `codecs["${ct}"] names '${path}', which is not a codec`, `plugins/${ROOT}/settings/codecs`, 'wilanis ls codec');
   const known = new Set(Object.keys(table).map(k => k.toLowerCase()));

@@ -58,6 +58,8 @@ describe('the example tree', () => {
     const text = r.lines.join('\n');
     // list-rows is reached from two triggers (the listing and the digest), and is one decision even so
     expect(text.match(/list-rows  switch 'route'/g)).toHaveLength(1);
+    // delete-row is reached directly by the single delete and once per element by the batch delete's map
+    expect(text.match(/delete-row  switch 'route'/g)).toHaveLength(1);
     expect(text).toMatch(/every branch settled -- 17 branch\(es\), 7 decision\(s\), 7 graph\(s\)/);
   });
   it('reaches both the answer and the declared failure of every data graph', async () => {
@@ -73,6 +75,14 @@ describe('the example tree', () => {
     expect(text).toMatch(/when status == 200 && has\(body\)/);
     expect(text).toMatch(/anything else/);
     expect(text).toMatch(/when status == 404/);
+  });
+  it('rehearses a switch inside a mapped operation through the first element, whatever the seed', async () => {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const r = await rehearse(loadTree(EXAMPLE, PLUGINS), { seed, verbose: true });
+      const text = r.lines.join('\n');
+      // the batch delete reaches the delete-row decision through its map, and every branch of it settles
+      expect(text).toMatch(/delete-row  switch 'route'  3\/3 branches  \[via delete-entries, delete-entry\]/);
+    }
   });
   it('loads its plugin packages through project.json → plugins[].from', async () => {
     const l = await loadProject(EXAMPLE);
@@ -249,6 +259,17 @@ describe('sabotage', () => {
   });
   it('T003 a route placeholder the route does not declare', () => {
     expect(sabotage('features/monitor/edge/get-entry.trigger.json', d => { d.settings.route = '/monitor/{entry}'; })).toContain('T003');
+  });
+  it('X003 a throttle that lets nothing through', () => {
+    expect(sabotage('connections/monitor-api.connection.json', d => { d.settings.throttle.concurrency = 0; })).toContain('X003');
+    expect(sabotage('connections/monitor-api.connection.json', d => { d.settings.throttle = { perSecond: -1 }; })).toContain('X003');
+    expect(sabotage('connections/monitor-api.connection.json', d => { d.settings.throttle.concurrency = 1.5; })).toContain('X003');
+  });
+  it('C002 a throttle that is not a number', () => {
+    expect(sabotage('connections/monitor-api.connection.json', d => { d.settings.throttle.concurrency = 'four'; })).toContain('C002');
+  });
+  it('G012 a map over something that is not a list', () => {
+    expect(sabotage('features/monitor/domain/remove-entries.graph.json', d => { d.nodes[0].over = '{{in}}'; })).toContain('G012');
   });
   it('X002 a content type with no codec', () => {
     expect(sabotage('features/monitor/edge/record-entry.trigger.json', d => { d.settings.consumes = 'application/xml'; })).toContain('X002');

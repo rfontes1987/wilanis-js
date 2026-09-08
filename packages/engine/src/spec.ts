@@ -60,8 +60,12 @@ export interface NodeReport {
   selected?: string;
   /** call bound to a graph: the nested run. */
   sub?: Report;
-  /** map: one nested report per element when the handler produced one. */
-  items?: (Report | undefined)[];
+  /**
+   * map: one report per element, in order -- its status, in, out or error, and the nested run in `sub` when
+   * the operation is a graph. Every element settles before the node does, so a failed map still says what
+   * each element did, and a caller can seed the finished ones (`initial['<id>.<index>']`) and run the rest.
+   */
+  items?: NodeReport[];
   startedAt?: number;
   endedAt?: number;
 }
@@ -96,7 +100,10 @@ export type Handler = (args: HandlerArgs) => Promise<unknown>;
 export type Handlers = Record<string, Handler>;
 
 export interface RunOptions {
-  /** Pre-supplied values: pseudo-nodes (`in`, `request`) and any node id (replay: seeded, not executed). */
+  /**
+   * Pre-supplied values: pseudo-nodes (`in`, `request`), any node id (replay: the node is seeded, not
+   * executed), and `<mapId>.<index>` for one element of a map (that element is seeded, the others run).
+   */
   initial?: Record<string, unknown>;
   stubs?: Record<string, unknown>;
   signal?: AbortSignal;

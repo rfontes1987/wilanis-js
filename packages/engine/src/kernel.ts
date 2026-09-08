@@ -5,6 +5,8 @@
  *
  * A graph whose inputs are not supplied is valid: the report says `blocked` and names what it needs.
  * Any node's value may be pre-supplied (`initial[nodeId]`): the node is `seeded`, not executed. That is replay.
+ * One element of a map may be pre-supplied the same way (`initial['m.2']`): a failed map reports every element's
+ * outcome in `items`, so the embedder can seed the ones that answered and run only the rest.
  */
 import type { Handlers, KernelSpec, KNode, KSource, NodeReport, Report, RunContext, RunOptions } from './spec.js';
 
@@ -181,19 +183,34 @@ export class Kernel {
             if (!Array.isArray(over)) throw new Error(`map '${id}': over is not a list`);
             const broadcast = readAll(n.in, values);
             rep.in = { ...broadcast, over };
-            rep.items = [];
+            // one report per element; an element supplied in initial as '<id>.<index>' is seeded and never runs
+            const items: NodeReport[] = over.map((_, i) => values.has(`${id}.${i}`) ? { status: 'seeded', out: values.get(`${id}.${i}`) } : { status: 'pending' });
+            rep.items = items;
+            // every element settles before the node does, whatever happened to the others: the map answers
+            // (or fails) only once all of its work is over, and the report then holds every element's fate
             const results = await Promise.all(over.map(async (item, i) => {
+              const el = items[i];
+              if (el.status === 'seeded') return { ok: true as const, value: el.out };
               const inv: Record<string, unknown> = { ...broadcast };
               if (n.bind) for (const [k, p] of Object.entries(n.bind)) { const v = readPath(item, p); if (v !== undefined) inv[k] = v; }
               else inv.item = item;
+              el.status = 'running'; el.startedAt = Date.now(); el.handler = n.handler;
+              el.in = redactValue(inv, n.redact?.in) as Record<string, unknown>;
               const ctx = ctxFor(id); ctx.nodePath = [...nodePath, id, String(i)];
-              ctx.attach = sub => { rep.items![i] = sub; };
-              try { return { ok: true as const, value: await invoke(n.handler, { in: inv }, ctx) }; }
-              catch (e) {
-                if (n.onItemFailure === 'collect') return { ok: false as const, error: (e as Error).message };
-                throw new Error(`map '${id}' element ${i}: ${(e as Error).message}`);
-              }
+              ctx.attach = sub => { el.sub = sub; };
+              try {
+                const value = await invoke(n.handler, { in: inv }, ctx);
+                el.out = redactValue(value, n.redact?.out); el.status = 'done';
+                return { ok: true as const, value };
+              } catch (e) {
+                el.error = (e as Error).message; el.status = 'failed';
+                return { ok: false as const, error: el.error };
+              } finally { el.endedAt = Date.now(); }
             }));
+            if (n.onItemFailure !== 'collect') {
+              const i = results.findIndex(r => !r.ok);
+              if (i >= 0) throw new Error(`map '${id}' element ${i}: ${(results[i] as { error: string }).error}`);
+            }
             const out = n.onItemFailure === 'collect' ? results : results.map(r => (r as { value: unknown }).value);
             rep.out = n.redact?.out?.length ? (out as unknown[]).map(x => redactValue(x, n.redact!.out)) : out; values.set(id, out); rep.status = 'done';
           }

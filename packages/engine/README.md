@@ -13,4 +13,9 @@ import { Kernel } from '@wilanis/engine';
 const report = await new Kernel(handlers).run(spec, { initial: { in: { x: 21 } } });
 ```
 
+`initial` pre-supplies values: the pseudo-nodes `in` and `request`, any node by id (the node is `seeded`,
+not executed -- that is replay), and one element of a `map` as `'<id>.<index>'`. A map settles only once
+every element has, and its report lists each element's outcome in `items`, so after a failure the embedder
+can seed the elements that answered and run only the rest.
+
 Part of [wilanis](https://github.com/rfontes1987/wilanis-js). Apache-2.0.

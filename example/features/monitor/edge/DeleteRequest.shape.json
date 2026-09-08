@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "Delete request",
+  "layer": "edge",
+  "description": "DELETE /monitor body: the ids of every entry to remove. Closed: an undeclared field is a 400.",
+  "fields": {
+    "ids": {
+      "type": "string[]",
+      "description": "the entries to remove, each by id"
+    }
+  }
+}

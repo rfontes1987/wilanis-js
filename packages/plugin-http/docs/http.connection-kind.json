@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/connection-kind.schema.json",
   "label": "HTTP API",
-  "description": "An HTTP base URL with headers every request carries. A PostgREST or Supabase REST endpoint is one: baseUrl to /rest/v1, apikey reading {{secrets.*}}.",
+  "description": "An HTTP base URL with headers every request carries, and optionally a throttle that paces the requests made against it. A PostgREST or Supabase REST endpoint is one: baseUrl to /rest/v1, apikey reading {{secrets.*}}.",
   "settings": {
     "fields": {
       "baseUrl": {
@@ -17,6 +17,24 @@
       "timeoutMs": {
         "type": "number",
         "required": false
+      },
+      "throttle": {
+        "type": {
+          "fields": {
+            "concurrency": {
+              "type": "number",
+              "required": false,
+              "description": "at most this many requests in flight against this connection at once; the rest wait for a slot. A whole number, 1 or more"
+            },
+            "perSecond": {
+              "type": "number",
+              "required": false,
+              "description": "at most this many requests started against this connection in any one second; the rest wait for the window. Above 0"
+            }
+          }
+        },
+        "required": false,
+        "description": "how requests against this connection are paced. Every node that names the connection shares the one gate, so a map that fans out one request per element is held to it. Absent: no limit"
       }
     }
   }

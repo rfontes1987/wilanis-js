@@ -22,6 +22,10 @@
     "remove": {
       "graph": "@monitor/data/delete-row.graph.json"
     },
+    "removeMany": {
+      "description": "The business graph that fans one removal out per id and waits for all of them.",
+      "graph": "@monitor/domain/remove-entries.graph.json"
+    },
     "submit": {
       "description": "The business graph that attributes and records.",
       "graph": "@monitor/domain/record-entry.graph.json"

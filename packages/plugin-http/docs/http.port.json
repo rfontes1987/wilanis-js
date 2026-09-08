@@ -4,7 +4,7 @@
   "description": "Outbound HTTP. request knows what HTTP knows: method, path, headers, body in; status, headers, body out. It executes and reports -- whether 404 is a failure is the caller's business, decided by a switch on status. It fails only on the unexpected: network, timeout, a body the codec cannot decode, or a 2xx body that does not conform to the declared type.",
   "operations": {
     "request": {
-      "description": "Send one request against a connection. The connection, method, content types and result type are static, declared where the statement is written; path, headers and body may read what any value may.",
+      "description": "Send one request against a connection, paced by the connection's throttle when it declares one. The connection, method, content types and result type are static, declared where the statement is written; path, headers and body may read what any value may.",
       "accepts": {
         "connection": {
           "type": "string",

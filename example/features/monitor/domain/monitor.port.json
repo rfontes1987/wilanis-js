@@ -78,6 +78,16 @@
       },
       "returns": "@monitor/domain/Entry.shape.json"
     },
+    "removeMany": {
+      "description": "Delete several entries at once and answer what was deleted, in the order asked. Fails when any of them does not exist.",
+      "accepts": {
+        "ids": {
+          "type": "string[]",
+          "description": "the entries to remove, each by id"
+        }
+      },
+      "returns": "@monitor/domain/Entry.shape.json[]"
+    },
     "submit": {
       "description": "Record an observed call, attributing it to this API rather than the client.",
       "accepts": {

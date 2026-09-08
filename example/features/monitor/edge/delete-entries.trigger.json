@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "label": "DELETE /monitor",
+  "description": "DELETE /monitor with a body of ids → the entries that were removed, in the order asked. Every deletion is issued at once, paced by the connection's throttle, and the answer leaves only after the last one settled; one entry that does not exist fails the whole request.",
+  "kind": "@http/http.trigger-kind.json",
+  "settings": {
+    "route": "/monitor",
+    "method": "DELETE",
+    "consumes": "application/json",
+    "produces": "application/json",
+    "access": {
+      "open": true
+    },
+    "body": "@monitor/edge/DeleteRequest.shape.json"
+  },
+  "in": "@monitor/edge/DeleteRequest.shape.json",
+  "out": "@monitor/edge/EntryView.shape.json[]",
+  "fire": {
+    "run": "@monitor/domain/monitor.port.json#removeMany",
+    "in": {
+      "ids": "{{request.body.ids}}"
+    }
+  }
+}
