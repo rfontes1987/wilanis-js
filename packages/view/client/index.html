@@ -86,6 +86,12 @@
   .node .go { font: 14px var(--sans); fill: var(--accent); cursor: pointer; } .node .go:hover { fill: #fff; }
   .node .link { cursor: pointer; } .node .link:hover { fill: var(--accent); text-decoration: underline; }
   .node .fx { font: 10px var(--sans); fill: var(--warn); }
+  .node .said { font: 12px var(--sans); fill: var(--text); } .node .said .lead { fill: var(--dim); } .node .said .val { font: 11.5px var(--mono); fill: var(--lit); }
+  .node .said .in { font: 600 11.5px var(--mono); fill: var(--text); cursor: default; } .node .said .in:hover, .node .said .in.lit-up { fill: var(--accent); }
+  .node .port.lit-up { fill: var(--accent); } .node .pin.lit-up { stroke: var(--accent); fill: var(--accent); }
+  .group .box { fill: #12171d; stroke: var(--line); stroke-width: 1; stroke-dasharray: 4 3; rx: 12; }
+  .group .title { font: 600 12px var(--sans); fill: var(--muted); } .group .tag { font: 10px var(--sans); fill: var(--dim); letter-spacing: .06em; }
+  .edge.step { stroke-dasharray: 3 3; } .elabel.step { font: italic 10px var(--sans); fill: var(--dim); }
   .edge { fill: none; stroke-width: 1.6; opacity: .9; } .edge.route { stroke-dasharray: 5 4; }
   .edge.dim { opacity: .12; } .edge.hot { stroke-width: 2.6; opacity: 1; }
   .elabel { font: 10px var(--mono); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
@@ -495,11 +501,12 @@
 
   function renderNodeDetails(box, n, v) {
     const color = nodeColors(v.graph).get(n.id);
-    const h = el('h3'); const sw = el('span', 'swatch'); sw.style.background = color; h.appendChild(sw); h.appendChild(document.createTextNode(n.label + ' ')); h.appendChild(badge(n.kind, { run: 'operation', map: 'for each', switch: 'decision', in: 'input', out: 'output', const: 'constants', request: 'request' }[n.kind])); box.appendChild(h);
-    box.appendChild(el('div', 'id', n.id));
+    const h = el('h3'); const sw = el('span', 'swatch'); sw.style.background = color; h.appendChild(sw); h.appendChild(document.createTextNode(n.label + ' ')); h.appendChild(badge(n.kind, { run: 'operation', map: 'for each', rule: 'rule', in: 'input', out: 'output', const: 'constants', request: 'request' }[n.kind])); box.appendChild(h);
+    box.appendChild(el('div', 'id', n.decision ? n.id + '   ' + n.decision.when : n.id));
     if (n.opens) { const p = el('p'); p.appendChild(frag('Read through ')); p.appendChild(link(n.opens)); box.appendChild(p); }
     if (n.type) { const p = el('p'); p.appendChild(frag(n.kind === 'in' ? 'The graph takes ' : 'The graph answers ')); p.appendChild(typeLink(n.type)); box.appendChild(p); }
     if (n.description) box.appendChild(el('p', null, n.description));
+    if (n.decision) { const d = n.decision, p = el('p'); p.appendChild(frag(`Rule ${d.rule} of ${d.of} in `)); p.appendChild(el('b', null, d.label)); p.appendChild(frag('. The first rule that holds wins.' + (d.description ? ' ' + d.description : ''))); box.appendChild(p); }
     if (n.target) {
       const t = n.target;
       box.appendChild(el('h4', null, 'runs'));
@@ -517,7 +524,7 @@
       }
     }
     if (n.inputs.length) {
-      box.appendChild(el('h4', null, n.kind === 'switch' ? 'decides on' : 'inputs'));
+      box.appendChild(el('h4', null, n.kind === 'rule' ? 'decides on' : 'inputs'));
       for (const p of n.inputs) {
         const r = el('div', 'row'); r.appendChild(el('span', 'name ' + (p.required === false ? 'opt' : 'req'), p.name));
         const cell = el('span');
@@ -530,16 +537,17 @@
         if (p.description) box.appendChild(el('div', 'desc', p.description));
       }
     }
-    if (n.rules) {
+    if (n.decision) {
       box.appendChild(el('h4', null, 'routes'));
-      for (const r of n.rules) { const d = el('div', 'row'); d.appendChild(el('span', 'val', r.when)); const t = el('span', 'from'); t.appendChild(frag(TO)); const b = el('b', null, labelOfNode(v.graph, r.to)); b.style.color = nodeColors(v.graph).get(r.to); t.appendChild(b); d.appendChild(t); box.appendChild(d); }
-      const d = el('div', 'row'); d.appendChild(el('span', 'miss', 'otherwise')); const t = el('span', 'from'); t.appendChild(frag(TO)); const b = el('b', null, labelOfNode(v.graph, n.else)); b.style.color = nodeColors(v.graph).get(n.else); t.appendChild(b); d.appendChild(t); box.appendChild(d);
+      const to = (word, id, cls) => { const d = el('div', 'row'); d.appendChild(el('span', cls, word)); const t = el('span', 'from'); t.appendChild(frag(TO)); const b = el('b', null, labelOfNode(v.graph, id)); b.style.color = nodeColors(v.graph).get(id); t.appendChild(b); d.appendChild(t); box.appendChild(d); };
+      to('then', n.decision.then, 'val');
+      to('otherwise', n.decision.otherwise, 'miss');
     }
     if (n.bind) { box.appendChild(el('h4', null, 'each item is read as')); for (const [k, p] of Object.entries(n.bind)) box.appendChild(el('div', 'row', `${k} ${FROM}item${p ? '.' + p : ''}`)); }
-    if (n.outputs.length) {
-      box.appendChild(el('h4', null, n.kind === 'switch' ? 'routes to' : n.kind === 'in' ? 'fields' : 'answers'));
+    if (n.outputs.length && n.kind !== 'rule') {
+      box.appendChild(el('h4', null, n.kind === 'in' ? 'fields' : 'answers'));
       for (const p of n.outputs) {
-        const r = el('div', 'row'); const nm = el('span', 'name ' + (p.required === false ? 'opt' : 'req'), p.name === '' ? (n.kind === 'switch' ? '' : 'the whole value') : (p.label || p.name.split('.').pop()));
+        const r = el('div', 'row'); const nm = el('span', 'name ' + (p.required === false ? 'opt' : 'req'), p.name === '' ? 'the whole value' : (p.label || p.name.split('.').pop()));
         if (p.depth) nm.style.paddingLeft = (p.depth * 12) + 'px';
         if (p.label) nm.title = p.name;
         r.appendChild(nm); r.appendChild(p.type ? typeLink(p.type) : el('span', 'type', p.description || '')); box.appendChild(r);
@@ -562,12 +570,19 @@
 
   // ---- layout ----------------------------------------------------------------------------------------
   const W = 280, HEAD = 42, ROW = 18, PAD = 8, GAPX = 120, GAPY = 30;
+  const GROUP_HEAD = 34, GROUP_FOOT = 10, GROUP_PAD = 12; // the container around a decision's rules: its header, its foot, its overhang
+  /** A node's header: a title and a subtitle, or on a rule one line per clause of what it says. */
+  const headOf = (n) => n.kind === 'rule' ? 16 + (n.says.length - 1) * 15 + 10 : HEAD;
   const rowsOf = (n) => Math.max(n.inputs.length, n.outputs.length, (n.fields || []).length, 1);
+  /** The decision a rule node belongs to; null for every other node. */
+  const ladderOf = (n) => n.kind === 'rule' ? n.decision.id : null;
+  /** An edge inside one ladder: a rule's otherwise stepping to the next rule. */
+  const isStep = (byId, e) => { const a = byId.get(e.from), b = byId.get(e.to); return Boolean(a && b && ladderOf(a) && ladderOf(a) === ladderOf(b)); };
   /** Layered left to right: a node sits one column after the last node it reads; in/const/request first, out last. */
   function layout(g) {
     const nodes = g.nodes, byId = new Map(nodes.map(n => [n.id, n]));
     const preds = new Map(nodes.map(n => [n.id, []]));
-    for (const e of g.edges) if (byId.has(e.from) && byId.has(e.to) && e.from !== e.to) preds.get(e.to).push(e.from);
+    for (const e of g.edges) if (byId.has(e.from) && byId.has(e.to) && e.from !== e.to && !isStep(byId, e)) preds.get(e.to).push(e.from);
     const rank = new Map(), visiting = new Set();
     const rankOf = (id) => {
       if (rank.has(id)) return rank.get(id);
@@ -578,22 +593,45 @@
       visiting.delete(id); rank.set(id, r); return r;
     };
     for (const n of nodes) rankOf(n.id);
+    // the rules of one decision stand in one column, so the ladder reads top to bottom
+    const ladders = new Map();
+    for (const n of nodes) if (ladderOf(n)) ladders.set(ladderOf(n), Math.max(ladders.get(ladderOf(n)) ?? 0, rank.get(n.id)));
+    for (const n of nodes) if (ladderOf(n)) rank.set(n.id, ladders.get(ladderOf(n)));
     const maxRank = Math.max(0, ...rank.values());
     for (const n of nodes) if (n.kind === 'out') rank.set(n.id, maxRank + (preds.get(n.id).some(p => rank.get(p) === maxRank) ? 1 : 0));
     const cols = []; for (const n of nodes) { const r = rank.get(n.id); (cols[r] = cols[r] || []).push(n); }
     for (let i = 0; i < cols.length; i++) cols[i] = cols[i] || [];
     const pos = new Map(); cols.forEach(c => c.forEach((n, i) => pos.set(n.id, i)));
     for (let sweep = 0; sweep < 3; sweep++) for (let r = 1; r < cols.length; r++) {
-      const bary = new Map(cols[r].map(n => { const ps = preds.get(n.id).filter(p => rank.get(p) < r); return [n.id, ps.length ? ps.reduce((s, p) => s + pos.get(p), 0) / ps.length : pos.get(n.id)]; }));
-      cols[r].sort((a, b) => bary.get(a.id) - bary.get(b.id) || pos.get(a.id) - pos.get(b.id));
+      // a node sits level with the ports that feed it: a decision's targets stack in rule order, so its routes do not cross
+      const slot = (e) => { const s = byId.get(e.from), i = s.outputs.findIndex(p => p.name === e.fromPort); return pos.get(e.from) + (i < 0 ? 0.5 : (i + 0.5) / rowsOf(s)); };
+      const bary = new Map(cols[r].map(n => {
+        const es = g.edges.filter(e => e.to === n.id && byId.has(e.from) && e.from !== n.id && rank.get(e.from) < r && !isStep(byId, e));
+        const near = es.filter(e => rank.get(e.from) === r - 1), use = near.length ? near : es;
+        return [n.id, use.length ? use.reduce((s, e) => s + slot(e), 0) / use.length : pos.get(n.id)];
+      }));
+      // a ladder moves as one: its rules take the mean of their pulls and stay contiguous, in rule order
+      for (const id of new Set(cols[r].map(ladderOf).filter(Boolean))) { const rs = cols[r].filter(n => ladderOf(n) === id); const m = rs.reduce((s, n) => s + bary.get(n.id), 0) / rs.length; for (const n of rs) bary.set(n.id, m); }
+      cols[r].sort((a, b) => bary.get(a.id) - bary.get(b.id) || (ladderOf(a) && ladderOf(a) === ladderOf(b) ? a.decision.rule - b.decision.rule : pos.get(a.id) - pos.get(b.id)));
       cols[r].forEach((n, i) => pos.set(n.id, i));
     }
-    const height = (n) => HEAD + rowsOf(n) * ROW + PAD;
-    const colH = cols.map(c => c.reduce((s, n) => s + height(n), 0) + Math.max(0, c.length - 1) * GAPY);
+    const height = (n) => headOf(n) + rowsOf(n) * ROW + PAD;
+    // a ladder's container needs a header above its first rule and a foot below its last
+    const firstOf = (c, i) => ladderOf(c[i]) && (i === 0 || ladderOf(c[i - 1]) !== ladderOf(c[i]));
+    const lastOf = (c, i) => ladderOf(c[i]) && (i === c.length - 1 || ladderOf(c[i + 1]) !== ladderOf(c[i]));
+    const colH = cols.map(c => c.reduce((s, n, i) => s + height(n) + (firstOf(c, i) ? GROUP_HEAD : 0) + (lastOf(c, i) ? GROUP_FOOT : 0), 0) + Math.max(0, c.length - 1) * GAPY);
     const total = Math.max(0, ...colH);
     const boxes = new Map();
-    cols.forEach((c, r) => { let y = (total - colH[r]) / 2; for (const n of c) { boxes.set(n.id, { x: r * (W + GAPX), y, w: W, h: height(n) }); y += height(n) + GAPY; } });
-    return { boxes, width: cols.length * (W + GAPX) - GAPX, height: total };
+    cols.forEach((c, r) => { let y = (total - colH[r]) / 2; c.forEach((n, i) => { if (firstOf(c, i)) y += GROUP_HEAD; boxes.set(n.id, { x: r * (W + GAPX), y, w: W, h: height(n) }); y += height(n) + (lastOf(c, i) ? GROUP_FOOT : 0) + GAPY; }); });
+    // one container per decision, around its rules
+    const groups = [];
+    for (const n of nodes) {
+      const id = ladderOf(n); if (!id || groups.some(g => g.id === id)) continue;
+      const bs = nodes.filter(x => ladderOf(x) === id).map(x => boxes.get(x.id));
+      const top = Math.min(...bs.map(b => b.y)) - GROUP_HEAD, bottom = Math.max(...bs.map(b => b.y + b.h)) + GROUP_FOOT;
+      groups.push({ id, label: n.decision.label, description: n.decision.description, x: bs[0].x - GROUP_PAD, y: top, w: W + 2 * GROUP_PAD, h: bottom - top });
+    }
+    return { boxes, groups, width: cols.length * (W + GAPX) - GAPX, height: total };
   }
 
   // ---- canvas ----------------------------------------------------------------------------------------
@@ -606,7 +644,7 @@
   const trunc = (s, n) => s.length > n ? s.slice(0, n - 1) + ELLIPSIS : s;
   const CH = 6.6; // monospace advance at 11px
   const subOf = (n) => {
-    if (n.kind === 'switch') return 'decision';
+    if (n.kind === 'rule') return '';
     if (n.kind === 'in' || n.kind === 'out') return showType(n.type);
     if (n.kind === 'const') return 'typed literals';
     if (n.kind === 'request') return 'what the trigger kind hands';
@@ -623,24 +661,59 @@
     root.appendChild(defs);
     root.appendChild(svg('rect', { width: '100%', height: '100%' }, 'grid'));
     const world = svg('g'); root.appendChild(world);
-    const { boxes, width, height } = layout(g);
+    const { boxes, groups, width, height } = layout(g);
     const byId = new Map(g.nodes.map(n => [n.id, n]));
-    const rowY = (b, i) => b.y + HEAD + Math.max(0, i) * ROW + ROW / 2;
-    const inY = (id, port) => rowY(boxes.get(id), byId.get(id).inputs.findIndex(p => p.name === port));
-    const outY = (id, port) => rowY(boxes.get(id), byId.get(id).outputs.findIndex(p => p.name === port));
+    const rowY = (n, b, i) => b.y + headOf(n) + Math.max(0, i) * ROW + ROW / 2;
+    const inY = (id, port) => { const n = byId.get(id); return rowY(n, boxes.get(id), n.inputs.findIndex(p => p.name === port)); };
+    const outY = (id, port) => { const n = byId.get(id); return rowY(n, boxes.get(id), n.outputs.findIndex(p => p.name === port)); };
     const usedIn = new Set(g.edges.filter(e => e.kind === 'data').map(e => e.to + ' ' + e.toPort));
 
+    const groupsG = svg('g'); world.appendChild(groupsG);
+    for (const grp of groups) {
+      const gg = svg('g', { transform: `translate(${grp.x},${grp.y})` }, 'group');
+      gg.appendChild(svg('rect', { width: grp.w, height: grp.h }, 'box'));
+      gg.appendChild(withTitle(txt(12, 21, trunc(grp.label, 30), 'title'), grp.label + (grp.description ? '\n' + grp.description : '')));
+      gg.appendChild(txt(grp.w - 12, 21, 'decision', 'tag', { 'text-anchor': 'end' }));
+      groupsG.appendChild(gg);
+    }
     const edgesG = svg('g'); world.appendChild(edgesG);
     const edgeEls = [];
+    /** Light an input up from the name in a rule's sentence: its pin, its label, and the wire that feeds it; off again on leave. */
+    const light = (gn, n, input, on) => {
+      for (const x of gn.querySelectorAll('[data-in]')) x.classList.toggle('lit-up', on && x.dataset.in === input);
+      for (const p of edgeEls) { if (p.dataset.from !== n.id && p.dataset.to !== n.id) continue; const mine = p.dataset.to === n.id && p.dataset.toPort === input; p.classList.toggle('hot', on ? mine : true); p.classList.toggle('dim', on ? !mine : false); }
+    };
+    /** One line of a rule said in words: the joining word dim, values as literals, each input a name that lights its port up when hovered. */
+    const saidLine = (gn, n, line, x, y) => {
+      const t = svg('text', { x, y }, 'said');
+      let room = 38;
+      const add = (str, cls, input) => {
+        if (room <= 0) return;
+        const sp = svg('tspan', {}, cls); sp.textContent = str.length > room ? str.slice(0, Math.max(0, room - 1)) + ELLIPSIS : str; room -= str.length;
+        if (input) { sp.dataset.in = input; sp.addEventListener('mouseenter', () => light(gn, n, input, true)); sp.addEventListener('mouseleave', () => light(gn, n, input, false)); }
+        t.appendChild(sp);
+      };
+      add(line.lead + ' ', 'lead');
+      for (const p of line.parts) { if ('input' in p) add(p.text, 'in', p.input); else if ('value' in p) add(p.value, 'val'); else add(p.text, 'word'); }
+      return withTitle(t, n.label + '\n' + n.decision.when);
+    };
     for (const e of g.edges) {
       const a = boxes.get(e.from), b = boxes.get(e.to); if (!a || !b) continue;
+      if (isStep(byId, e)) {
+        // otherwise, down to the next rule: a short step between two rungs of the ladder
+        const x = a.x + a.w / 2, color = colors.get(e.to);
+        const p = svg('path', { d: `M${x},${a.y + a.h} L${x},${b.y}`, stroke: color }, 'edge route step');
+        p.dataset.from = e.from; p.dataset.to = e.to; edgesG.appendChild(p); edgeEls.push(p);
+        edgesG.appendChild(txt(x + 8, (a.y + a.h + b.y) / 2 + 3.5, 'otherwise', 'elabel step'));
+        continue;
+      }
       const x1 = a.x + a.w, y1 = outY(e.from, e.fromPort);
       const toHead = e.kind === 'route' || e.toPort === '';
-      const x2 = b.x, y2 = toHead ? b.y + HEAD / 2 : inY(e.to, e.toPort);
+      const x2 = b.x, y2 = toHead ? b.y + headOf(byId.get(e.to)) / 2 : inY(e.to, e.toPort);
       const dx = Math.max(40, Math.abs(x2 - x1) / 2);
       const color = colors.get(e.to);
       const p = svg('path', { d: `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`, stroke: color }, 'edge ' + e.kind);
-      p.dataset.from = e.from; p.dataset.to = e.to; edgesG.appendChild(p); edgeEls.push(p);
+      p.dataset.from = e.from; p.dataset.to = e.to; p.dataset.toPort = e.toPort; edgesG.appendChild(p); edgeEls.push(p);
       // labels sit a third of the way along, where the curve is still near its source and clear of the target box
       if (e.label) edgesG.appendChild(withTitle(txt(x1 + (x2 - x1) * 0.33, y1 + (y2 - y1) * 0.18 - 5, trunc(e.label, 28), 'elabel', { 'text-anchor': 'middle', fill: color }), e.label));
     }
@@ -648,9 +721,10 @@
       const b = boxes.get(n.id), color = colors.get(n.id);
       const gn = svg('g', { transform: `translate(${b.x},${b.y})` }, 'node kind-' + n.kind + (state.selected === n.id ? ' selected' : '')); gn.dataset.id = n.id;
       gn.appendChild(svg('rect', { width: b.w, height: b.h }, 'box'));
-      gn.appendChild(svg('rect', { width: b.w, height: HEAD }, 'head'));
+      gn.appendChild(svg('rect', { width: b.w, height: headOf(n) }, 'head'));
       gn.appendChild(svg('rect', { x: 0, y: 8, width: 4, height: b.h - 16, rx: 2, fill: color }));
-      gn.appendChild(withTitle(txt(14, 17, trunc(n.label, 30), 'title'), n.label + (n.description ? '\n' + n.description : '')));
+      if (n.kind === 'rule') n.says.forEach((line, i) => gn.appendChild(saidLine(gn, n, line, 14, 16 + i * 15)));
+      else gn.appendChild(withTitle(txt(14, 17, trunc(n.label, 30), 'title'), n.label + (n.description ? '\n' + n.description : '')));
       const sub = subOf(n);
       if (sub) gn.appendChild(opens(withTitle(txt(14, 32, trunc(sub, 36), 'sub'), n.op || n.type || sub), n.type ? shapeOf(n.type) : null));
       if (n.target && n.target.effect) gn.appendChild(withTitle(txt(b.w - (n.target ? 32 : 14), 32, 'effect', 'fx', { 'text-anchor': 'end' }), 'reaches outside the process'));
@@ -661,45 +735,50 @@
         gn.appendChild(go_);
       }
       n.inputs.forEach((p, i) => {
-        const y = HEAD + i * ROW + ROW / 2;
+        const y = headOf(n) + i * ROW + ROW / 2;
         const used = usedIn.has(n.id + ' ' + p.name);
         const req = p.required !== false;
         const pin = svg('circle', { cx: 0, cy: y, r: 3.8 }, 'pin' + (req ? ' req' : ''));
         if (used) { pin.setAttribute('stroke', color); if (req) pin.setAttribute('fill', color); }
+        pin.dataset.in = p.name;
         gn.appendChild(pin);
         const val = p.literal != null ? ' = ' + showLit(p) : p.text != null ? ' = ' + p.text : '';
         const nameLen = Math.min(14, p.name.length);
         const room = n.outputs.length ? 22 : 36; // characters the left column may use when the right one is in use
         const hint = p.name + (req ? '' : ' (optional)') + (p.type ? ': ' + showType(p.type) : '') + (p.description ? '\n' + p.description : '');
-        gn.appendChild(withTitle(txt(12, y + 4, trunc(p.name, 14), 'port' + (p.missing ? ' miss' : req ? '' : ' opt')), hint));
+        const name = withTitle(txt(12, y + 4, trunc(p.name, 14), 'port' + (p.missing ? ' miss' : req ? '' : ' opt')), hint); name.dataset.in = p.name; gn.appendChild(name);
         if (val) gn.appendChild(opens(withTitle(txt(12 + (nameLen + 1) * CH, y + 4, trunc(val, room - nameLen), 'port lit'), p.name + val), p.ref));
         else if (p.missing) gn.appendChild(txt(12 + (nameLen + 1) * CH, y + 4, 'not given', 'port miss'));
         else if (p.type && n.outputs.length === 0) gn.appendChild(opens(withTitle(txt(12 + (nameLen + 1) * CH, y + 4, trunc(showType(p.type), room - 1 - nameLen), 'port type'), p.name + ': ' + showType(p.type)), shapeOf(p.type)));
       });
       const usedOut = new Set(g.edges.filter(e => e.from === n.id).map(e => e.fromPort));
       n.outputs.forEach((p, i) => {
-        const y = HEAD + i * ROW + ROW / 2;
+        const y = headOf(n) + i * ROW + ROW / 2;
+        if (n.kind === 'rule') {
+          // then, and on the last rule otherwise: each names where it goes, in that node's colour; the wire says the same
+          const target = colors.get(p.description) || color, to = labelOfNode(g, p.description), isElse = p.name === 'otherwise';
+          gn.appendChild(svg('circle', { cx: b.w, cy: y, r: 3.8, stroke: target, fill: target }, 'pin req'));
+          const t = txt(b.w - 12, y + 4, trunc(isElse ? 'otherwise' : to, n.inputs.length ? 14 : 30), 'port' + (isElse ? ' miss' : ''), { 'text-anchor': 'end', fill: target });
+          gn.appendChild(withTitle(t, (isElse ? 'otherwise' : 'then') + TO + to));
+          return;
+        }
         const req = p.required !== false;
-        const isRoute = n.kind === 'switch';
         const depth = p.depth || 0;
         const parentOnly = depth === 0 && !usedOut.has(p.name) && n.outputs.some(o => o.depth && o.name.startsWith(p.name + '.'));
         if (!parentOnly) {
           const pin = svg('circle', { cx: b.w, cy: y, r: 3.8 }, 'pin' + (req ? ' req' : ''));
-          if (isRoute) { pin.setAttribute('stroke', colors.get(p.name) || color); pin.setAttribute('fill', colors.get(p.name) || color); }
           gn.appendChild(pin);
         }
         const leaf = p.name.split('.').pop();
-        const label = isRoute ? labelOfNode(g, p.name) : p.name === '' ? (p.type ? showType(p.type) : 'the value') : (p.label || leaf);
-        const hint = isRoute ? (p.description === 'else' ? 'otherwise' : 'when ' + p.description) + TO + labelOfNode(g, p.name)
-          : (p.label ? p.label + ': ' : '') + (n.kind === 'request' ? showRead('request.' + p.name) : (p.name || 'the whole value')) + (req ? '' : ' (optional)') + (p.type ? ': ' + showType(p.type) : '') + (p.description ? '\n' + p.description : '');
+        const label = p.name === '' ? (p.type ? showType(p.type) : 'the value') : (p.label || leaf);
+        const hint = (p.label ? p.label + ': ' : '') + (n.kind === 'request' ? showRead('request.' + p.name) : (p.name || 'the whole value')) + (req ? '' : ' (optional)') + (p.type ? ': ' + showType(p.type) : '') + (p.description ? '\n' + p.description : '');
         const room = (n.inputs.length ? 14 : 30) - depth * 2;
         const t = txt(b.w - 12 - depth * 12, y + 4, trunc(label, room), 'port' + (p.name === '' ? ' type' : parentOnly ? ' type' : req ? '' : ' opt'), { 'text-anchor': 'end' });
-        if (isRoute) t.setAttribute('fill', colors.get(p.name) || color);
         gn.appendChild(opens(withTitle(t, hint), p.name === '' ? shapeOf(p.type) : null));
         if (depth) gn.appendChild(svg('path', { d: `M${b.w - 12 - depth * 12 - 4},${y - 6} v6 h-3`, stroke: 'var(--dim)', fill: 'none', 'stroke-width': 1 }));
       });
       (n.fields || []).forEach((p, i) => {
-        const y = HEAD + i * ROW + ROW / 2;
+        const y = headOf(n) + i * ROW + ROW / 2;
         const req = p.required !== false;
         gn.appendChild(withTitle(txt(14, y + 4, trunc(p.name, 16), 'port' + (req ? '' : ' opt')), p.name + (req ? '' : ' (optional)') + ': ' + showType(p.type)));
         gn.appendChild(opens(withTitle(txt(b.w - 12, y + 4, trunc(showType(p.type), 18), 'port type', { 'text-anchor': 'end' }), showType(p.type)), shapeOf(p.type)));

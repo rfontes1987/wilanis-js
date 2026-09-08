@@ -1,7 +1,7 @@
 /**
  * The view model: what a page needs to draw one document. For a graph, nodes with typed input and output
- * ports, a data edge for every {{node.field}} read from the field to the input that reads it, route edges
- * from switch rules, the out node's fields, and for each run or map node where its operation leads (a
+ * ports, a data edge for every {{node.field}} read from the field to the input that reads it, one rule node per
+ * switch rule with a route from it, the out node's fields, and for each run or map node where its operation leads (a
  * native port, or a binding and the graph behind it). A deep read ({{asked.body.id}}) opens the field it
  * reads as an attribute port under its parent, so the edge leaves the attribute. The request a data graph
  * reads through its resolvers is a node of its own, its ports the paths the resolvers name.
@@ -9,7 +9,7 @@
  * For every kind, the references the document makes and the documents that make references to it, so a
  * reader can walk the tree in both directions. Nothing here draws; it answers JSON a page lays out.
  */
-import { Scope, show, splitPath, substitute, hasVars, isRun, isSwitch, isMap, typeAt, TEMPLATE, WHOLE_TEMPLATE } from '@wilanis/core';
+import { Scope, expr, show, splitPath, substitute, hasVars, isRun, isSwitch, isMap, typeAt, TEMPLATE, WHOLE_TEMPLATE } from '@wilanis/core';
 import type { Kind, Layer, Loaded, LoadResult, GraphDoc, Operation, Refusal, Type, Values } from '@wilanis/core';
 import { bindings, checkTree } from '@wilanis/compiler';
 
@@ -53,7 +53,7 @@ export interface VTarget {
   implementation: string;
 }
 
-export type VNodeKind = 'in' | 'const' | 'request' | 'run' | 'map' | 'switch' | 'out';
+export type VNodeKind = 'in' | 'const' | 'request' | 'run' | 'map' | 'rule' | 'out';
 
 export interface VNode {
   id: string;
@@ -72,11 +72,43 @@ export interface VNode {
   /** The fields of the out type, on the out node. */
   fields?: VPort[];
   target?: VTarget;
-  rules?: { when: string; to: string; description?: string }[];
-  else?: string;
+  /** On a rule node: the decision it belongs to and its place in it. */
+  decision?: VDecision;
+  /** On a rule node: its condition said in words, one clause per line. */
+  says?: VSaid[];
   onItemFailure?: string;
   bind?: Record<string, string>;
 }
+
+/**
+ * A switch is drawn as a ladder: one rule node per rule, in order, each reading only the inputs its condition
+ * names. `then` routes to the rule's target; `otherwise` steps to the next rule, and leaves the ladder for the
+ * switch's `else` from the last one. So "the first rule that holds wins" is the shape, not a caption.
+ */
+export interface VDecision {
+  /** The switch node's id, shared by every rule of it. */
+  id: string;
+  label: string;
+  description?: string;
+  /** The condition as written. */
+  when: string;
+  /** This rule's place, from 1, and how many there are. */
+  rule: number;
+  of: number;
+  /** The node this rule routes to when it holds. */
+  then: string;
+  /** Where it goes when it does not: the next rule's id, or the switch's else target from the last rule. */
+  otherwise: string;
+  /** True on the last rule, whose otherwise leaves the ladder. */
+  last: boolean;
+}
+
+/**
+ * One line of a condition said in words: `if status is 200`, `and body exists`. Its parts are words, values
+ * as written, and the inputs the rule reads, so a page can point from a name in the sentence to the port.
+ */
+export interface VSaid { lead: 'if' | 'and' | 'or'; parts: VSaidPart[] }
+export type VSaidPart = { text: string } | { value: string } | { input: string; text: string };
 
 export interface VEdge {
   from: string;
@@ -246,12 +278,23 @@ function graphView(scope: Scope, g: Loaded<GraphDoc>): NonNullable<DocView['grap
 
   for (const n of doc.nodes) {
     if (isSwitch(n)) {
-      const inputs: VPort[] = Object.entries(n.in).map(([k, v]) => ({ name: k, ...written(scope, v) }));
-      const outputs: VPort[] = [...n.rules.map(r => ({ name: r.to, description: r.when })), { name: n.else, description: 'else' }];
-      nodes.push({ id: n.id, kind: 'switch', label: n.label ?? readable(n.id), description: n.description, inputs, outputs, rules: n.rules, else: n.else });
-      wire(edges, n.id, n.in, resolvers);
-      for (const r of n.rules) edges.push({ from: n.id, fromPort: r.to, to: r.to, toPort: WHOLE, kind: 'route', label: r.when });
-      edges.push({ from: n.id, fromPort: n.else, to: n.else, toPort: WHOLE, kind: 'route', label: 'else' });
+      const label = n.label ?? readable(n.id);
+      n.rules.forEach((r, i) => {
+        const id = `${n.id}/${i + 1}`, last = i === n.rules.length - 1;
+        const otherwise = last ? n.else : `${n.id}/${i + 2}`;
+        // a rule reads only what its condition names; a condition that does not parse (a refusal says so) reads everything
+        const says = said(r.when);
+        const names = says ? new Set(says.flatMap(l => l.parts).flatMap(p => 'input' in p ? [p.input] : [])) : undefined;
+        const read = Object.fromEntries(Object.entries(n.in).filter(([k]) => !names || names.has(k)));
+        const inputs: VPort[] = Object.entries(read).map(([k, v]) => ({ name: k, ...written(scope, v) }));
+        const outputs: VPort[] = [{ name: 'then', description: r.to }, ...(last ? [{ name: 'otherwise', description: n.else }] : [])];
+        const lines = says ?? [{ lead: 'if' as const, parts: [{ text: r.when }] }];
+        const spoken = lines.map(l => l.lead + ' ' + l.parts.map(p => 'value' in p ? p.value : p.text).join('')).join(' ');
+        nodes.push({ id, kind: 'rule', label: spoken, description: r.description, inputs, outputs, says: lines, decision: { id: n.id, label, description: n.description, when: r.when, rule: i + 1, of: n.rules.length, then: r.to, otherwise, last } });
+        wire(edges, id, read, resolvers);
+        edges.push({ from: id, fromPort: 'then', to: r.to, toPort: WHOLE, kind: 'route' });
+        edges.push({ from: id, fromPort: 'otherwise', to: otherwise, toPort: WHOLE, kind: 'route' });
+      });
       continue;
     }
     const t = targetOf(scope, n.run);
@@ -294,6 +337,40 @@ function graphView(scope: Scope, g: Loaded<GraphDoc>): NonNullable<DocView['grap
   const request = byId.get('request');
   if (request) for (const r of resolvers.values()) { const p = request.outputs.find(o => o.name === r.path.join('.')); if (p) { p.label = r.label; p.description = r.description; } }
   return { nodes, edges, role: scope.roleOf(g.path) };
+}
+
+/**
+ * A switch condition said in words, one line per clause of its top-level `&&` (or `||`) chain:
+ * `status == 200 && has(body)` → `if status is 200` / `and body exists`. Undefined when it does not parse.
+ */
+function said(when: string): VSaid[] | undefined {
+  let e: expr.Expr;
+  try { e = expr.parse(when); } catch { return undefined; }
+  const top = e.t === 'bin' && (e.op === '&&' || e.op === '||') ? e.op : '&&';
+  const chain = (x: expr.Expr): expr.Expr[] => x.t === 'bin' && x.op === top ? [...chain(x.l), ...chain(x.r)] : [x];
+  return chain(e).map((x, i) => ({ lead: i === 0 ? 'if' : top === '&&' ? 'and' : 'or', parts: clause(x, false) }));
+}
+
+const VERB: Record<string, [string, string]> = { '==': ['is', 'is not'], '!=': ['is not', 'is'], '<': ['is below', 'is at least'], '<=': ['is at most', 'is above'], '>': ['is above', 'is at most'], '>=': ['is at least', 'is below'] };
+
+/** One clause in words; `negate` says the clause sits under a `!`, which is folded into the verb. */
+function clause(e: expr.Expr, negate: boolean): VSaidPart[] {
+  const path = (p: string[]): VSaidPart => ({ input: p[0], text: p.join(' › ') });
+  switch (e.t) {
+    case 'lit': return [{ value: JSON.stringify(negate ? !e.v : e.v) }];
+    case 'path': return negate ? [{ text: 'not ' }, path(e.p)] : [path(e.p)];
+    case 'has': return [path(e.p), { text: negate ? ' is missing' : ' exists' }];
+    case 'not': return clause(e.e, !negate);
+    case 'len': return [{ text: 'the size of ' }, ...clause(e.e, false)];
+    case 'bin': {
+      if (e.op === '&&' || e.op === '||') {
+        // a nested group reads inline; under a `!` it flips (De Morgan) so the verbs stay positive
+        const both = (e.op === '&&') !== negate;
+        return [{ text: both ? 'both ' : 'either ' }, ...clause(e.l, negate), { text: both ? ' and ' : ' or ' }, ...clause(e.r, negate)];
+      }
+      return [...clause(e.l, false), { text: ` ${VERB[e.op][negate ? 1 : 0]} ` }, ...clause(e.r, false)];
+    }
+  }
 }
 
 const ordinal = (n: number) => `${n}${['th', 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : Math.min(n % 10, 4) % 4] ?? 'th'}`;

@@ -48,7 +48,7 @@ describe('the view model of the example', () => {
   it('draws a data graph: in, every node, out, with typed ports', async () => {
     const v = await view(GET_ROW);
     const ids = v.graph!.nodes.map(n => n.id);
-    expect(ids).toEqual(['in', 'asked', 'route', 'row', 'missing', 'failed', 'out']);
+    expect(ids).toEqual(['in', 'asked', 'route/1', 'route/2', 'row', 'missing', 'failed', 'out']);
     const asked = v.graph!.nodes.find(n => n.id === 'asked')!;
     expect(asked.kind).toBe('run');
     expect(asked.label).toBe('GET the row');
@@ -73,18 +73,32 @@ describe('the view model of the example', () => {
   it('wires a data edge per read, from the field read to the input that reads it', async () => {
     const v = await view(GET_ROW);
     expect(edge(v, 'in', 'id', 'asked', 'path')).toMatchObject({ kind: 'data' });
-    expect(edge(v, 'asked', 'status', 'route', 'status')).toMatchObject({ kind: 'data' });
+    expect(edge(v, 'asked', 'status', 'route/1', 'status')).toMatchObject({ kind: 'data' });
     expect(edge(v, 'asked', 'body', 'row', 'value')).toMatchObject({ kind: 'data' });
     expect(edge(v, 'asked', 'status', 'failed', 'message')).toMatchObject({ kind: 'data' });
   });
 
-  it('routes a switch: one edge per rule carrying its expression, and one for else', async () => {
+  it('draws a switch as a ladder: one rule node per rule, reading only what its condition names, then to its target, otherwise down or out', async () => {
     const v = await view(GET_ROW);
-    const route = v.graph!.nodes.find(n => n.id === 'route')!;
-    expect(route.kind).toBe('switch');
-    expect(route.outputs.map(p => p.name)).toEqual(['missing', 'row', 'failed']);
-    expect(edge(v, 'route', 'missing', 'missing', '')).toMatchObject({ kind: 'route', label: 'status == 404' });
-    expect(edge(v, 'route', 'failed', 'failed', '')).toMatchObject({ kind: 'route', label: 'else' });
+    const first = v.graph!.nodes.find(n => n.id === 'route/1')!, second = v.graph!.nodes.find(n => n.id === 'route/2')!;
+    expect(first).toMatchObject({ kind: 'rule', label: 'if status is 404', inputs: [{ name: 'status' }], outputs: [{ name: 'then', description: 'missing' }] });
+    expect(first.decision).toEqual({ id: 'route', label: 'What did the API say?', description: undefined, when: 'status == 404', rule: 1, of: 2, then: 'missing', otherwise: 'route/2', last: false });
+    // a condition is said in words, one clause per line, each input named so the page can point at its port
+    expect(second.label).toBe('if status is 200 and body exists');
+    expect(second.says).toEqual([
+      { lead: 'if', parts: [{ input: 'status', text: 'status' }, { text: ' is ' }, { value: '200' }] },
+      { lead: 'and', parts: [{ input: 'body', text: 'body' }, { text: ' exists' }] },
+    ]);
+    expect(second.inputs.map(p => p.name)).toEqual(['status', 'body']);
+    expect(second.outputs.map(p => p.name)).toEqual(['then', 'otherwise']);
+    expect(second.decision).toMatchObject({ rule: 2, then: 'row', otherwise: 'failed', last: true });
+    expect(edge(v, 'route/1', 'then', 'missing', '')).toMatchObject({ kind: 'route' });
+    expect(edge(v, 'route/1', 'otherwise', 'route/2', '')).toMatchObject({ kind: 'route' });
+    expect(edge(v, 'route/2', 'then', 'row', '')).toMatchObject({ kind: 'route' });
+    expect(edge(v, 'route/2', 'otherwise', 'failed', '')).toMatchObject({ kind: 'route' });
+    // the body is read by the second rule only: the first never looks at it
+    expect(edge(v, 'asked', 'body', 'route/2', 'body')).toMatchObject({ kind: 'data' });
+    expect(edge(v, 'asked', 'body', 'route/1', 'body')).toBeUndefined();
   });
 
   it('shows the out node as the fields it answers, fed by each candidate in order', async () => {
@@ -195,7 +209,7 @@ describe('the view server', () => {
       expect(typeof idx.version).toBe('string');
       const doc = await (await fetch(`${s.url}api/doc?path=${encodeURIComponent('@monitor/data/get-row.graph.json')}`)).json() as DocView;
       expect(doc.path).toBe(GET_ROW);
-      expect(doc.graph?.nodes.length).toBe(7);
+      expect(doc.graph?.nodes.length).toBe(8);
       const missing = await fetch(`${s.url}api/doc?path=${encodeURIComponent('@features/nope.json')}`);
       expect(missing.status).toBe(404);
       const none = await fetch(`${s.url}api/doc`);
