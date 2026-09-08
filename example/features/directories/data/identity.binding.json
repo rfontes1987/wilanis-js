@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/binding.schema.json",
+  "label": "Identity over this project's directories",
+  "description": "The included access tree's identity.port.json met by the @auth plugin against this project's two directories, customers and employees, written in connections/. Every operation is one delegation.",
+  "port": "@access/domain/identity.port.json",
+  "operations": {
+    "verifyCustomer": {
+      "run": "@auth/identity.port.json#verify",
+      "in": {
+        "connection": "@connections/customers.connection.json"
+      }
+    },
+    "verifyEmployee": {
+      "run": "@auth/identity.port.json#verify",
+      "in": {
+        "connection": "@connections/employees.connection.json"
+      }
+    },
+    "issue": {
+      "run": "@auth/token.port.json#issue"
+    },
+    "refresh": {
+      "run": "@auth/token.port.json#refresh"
+    }
+  }
+}

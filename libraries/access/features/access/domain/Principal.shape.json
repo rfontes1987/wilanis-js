@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "Principal",
+  "description": "Who is calling, as the guard established it from our token: the directory's subject, the realm the sign-in wrote, the roles.",
+  "layer": "core",
+  "fields": {
+    "subject": {
+      "type": "string"
+    },
+    "realm": {
+      "type": "string"
+    },
+    "roles": {
+      "type": "string[]"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "Session",
+  "description": "What a session carries between calls: the display name the directory gave at sign-in, the realm the sign-in decided, and the theme the caller chose, when one was. Named by the @auth plugin's settings.session, so every write through session.port.json is judged against it.",
+  "layer": "core",
+  "fields": {
+    "displayName": {
+      "type": "string",
+      "description": "written at sign-in from the directory's name"
+    },
+    "realm": {
+      "type": "string",
+      "description": "written at sign-in: customer or employee"
+    },
+    "theme": {
+      "type": "string",
+      "required": false,
+      "enum": [
+        "light",
+        "dark"
+      ],
+      "description": "written by savePreferences"
+    }
+  }
+}

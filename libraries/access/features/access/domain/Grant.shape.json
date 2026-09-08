@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "Grant",
+  "description": "A decision that allowed: the run goes on.",
+  "layer": "core",
+  "fields": {
+    "allowed": {
+      "type": "boolean"
+    }
+  }
+}

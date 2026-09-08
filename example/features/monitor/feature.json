@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/feature.schema.json",
   "label": "Monitor",
-  "description": "Entries of the monitor: list them, read one, record one, update one, remove one, a digest, and a CSV import and export.",
+  "description": "Entries of the monitor: list them, read one, record one, update one, remove one, a digest, and a CSV import and export. Reads are public; every write is for a signed-in employee holding the recorder role.",
   "exports": [
     "@features/monitor/domain/monitor.port.json",
     "@features/monitor/domain/Entry.shape.json"
@@ -10,5 +10,8 @@
     "@http/http.port.json#request",
     "@blob/csv.port.json#parse",
     "@blob/csv.port.json#write"
+  ],
+  "dependsOn": [
+    "access"
   ]
 }

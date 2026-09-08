@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "label": "POST /api/v1/auth-customers",
+  "description": "Customers sign in: the credential is verified against the customer directory and our own token is issued, realm customer. 401 as bad_credentials, 503 as directory_unavailable. The access token is also set as the session cookie, so a browser needs no header.",
+  "kind": "@http/http.trigger-kind.json",
+  "settings": {
+    "route": "/api/v1/auth-customers",
+    "method": "POST",
+    "produces": "application/json",
+    "consumes": "application/json",
+    "body": "@access/edge/Credentials.shape.json",
+    "response": {
+      "refusals": {
+        "bad_credentials": 401,
+        "directory_unavailable": 503
+      },
+      "cookies": {
+        "session": {
+          "from": "accessToken",
+          "httpOnly": true,
+          "sameSite": "lax",
+          "maxAge": 900
+        }
+      }
+    }
+  },
+  "in": "@access/edge/Credentials.shape.json",
+  "out": "@access/edge/TokensView.shape.json",
+  "fire": {
+    "run": "@access/domain/access.port.json#signInCustomer",
+    "in": {
+      "username": "{{request.body.username}}",
+      "password": "{{request.body.password}}"
+    }
+  }
+}

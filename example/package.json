@@ -3,19 +3,22 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "A wilanis project: pure JSON documents, run by @wilanis/runtime with the @http and @blob plugin packages, against a public REST API.",
+  "description": "A wilanis project: pure JSON documents, run by @wilanis/runtime with the @http, @blob, @reload and @auth plugin packages, against a public REST API.",
   "scripts": {
     "check": "wilanis check .",
     "rehearse": "wilanis rehearse .",
     "fuzz": "wilanis fuzz .",
     "regress": "wilanis regress .",
     "digest": "wilanis run @monitor/edge/digest.trigger.json .",
-    "start": "wilanis start ."
+    "start": "wilanis start .",
+    "hello": "wilanis run @hello/edge/hello-gated.trigger.json ."
   },
   "dependencies": {
     "@wilanis/plugin-http": "0.1.0",
     "@wilanis/runtime": "0.1.0",
     "@wilanis/plugin-blob": "0.1.0",
-    "@wilanis/plugin-reload": "^0.1.0"
+    "@wilanis/plugin-reload": "^0.1.0",
+    "@wilanis/plugin-auth": "0.1.0",
+    "@wilanis/access": "0.1.0"
   }
 }

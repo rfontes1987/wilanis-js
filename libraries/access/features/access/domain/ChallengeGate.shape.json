@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "Challenge gate",
+  "description": "What a decision about a challenge reads: the challenge answered on this call, absent when none was.",
+  "layer": "core",
+  "fields": {
+    "challenge": {
+      "type": "@access/domain/Challenge.shape.json",
+      "required": false
+    }
+  }
+}

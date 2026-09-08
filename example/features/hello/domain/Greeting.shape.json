@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "Greeting",
+  "description": "A greeting.",
+  "layer": "core",
+  "fields": {
+    "greeting": {
+      "type": "string"
+    }
+  }
+}

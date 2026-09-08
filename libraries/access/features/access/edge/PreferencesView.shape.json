@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "Preferences (answer)",
+  "description": "The caller's preferences, from the session: the display name the directory gave and the theme chosen, when one was.",
+  "layer": "edge",
+  "fields": {
+    "displayName": {
+      "type": "string"
+    },
+    "theme": {
+      "type": "string",
+      "required": false
+    }
+  }
+}

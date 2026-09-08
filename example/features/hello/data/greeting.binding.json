@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/binding.schema.json",
+  "label": "Greeting, met",
+  "description": "greeting.port.json met by the domain graph.",
+  "port": "@hello/domain/greeting.port.json",
+  "operations": {
+    "hello": {
+      "graph": "@hello/domain/greet.graph.json"
+    }
+  }
+}

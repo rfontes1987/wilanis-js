@@ -1,23 +1,35 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
   "label": "DELETE /monitor/{id}",
-  "description": "DELETE /monitor/{id} \u2192 the entry that was removed; 404 as missing when there is none, 502 as upstream when the monitor API broke.",
+  "description": "DELETE /monitor/{id} \u2192 the entry that was removed; 404 as missing when there is none, 502 as upstream when the monitor API broke. Employees holding the recorder role only: 401 as anonymous without a token or as invalid_credential with a bad one, 403 as forbidden for a customer or an employee without the role.",
   "settings": {
     "route": "/monitor/{id}",
     "method": "DELETE",
     "produces": "application/json",
-    "access": {
-      "open": true
-    },
     "response": {
       "refusals": {
         "missing": 404,
-        "upstream": 502
+        "upstream": 502,
+        "anonymous": 401,
+        "invalid_credential": 401,
+        "forbidden": 403
       }
     }
   },
   "in": "@monitor/edge/IdRequest.shape.json",
   "out": "@monitor/edge/EntryView.shape.json",
+  "policies": [
+    {
+      "policy": "@access/edge/employees-only.policy.json",
+      "in": {
+        "token": [
+          "{{request.headers.authorization}}",
+          "{{request.cookies.session}}"
+        ]
+      }
+    },
+    "@access/edge/can-record.policy.json"
+  ],
   "kind": "@http/http.trigger-kind.json",
   "fire": {
     "run": "@monitor/domain/monitor.port.json#remove",

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "Code issue outcome",
+  "description": "Whether a challenge could be given a code.",
+  "layer": "core",
+  "fields": {
+    "issued": {
+      "type": "boolean"
+    },
+    "code": {
+      "type": "string",
+      "required": false
+    },
+    "expiresAt": {
+      "type": "string",
+      "required": false
+    }
+  }
+}

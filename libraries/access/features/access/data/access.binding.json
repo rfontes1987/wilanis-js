@@ -1,0 +1,44 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/binding.schema.json",
+  "label": "Access, met",
+  "description": "access.port.json met: the sign-ins and the refresh are business graphs; the session operations are data graphs over the @auth session port, keyed by the session the guard identified; the decisions are the policy graphs.",
+  "port": "@access/domain/access.port.json",
+  "operations": {
+    "signInCustomer": {
+      "description": "The business graph that decides the customer realm.",
+      "graph": "@access/domain/sign-in-customer.graph.json"
+    },
+    "signInEmployee": {
+      "description": "The business graph that decides the employee realm.",
+      "graph": "@access/domain/sign-in-employee.graph.json"
+    },
+    "refresh": {
+      "graph": "@access/domain/refresh.graph.json"
+    },
+    "signOut": {
+      "graph": "@access/data/end-session.graph.json"
+    },
+    "preferences": {
+      "graph": "@access/data/read-session.graph.json"
+    },
+    "savePreferences": {
+      "graph": "@access/data/write-theme.graph.json"
+    },
+    "deliverCode": {
+      "description": "Prints the code. A production profile binds this to a graph that mails it.",
+      "graph": "@access/data/issue-code.graph.json"
+    },
+    "requireSignedIn": {
+      "graph": "@access/domain/require-signed-in.graph.json"
+    },
+    "requireEmployee": {
+      "graph": "@access/domain/require-employee.graph.json"
+    },
+    "requireRecorder": {
+      "graph": "@access/domain/require-recorder.graph.json"
+    },
+    "requireOtp": {
+      "graph": "@access/domain/require-otp.graph.json"
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/policy.schema.json",
+  "label": "Can record",
+  "description": "A caller holding the recorder role: the directory's group, written into the token at sign-in.",
+  "decide": {
+    "run": "@access/domain/access.port.json#requireRecorder",
+    "in": {
+      "principal": "{{request.principal}}"
+    }
+  },
+  "proves": [
+    "request.principal",
+    "request.session"
+  ],
+  "outcomes": {
+    "anonymous": {
+      "effect": "deny"
+    },
+    "forbidden": {
+      "effect": "deny",
+      "description": "signed in, but without the recorder role"
+    }
+  }
+}

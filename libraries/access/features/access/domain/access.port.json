@@ -1,0 +1,120 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "label": "Access",
+  "description": "What the edge asks of access: sign in against one of two directories, refresh, sign out, read and keep preferences, deliver a challenge code -- and the four decisions the policies fire. Bound by access.binding.json.",
+  "operations": {
+    "signInCustomer": {
+      "description": "Verify a customer's credential and issue our token, realm customer.",
+      "accepts": {
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string",
+          "secret": true
+        }
+      },
+      "returns": "@access/domain/Tokens.shape.json"
+    },
+    "signInEmployee": {
+      "description": "Verify an employee's credential and issue our token, realm employee, roles from the directory's groups.",
+      "accepts": {
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string",
+          "secret": true
+        }
+      },
+      "returns": "@access/domain/Tokens.shape.json"
+    },
+    "refresh": {
+      "description": "Trade a refresh token for a new pair. Refuses as invalid_refresh when it is unknown, spent or expired.",
+      "accepts": {
+        "refreshToken": {
+          "type": "string",
+          "secret": true
+        }
+      },
+      "returns": "@access/domain/Tokens.shape.json"
+    },
+    "signOut": {
+      "description": "End the caller's session.",
+      "returns": {
+        "fields": {
+          "ended": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "preferences": {
+      "description": "The caller's session attributes.",
+      "returns": "@access/domain/Session.shape.json"
+    },
+    "savePreferences": {
+      "description": "Keep a theme in the caller's session; answers the attributes whole.",
+      "accepts": {
+        "theme": {
+          "type": "string",
+          "enum": [
+            "light",
+            "dark"
+          ]
+        }
+      },
+      "returns": "@access/domain/Session.shape.json"
+    },
+    "deliverCode": {
+      "description": "Give an open challenge its code and hand it over. Refuses as unknown_challenge when the challenge is unknown or expired.",
+      "accepts": {
+        "id": {
+          "type": "string",
+          "description": "the challenge id the caller was told"
+        }
+      },
+      "returns": "@access/domain/IssuedCode.shape.json"
+    },
+    "requireSignedIn": {
+      "description": "Allow any caller our token names; refuse anonymous otherwise.",
+      "accepts": {
+        "principal": {
+          "type": "@access/domain/Principal.shape.json",
+          "required": false
+        }
+      },
+      "returns": "@access/domain/Grant.shape.json"
+    },
+    "requireEmployee": {
+      "description": "Allow a caller of realm employee; refuse anonymous or forbidden.",
+      "accepts": {
+        "principal": {
+          "type": "@access/domain/Principal.shape.json",
+          "required": false
+        }
+      },
+      "returns": "@access/domain/Grant.shape.json"
+    },
+    "requireRecorder": {
+      "description": "Allow a caller holding the recorder role; refuse anonymous or forbidden.",
+      "accepts": {
+        "principal": {
+          "type": "@access/domain/Principal.shape.json",
+          "required": false
+        }
+      },
+      "returns": "@access/domain/Grant.shape.json"
+    },
+    "requireOtp": {
+      "description": "Allow a caller who answered a challenge on this call; refuse otp otherwise, which the policy turns into a challenge.",
+      "accepts": {
+        "challenge": {
+          "type": "@access/domain/Challenge.shape.json",
+          "required": false
+        }
+      },
+      "returns": "@access/domain/Grant.shape.json"
+    }
+  }
+}

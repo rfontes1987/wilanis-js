@@ -1,0 +1,61 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "label": "Identity",
+  "description": "What the sign-in graphs need from the outside: a directory's verdict on a credential, and our tokens. Bound by identity.binding.json to the @auth plugin and the two directories written in connections/; a production profile binds it to real directories.",
+  "operations": {
+    "verifyCustomer": {
+      "description": "Ask the customer directory about a credential.",
+      "accepts": {
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string",
+          "secret": true
+        }
+      },
+      "returns": "@access/domain/Verification.shape.json"
+    },
+    "verifyEmployee": {
+      "description": "Ask the employee directory about a credential.",
+      "accepts": {
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string",
+          "secret": true
+        }
+      },
+      "returns": "@access/domain/Verification.shape.json"
+    },
+    "issue": {
+      "description": "Sign our access token for a subject and open its session with the attributes given.",
+      "accepts": {
+        "subject": {
+          "type": "string"
+        },
+        "realm": {
+          "type": "string"
+        },
+        "roles": {
+          "type": "string[]"
+        },
+        "attributes": {
+          "type": "@access/domain/Session.shape.json"
+        }
+      },
+      "returns": "@access/domain/Tokens.shape.json"
+    },
+    "refresh": {
+      "description": "Trade a refresh token for a new pair, when it is good.",
+      "accepts": {
+        "refreshToken": {
+          "type": "string",
+          "secret": true
+        }
+      },
+      "returns": "@access/domain/Refreshed.shape.json"
+    }
+  }
+}

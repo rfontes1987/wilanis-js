@@ -6,9 +6,6 @@
     "route": "/monitor/{id}",
     "method": "GET",
     "produces": "application/json",
-    "access": {
-      "open": true
-    },
     "response": {
       "refusals": {
         "missing": 404,

@@ -1,28 +1,40 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
   "label": "POST /monitor.csv",
-  "description": "POST /monitor.csv with a text/csv body (header url,method) \u2192 201 with every entry recorded, in file order. The file streams into the blob registry; the graph gets its handle. 502 as upstream when the monitor API broke.",
-  "kind": "@http/http.trigger-kind.json",
+  "description": "POST /monitor.csv with a text/csv body (header url,method) \u2192 201 with every entry recorded, in file order. The file streams into the blob registry; the graph gets its handle. 502 as upstream when the monitor API broke. Employees holding the recorder role only: 401 as anonymous without a token or as invalid_credential with a bad one, 403 as forbidden for a customer or an employee without the role.",
   "settings": {
     "route": "/monitor.csv",
     "method": "POST",
     "consumes": "text/csv",
     "produces": "application/json",
-    "access": {
-      "open": true
-    },
     "body": "blob",
     "response": {
       "status": {
         "default": 201
       },
       "refusals": {
-        "upstream": 502
+        "upstream": 502,
+        "anonymous": 401,
+        "invalid_credential": 401,
+        "forbidden": 403
       }
     }
   },
   "in": "@monitor/edge/CsvUpload.shape.json",
   "out": "@monitor/edge/EntryView.shape.json[]",
+  "policies": [
+    {
+      "policy": "@access/edge/employees-only.policy.json",
+      "in": {
+        "token": [
+          "{{request.headers.authorization}}",
+          "{{request.cookies.session}}"
+        ]
+      }
+    },
+    "@access/edge/can-record.policy.json"
+  ],
+  "kind": "@http/http.trigger-kind.json",
   "fire": {
     "run": "@monitor/domain/monitor.port.json#import",
     "in": {

@@ -1,0 +1,53 @@
+{
+  "name": "@wilanis/access",
+  "version": "0.1.0",
+  "description": "A wilanis tree to include: sign-in against directories that all end in the tree's own token, refresh and sign-out, a session with typed attributes, the policies that gate other features' triggers (signed in, employees only, a role, a one-time code), and the command that issues a code. Pure JSON; the host binds identity.port.json to its directories.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Rafael Fontes <rfontes1987@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rfontes1987/wilanis-js.git",
+    "directory": "libraries/access"
+  },
+  "homepage": "https://github.com/rfontes1987/wilanis-js/tree/main/libraries/access#readme",
+  "bugs": "https://github.com/rfontes1987/wilanis-js/issues",
+  "keywords": [
+    "wilanis",
+    "declarative",
+    "auth",
+    "policy",
+    "session",
+    "otp",
+    "tree"
+  ],
+  "files": [
+    "features",
+    "connections",
+    "project.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "check": "wilanis check .",
+    "rehearse": "wilanis rehearse ."
+  },
+  "peerDependencies": {
+    "@wilanis/plugin-auth": "0.1.0",
+    "@wilanis/plugin-http": "0.1.0",
+    "@wilanis/runtime": "0.1.0"
+  },
+  "devDependencies": {
+    "@wilanis/compiler": "0.1.0",
+    "@wilanis/core": "0.1.0",
+    "@wilanis/plugin-auth": "0.1.0",
+    "@wilanis/plugin-http": "0.1.0",
+    "@wilanis/runtime": "0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

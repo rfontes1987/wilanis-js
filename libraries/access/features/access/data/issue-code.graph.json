@@ -1,0 +1,67 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "label": "Issue a code",
+  "description": "Data graph behind deliverCode: give the challenge its code and hand it back, or refuse unknown_challenge.",
+  "in": "@access/edge/ChallengeRef.shape.json",
+  "out": {
+    "type": "@access/domain/IssuedCode.shape.json",
+    "from": [
+      "code",
+      "unknown"
+    ]
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "asked",
+      "label": "Give it a code",
+      "run": "@auth/challenge.port.json#issue",
+      "in": {
+        "id": "{{in.id}}"
+      }
+    },
+    {
+      "type": "@wilanis/node/switch.schema.json",
+      "id": "route",
+      "label": "Was there a challenge?",
+      "in": {
+        "issued": "{{asked.issued}}",
+        "id": "{{asked.id}}",
+        "code": "{{asked.code}}",
+        "expiresAt": "{{asked.expiresAt}}"
+      },
+      "rules": [
+        {
+          "when": "issued == true && has(id) && has(code) && has(expiresAt)",
+          "to": "code"
+        }
+      ],
+      "else": "unknown"
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "code",
+      "label": "The code",
+      "run": "@std/object.port.json#make",
+      "in": {
+        "value": {
+          "id": "{{asked.id}}",
+          "code": "{{asked.code}}",
+          "expiresAt": "{{asked.expiresAt}}"
+        },
+        "type": "@access/domain/IssuedCode.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "unknown",
+      "label": "No such challenge",
+      "run": "@std/outcome.port.json#refuse",
+      "in": {
+        "reason": "unknown_challenge",
+        "message": "challenge {{in.id}} is unknown or has expired",
+        "type": "@access/domain/IssuedCode.shape.json"
+      }
+    }
+  ]
+}

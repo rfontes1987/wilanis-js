@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "Tokens",
+  "description": "Our token pair and the session it opened.",
+  "layer": "core",
+  "fields": {
+    "accessToken": {
+      "type": "string"
+    },
+    "refreshToken": {
+      "type": "string"
+    },
+    "tokenType": {
+      "type": "string"
+    },
+    "expiresIn": {
+      "type": "number"
+    },
+    "sessionId": {
+      "type": "string"
+    }
+  }
+}

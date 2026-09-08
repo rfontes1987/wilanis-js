@@ -1,0 +1,69 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "label": "Require an employee",
+  "description": "A token of realm employee is allowed; a customer's token is forbidden; none is anonymous.",
+  "in": "@access/domain/PrincipalGate.shape.json",
+  "out": {
+    "type": "@access/domain/Grant.shape.json",
+    "from": [
+      "granted",
+      "forbidden",
+      "anonymous"
+    ]
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/switch.schema.json",
+      "id": "decide",
+      "label": "Who is it?",
+      "in": {
+        "principal": "{{in.principal}}"
+      },
+      "rules": [
+        {
+          "when": "has(principal) && principal.realm == 'employee'",
+          "to": "granted"
+        },
+        {
+          "when": "has(principal)",
+          "to": "forbidden"
+        }
+      ],
+      "else": "anonymous"
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "granted",
+      "label": "Allowed",
+      "run": "@std/object.port.json#make",
+      "in": {
+        "value": {
+          "allowed": true
+        },
+        "type": "@access/domain/Grant.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "forbidden",
+      "label": "Not an employee",
+      "run": "@std/outcome.port.json#refuse",
+      "in": {
+        "reason": "forbidden",
+        "message": "this is for employees",
+        "type": "@access/domain/Grant.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "anonymous",
+      "label": "No caller",
+      "run": "@std/outcome.port.json#refuse",
+      "in": {
+        "reason": "anonymous",
+        "message": "sign in first: no token was presented",
+        "type": "@access/domain/Grant.shape.json"
+      }
+    }
+  ]
+}

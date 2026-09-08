@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "Issued code",
+  "description": "The code of a challenge and when it expires. Printed here; a real tree delivers it instead.",
+  "layer": "edge",
+  "fields": {
+    "id": {
+      "type": "string"
+    },
+    "code": {
+      "type": "string"
+    },
+    "expiresAt": {
+      "type": "string"
+    }
+  }
+}

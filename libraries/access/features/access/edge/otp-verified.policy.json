@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/policy.schema.json",
+  "label": "One-time code verified",
+  "description": "The caller has answered a one-time challenge on this very call. Without one, the caller is challenged: told a challenge id and how to obtain and present the code.",
+  "decide": {
+    "run": "@access/domain/access.port.json#requireOtp",
+    "in": {
+      "challenge": "{{request.challenge}}"
+    }
+  },
+  "outcomes": {
+    "otp": {
+      "effect": "challenge",
+      "method": "otp",
+      "description": "open a challenge; the caller repeats the call with --challenge-id and --code"
+    }
+  }
+}

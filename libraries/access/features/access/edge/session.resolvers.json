@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/resolvers.schema.json",
+  "label": "Session context",
+  "description": "The session the guard identified, read by the data graphs that store and fetch its attributes.",
+  "resolvers": {
+    "sid": {
+      "label": "The caller's session id",
+      "read": "request.session.id",
+      "description": "present on every trigger a signed-in policy gates: the guard verified the token and found its session, and the policy proves it (A006)",
+      "required": true
+    }
+  }
+}

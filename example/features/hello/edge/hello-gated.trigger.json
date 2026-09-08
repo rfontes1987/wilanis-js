@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "label": "hello-gated",
+  "description": "wilanis run @hello/edge/hello-gated.trigger.json: gated by the one-time code policy, which is given the challenge answer from --challenge-id and --code. Run it bare and it answers a challenge id and how to unlock it; run issue-otp with that id to get the code; run it again with both flags and it greets.",
+  "settings": {
+    "command": "hello-gated"
+  },
+  "out": "@hello/edge/GreetingView.shape.json",
+  "policies": [
+    {
+      "policy": "@access/edge/otp-verified.policy.json",
+      "in": {
+        "challenge": {
+          "id": "{{request.flags['challenge-id']}}",
+          "code": "{{request.flags.code}}"
+        }
+      }
+    }
+  ],
+  "kind": "@cli/cli.trigger-kind.json",
+  "fire": {
+    "run": "@hello/domain/greeting.port.json#hello"
+  }
+}

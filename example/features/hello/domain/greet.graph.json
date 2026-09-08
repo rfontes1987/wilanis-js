@@ -1,0 +1,42 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "label": "Greet",
+  "description": "Compose the greeting from the domain's own word for who got through.",
+  "constants": {
+    "who": {
+      "type": "string",
+      "value": "gated",
+      "description": "who is greeted"
+    }
+  },
+  "out": {
+    "type": "@hello/domain/Greeting.shape.json",
+    "from": "greeting"
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "said",
+      "label": "Say it",
+      "run": "@std/text.port.json#fill",
+      "in": {
+        "template": "hello, {who}",
+        "values": {
+          "who": "{{const.who}}"
+        }
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "greeting",
+      "label": "As a greeting",
+      "run": "@std/object.port.json#make",
+      "in": {
+        "value": {
+          "greeting": "{{said}}"
+        },
+        "type": "@hello/domain/Greeting.shape.json"
+      }
+    }
+  ]
+}

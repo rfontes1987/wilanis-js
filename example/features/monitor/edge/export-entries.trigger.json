@@ -7,9 +7,6 @@
     "route": "/monitor.csv",
     "method": "GET",
     "produces": "text/csv",
-    "access": {
-      "open": true
-    },
     "response": {
       "refusals": {
         "upstream": 502

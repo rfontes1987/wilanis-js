@@ -1,0 +1,34 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "label": "POST /api/v1/token/refresh",
+  "description": "Trade a refresh token for a new pair. The old one is spent either way; an unknown, spent or expired one is 401 as invalid_refresh.",
+  "kind": "@http/http.trigger-kind.json",
+  "settings": {
+    "route": "/api/v1/token/refresh",
+    "method": "POST",
+    "produces": "application/json",
+    "consumes": "application/json",
+    "body": "@access/edge/RefreshRequest.shape.json",
+    "response": {
+      "refusals": {
+        "invalid_refresh": 401
+      },
+      "cookies": {
+        "session": {
+          "from": "accessToken",
+          "httpOnly": true,
+          "sameSite": "lax",
+          "maxAge": 900
+        }
+      }
+    }
+  },
+  "in": "@access/edge/RefreshRequest.shape.json",
+  "out": "@access/edge/TokensView.shape.json",
+  "fire": {
+    "run": "@access/domain/access.port.json#refresh",
+    "in": {
+      "refreshToken": "{{request.body.refreshToken}}"
+    }
+  }
+}

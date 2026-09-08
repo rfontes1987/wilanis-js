@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "label": "GET /api/v1/me/preferences",
+  "description": "The caller's preferences, read from the session the token names. Gated by signed-in, the token read from the Authorization header or the session cookie.",
+  "settings": {
+    "route": "/api/v1/me/preferences",
+    "method": "GET",
+    "produces": "application/json",
+    "response": {
+      "refusals": {
+        "anonymous": 401,
+        "invalid_credential": 401
+      }
+    }
+  },
+  "out": "@access/edge/PreferencesView.shape.json",
+  "policies": [
+    {
+      "policy": "@access/edge/signed-in.policy.json",
+      "in": {
+        "token": [
+          "{{request.headers.authorization}}",
+          "{{request.cookies.session}}"
+        ]
+      }
+    }
+  ],
+  "kind": "@http/http.trigger-kind.json",
+  "fire": {
+    "run": "@access/domain/access.port.json#preferences"
+  }
+}

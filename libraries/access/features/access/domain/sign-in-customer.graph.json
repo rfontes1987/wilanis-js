@@ -1,0 +1,90 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "label": "Sign a customer in",
+  "description": "Ask the customer directory about the credential, then decide: verified issues our token with realm customer and the directory's groups as roles, and opens the session with the display name; rejected refuses bad_credentials; anything else refuses directory_unavailable. The realm is this graph's decision, never the caller's.",
+  "constants": {
+    "realm": {
+      "type": "string",
+      "value": "customer",
+      "description": "the realm every token this sign-in issues carries"
+    }
+  },
+  "in": "@access/domain/Credential.shape.json",
+  "out": {
+    "type": "@access/domain/Tokens.shape.json",
+    "from": [
+      "issued",
+      "rejected",
+      "unavailable"
+    ]
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "checked",
+      "label": "Ask the directory",
+      "run": "@access/domain/identity.port.json#verifyCustomer",
+      "in": {
+        "username": "{{in.username}}",
+        "password": "{{in.password}}"
+      }
+    },
+    {
+      "type": "@wilanis/node/switch.schema.json",
+      "id": "route",
+      "label": "What did the directory say?",
+      "in": {
+        "status": "{{checked.status}}",
+        "identity": "{{checked.identity}}"
+      },
+      "rules": [
+        {
+          "when": "status == 'verified' && has(identity)",
+          "to": "issued"
+        },
+        {
+          "when": "status == 'rejected'",
+          "to": "rejected"
+        }
+      ],
+      "else": "unavailable"
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "issued",
+      "label": "Issue our token",
+      "run": "@access/domain/identity.port.json#issue",
+      "in": {
+        "subject": "{{checked.identity.subject}}",
+        "realm": "{{const.realm}}",
+        "roles": "{{checked.identity.groups}}",
+        "attributes": {
+          "displayName": "{{checked.identity.name}}",
+          "realm": "{{const.realm}}"
+        }
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "rejected",
+      "label": "Bad credentials",
+      "run": "@std/outcome.port.json#refuse",
+      "in": {
+        "reason": "bad_credentials",
+        "message": "the username or password is wrong",
+        "type": "@access/domain/Tokens.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "unavailable",
+      "label": "Directory unavailable",
+      "run": "@std/outcome.port.json#refuse",
+      "in": {
+        "reason": "directory_unavailable",
+        "message": "the directory could not be asked",
+        "type": "@access/domain/Tokens.shape.json"
+      }
+    }
+  ]
+}

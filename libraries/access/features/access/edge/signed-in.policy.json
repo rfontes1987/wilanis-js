@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/policy.schema.json",
+  "label": "Signed in",
+  "description": "Any caller our token names: a customer or an employee. Anonymous callers are denied.",
+  "decide": {
+    "run": "@access/domain/access.port.json#requireSignedIn",
+    "in": {
+      "principal": "{{request.principal}}"
+    }
+  },
+  "proves": [
+    "request.principal",
+    "request.session"
+  ],
+  "outcomes": {
+    "anonymous": {
+      "effect": "deny",
+      "description": "no token was presented"
+    }
+  }
+}

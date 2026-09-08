@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "label": "Require a one-time code",
+  "description": "A challenge answered on this call, verified by the guard, is allowed; anything else refuses otp, which the policy turns into a challenge.",
+  "in": "@access/domain/ChallengeGate.shape.json",
+  "out": {
+    "type": "@access/domain/Grant.shape.json",
+    "from": [
+      "granted",
+      "otp"
+    ]
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/switch.schema.json",
+      "id": "decide",
+      "label": "Was a code answered?",
+      "in": {
+        "challenge": "{{in.challenge}}"
+      },
+      "rules": [
+        {
+          "when": "has(challenge) && challenge.verified == true",
+          "to": "granted"
+        }
+      ],
+      "else": "otp"
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "granted",
+      "label": "Allowed",
+      "run": "@std/object.port.json#make",
+      "in": {
+        "value": {
+          "allowed": true
+        },
+        "type": "@access/domain/Grant.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "otp",
+      "label": "No code answered",
+      "run": "@std/outcome.port.json#refuse",
+      "in": {
+        "reason": "otp",
+        "message": "this command needs a one-time code",
+        "type": "@access/domain/Grant.shape.json"
+      }
+    }
+  ]
+}

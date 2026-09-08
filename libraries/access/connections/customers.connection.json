@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/connection.schema.json",
+  "label": "Customer directory",
+  "description": "The customers, written in the connection: ana (password ana-pass, group customer). For running the access tree alone; a production profile points the same domain port at an OIDC issuer such as Okta.",
+  "kind": "@auth/directory.connection-kind.json",
+  "settings": {
+    "users": [
+      {
+        "username": "ana",
+        "passwordHash": "scrypt:c2FsdC1hbmEtMDAwMDAwMQ:sFkuzjzEGVI3rUhiD0_oBkeRkhMeZH71meOkdSmBXSo",
+        "name": "Ana",
+        "groups": [
+          "customer"
+        ]
+      }
+    ]
+  }
+}

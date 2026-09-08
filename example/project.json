@@ -2,9 +2,10 @@
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/project.schema.json",
   "label": "Monitor",
   "name": "monitor",
-  "description": "A monitor of observed HTTP calls: the routes talk to a REST API (mockapi.io); entries are imported from and exported to CSV files through the blob registry. Plugins come from npm packages named by \"from\". No secrets: the API is public.",
+  "description": "A monitor of observed HTTP calls: the routes talk to a REST API (mockapi.io); entries are imported from and exported to CSV files through the blob registry. Reads are public; writes are for signed-in employees holding the recorder role, identified by our own token, issued by the included access tree (@wilanis/access) at /api/v1/auth-employees against a directory this project binds (customers sign in at /api/v1/auth-customers and hold a token too, but no write). Preferences live in the session. A command-line greeting is gated by a one-time code. Plugins come from npm packages named by \"from\".",
   "aliases": {
-    "@monitor": "@features/monitor"
+    "@monitor": "@features/monitor",
+    "@hello": "@features/hello"
   },
   "plugins": [
     {
@@ -31,8 +32,48 @@
     {
       "use": "@reload",
       "from": "@wilanis/plugin-reload"
+    },
+    {
+      "use": "@auth",
+      "from": "@wilanis/plugin-auth",
+      "settings": {
+        "tokens": {
+          "issuer": "monitor",
+          "audience": "monitor-api",
+          "secret": "{{secrets.jwt}}",
+          "accessTtl": 900,
+          "refreshTtl": 604800
+        },
+        "store": {
+          "dir": ".wilanis/auth"
+        },
+        "session": "@access/domain/Session.shape.json",
+        "challenge": {
+          "ttl": 300,
+          "attempts": 5,
+          "digits": 6,
+          "methods": {
+            "otp": {
+              "description": "a one-time code: printed by the issue-otp command in this example, delivered out of band in a real tree -- the binding of access.port.json#deliverCode decides",
+              "obtain": "wilanis run @access/edge/issue-otp.trigger.json --challenge-id={id}"
+            }
+          }
+        }
+      }
     }
   ],
+  "includes": [
+    {
+      "from": "@wilanis/access",
+      "features": [
+        "access"
+      ],
+      "description": "sign-in, sessions, policies and the one-time code, as a tree of their own; identity.port.json is bound below, in features/directories"
+    }
+  ],
+  "secrets": {
+    "jwt": "MONITOR_JWT_SECRET"
+  },
   "startup": [
     {
       "label": "Reach the entry store",
@@ -53,9 +94,10 @@
   ],
   "profiles": {
     "live": {
-      "description": "The real monitor API.",
+      "description": "The real monitor API, and the directories written in the connections. A production profile binds identity.port.json to a binding whose connections are an OIDC issuer and LDAP; nothing else changes.",
       "bindings": {
-        "@monitor/domain/monitor.port.json": "@monitor/data/monitor-rest.binding.json"
+        "@monitor/domain/monitor.port.json": "@monitor/data/monitor-rest.binding.json",
+        "@access/domain/identity.port.json": "@features/directories/data/identity.binding.json"
       }
     }
   }

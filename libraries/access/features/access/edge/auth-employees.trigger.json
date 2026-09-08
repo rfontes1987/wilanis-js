@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "label": "POST /api/v1/auth-employees",
+  "description": "Employees sign in: the credential is verified against the employee directory and our own token is issued, realm employee, roles from the directory's groups. Same answers as the customer route: the caller cannot tell the directories apart.",
+  "kind": "@http/http.trigger-kind.json",
+  "settings": {
+    "route": "/api/v1/auth-employees",
+    "method": "POST",
+    "produces": "application/json",
+    "consumes": "application/json",
+    "body": "@access/edge/Credentials.shape.json",
+    "response": {
+      "refusals": {
+        "bad_credentials": 401,
+        "directory_unavailable": 503
+      },
+      "cookies": {
+        "session": {
+          "from": "accessToken",
+          "httpOnly": true,
+          "sameSite": "lax",
+          "maxAge": 900
+        }
+      }
+    }
+  },
+  "in": "@access/edge/Credentials.shape.json",
+  "out": "@access/edge/TokensView.shape.json",
+  "fire": {
+    "run": "@access/domain/access.port.json#signInEmployee",
+    "in": {
+      "username": "{{request.body.username}}",
+      "password": "{{request.body.password}}"
+    }
+  }
+}

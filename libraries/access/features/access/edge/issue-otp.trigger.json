@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "label": "issue-otp",
+  "description": "Give an open challenge its code and print it: wilanis run @access/edge/issue-otp.trigger.json --challenge-id=XXXX-XXXX. This stands in for delivery: a real tree binds deliverCode to a graph that mails or texts the code and answers nothing. An unknown or expired challenge is refused as unknown_challenge.",
+  "kind": "@cli/cli.trigger-kind.json",
+  "settings": {
+    "command": "issue-otp"
+  },
+  "in": "@access/edge/ChallengeRef.shape.json",
+  "out": "@access/edge/IssuedCodeView.shape.json",
+  "fire": {
+    "run": "@access/domain/access.port.json#deliverCode",
+    "in": {
+      "id": "{{request.flags['challenge-id']}}"
+    }
+  }
+}

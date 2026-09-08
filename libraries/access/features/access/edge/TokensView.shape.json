@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "Tokens (answer)",
+  "description": "What a sign-in or a refresh answers the caller: the access token to present as Authorization: Bearer (also set as the session cookie), the refresh token to renew it with, and when it expires.",
+  "layer": "edge",
+  "fields": {
+    "accessToken": {
+      "type": "string"
+    },
+    "refreshToken": {
+      "type": "string"
+    },
+    "tokenType": {
+      "type": "string"
+    },
+    "expiresIn": {
+      "type": "number"
+    }
+  }
+}

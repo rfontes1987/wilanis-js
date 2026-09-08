@@ -1,0 +1,37 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "label": "POST /api/v1/sign-out",
+  "description": "End the caller's session: its tokens no longer verify, and the session cookie is cleared. Gated by signed-in, the token read from the Authorization header or the session cookie: 401 as anonymous without a token, 401 as invalid_credential with one that does not verify.",
+  "settings": {
+    "route": "/api/v1/sign-out",
+    "method": "POST",
+    "produces": "application/json",
+    "response": {
+      "refusals": {
+        "anonymous": 401,
+        "invalid_credential": 401
+      },
+      "cookies": {
+        "session": {
+          "clear": true
+        }
+      }
+    }
+  },
+  "out": "@access/edge/SignedOut.shape.json",
+  "policies": [
+    {
+      "policy": "@access/edge/signed-in.policy.json",
+      "in": {
+        "token": [
+          "{{request.headers.authorization}}",
+          "{{request.cookies.session}}"
+        ]
+      }
+    }
+  ],
+  "kind": "@http/http.trigger-kind.json",
+  "fire": {
+    "run": "@access/domain/access.port.json#signOut"
+  }
+}

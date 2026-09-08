@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/feature.schema.json",
+  "label": "Access",
+  "description": "Who is calling and what they may do: sign-in against two directories (customers, employees) that both end in our own token; refresh and sign-out; preferences kept in the session; the policies other features gate their triggers with; and the one-time code a challenged command is unlocked with. identity.port.json is what a host binds to its own directories.",
+  "exports": [
+    "@features/access/domain/access.port.json",
+    "@features/access/domain/identity.port.json",
+    "@features/access/edge/signed-in.policy.json",
+    "@features/access/edge/employees-only.policy.json",
+    "@features/access/edge/can-record.policy.json",
+    "@features/access/edge/otp-verified.policy.json"
+  ],
+  "effects": [
+    "@auth/session.port.json#get",
+    "@auth/session.port.json#set",
+    "@auth/session.port.json#end",
+    "@auth/challenge.port.json#issue"
+  ]
+}

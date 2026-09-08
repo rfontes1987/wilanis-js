@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/policy.schema.json",
+  "label": "Employees only",
+  "description": "A caller whose token was issued by the employee sign-in. A customer holds a perfectly valid token and is still denied.",
+  "decide": {
+    "run": "@access/domain/access.port.json#requireEmployee",
+    "in": {
+      "principal": "{{request.principal}}"
+    }
+  },
+  "proves": [
+    "request.principal",
+    "request.session"
+  ],
+  "outcomes": {
+    "anonymous": {
+      "effect": "deny"
+    },
+    "forbidden": {
+      "effect": "deny",
+      "description": "signed in, but not as an employee"
+    }
+  }
+}

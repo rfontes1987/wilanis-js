@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/feature.schema.json",
+  "label": "Hello",
+  "description": "A command-line greeting gated by a one-time code: the first run is challenged, issue-otp prints the code, the run with --challenge-id and --code goes through.",
+  "dependsOn": [
+    "access"
+  ],
+  "exports": [],
+  "effects": []
+}

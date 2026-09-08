@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "label": "Greeting",
+  "description": "The greeting the command answers.",
+  "operations": {
+    "hello": {
+      "description": "Say hello to whoever got through the gate.",
+      "returns": "@hello/domain/Greeting.shape.json"
+    }
+  }
+}
