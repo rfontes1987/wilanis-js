@@ -269,7 +269,13 @@ describe('sabotage', () => {
     expect(sabotage('connections/monitor-api.connection.json', d => { d.settings.throttle.concurrency = 'four'; })).toContain('C002');
   });
   it('G012 a map over something that is not a list', () => {
-    expect(sabotage('features/monitor/domain/remove-entries.graph.json', d => { d.nodes[0].over = '{{in}}'; })).toContain('G012');
+    expect(sabotage('features/monitor/domain/remove-entries.graph.json', d => { d.in = 'string'; })).toContain('G012');
+  });
+  it('B005 a graph that takes its input whole, bound to an operation that accepts two fields', () => {
+    expect(sabotage('features/monitor/domain/monitor.port.json', d => { d.operations.removeMany.accepts.reason = { type: 'string' }; })).toContain('B005');
+  });
+  it('B005 a graph that takes its input whole, fed a field of another type', () => {
+    expect(sabotage('features/monitor/domain/monitor.port.json', d => { d.operations.removeMany.accepts.ids.type = 'number[]'; })).toContain('B005');
   });
   it('X002 a content type with no codec', () => {
     expect(sabotage('features/monitor/edge/record-entry.trigger.json', d => { d.settings.consumes = 'application/xml'; })).toContain('X002');

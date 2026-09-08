@@ -88,11 +88,14 @@ export class Compiler {
     return { handler: key, op: o.op };
   }
 
-  /** A handler that runs a nested spec with the caller's `in` and forwards request, stubs and env. */
-  private nestedRunner(spec: KernelSpec): Handler {
+  /**
+   * A handler that runs a nested spec with the caller's `in` and forwards request, stubs and env. A graph that
+   * takes its input whole (an `in` that is not a shape) is handed it under the one key `in`, and unwraps it.
+   */
+  private nestedRunner(spec: KernelSpec, whole = false): Handler {
     return async ({ in: input, ctx }) => {
       const report = await new Kernel(this.handlers).run(spec, {
-        initial: { in: input, ...(ctx.request !== undefined ? { request: ctx.request } : {}) },
+        initial: { in: whole ? input.in : input, ...(ctx.request !== undefined ? { request: ctx.request } : {}) },
         stubs: ctx.stubs, signal: ctx.signal, env: ctx.env, nodePath: ctx.nodePath,
       });
       ctx.attach(report);
@@ -143,9 +146,12 @@ export class Compiler {
     if (bop.graph) {
       const g = this.scope.get('graph', bop.graph)!;
       const handlerKey = `graph:${g.path}`;
-      this.handlers[handlerKey] ??= this.nestedRunner(this.lowerGraph(g));
+      const whole = this.takesWhole(g);
+      this.handlers[handlerKey] ??= this.nestedRunner(this.lowerGraph(g), whole);
       const passIn: Record<string, KSource> = {};
-      for (const k of Object.keys(op.accepts ?? {})) passIn[k] = { ref: 'in', path: [k] };
+      // a graph whose in is a shape gets the operation's fields by name; one that takes a value whole gets the one field the operation accepts
+      if (whole) passIn.in = { ref: 'in', path: [Object.keys(op.accepts ?? {})[0]] };
+      else for (const k of Object.keys(op.accepts ?? {})) passIn[k] = { ref: 'in', path: [k] };
       nodes.op = { kind: 'call', handler: handlerKey, in: passIn };
     } else {
       const resolvers = this.resolverRoots(b.doc.resolvers);
@@ -157,6 +163,12 @@ export class Compiler {
     const spec: KernelSpec = { name: key, nodes, output: op.returns ? ['op'] : undefined };
     this.bindingSpecs.set(key, spec);
     return spec;
+  }
+
+  /** Whether a graph takes its input whole: it declares an `in` that is not a shape (a list, a scalar), read as {{in}}. */
+  private takesWhole(g: Loaded<GraphDoc>): boolean {
+    if (!g.doc.in) return false;
+    try { return this.scope.types.ref(g.doc.in).kind !== 'object'; } catch { return false; }
   }
 
   /** The resolvers a document names: name -> the segments read below request. A resolver is a read, so it lowers to no node. */

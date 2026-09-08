@@ -281,8 +281,16 @@ class Checker {
         const v = this.s.visibility(b, g); if (v) this.refuse('L005', b.path, v, `${at}/graph`);
         const gin = this.quiet(g.doc.in), gout = this.quiet(g.doc.out?.type);
         if (accepts) {
-          if (!gin) { if (Object.keys(op.accepts ?? {}).length) this.refuse('B005', b.path, `'${opName}' accepts fields but graph '${bop.graph}' takes nothing`, `${at}/graph`); }
-          else { const bad = assignable(accepts, gin); if (bad) this.refuse('B005', b.path, `'${opName}' accepts → graph in: ${bad}`, `${at}/graph`, "the operation's accepts must be assignable to the graph's in shape"); }
+          const names = Object.keys(op.accepts ?? {});
+          if (!gin) { if (names.length) this.refuse('B005', b.path, `'${opName}' accepts fields but graph '${bop.graph}' takes nothing`, `${at}/graph`); }
+          else if (gin.kind === 'object') { const bad = assignable(accepts, gin); if (bad) this.refuse('B005', b.path, `'${opName}' accepts → graph in: ${bad}`, `${at}/graph`, "the operation's accepts must be assignable to the graph's in shape"); }
+          else if (names.length !== 1) this.refuse('B005', b.path, `graph '${bop.graph}' takes ${show(gin)} whole, so '${opName}' must accept exactly one field; it accepts ${names.join(', ') || 'none'}`, `${at}/graph`, 'a graph whose in is not a shape receives the one field the operation accepts');
+          else {
+            // the graph takes a value whole: the operation's one field is that value
+            const f = (accepts as Extract<Type, { kind: 'object' }>).fields[names[0]];
+            if (!f.required) this.refuse('B005', b.path, `'${opName}' accepts '${names[0]}' optionally but graph '${bop.graph}' takes it whole, so it must be given`, `${at}/graph`);
+            const bad = assignable(f.type, gin); if (bad) this.refuse('B005', b.path, `'${opName}' accepts ${names[0]}: ${show(f.type)} → graph in ${show(gin)}: ${bad}`, `${at}/graph`);
+          }
         }
         if (returns && !gout) this.refuse('B005', b.path, `'${opName}' returns ${show(returns)} but graph '${bop.graph}' answers nothing`, `${at}/graph`);
         if (returns && gout) { const bad = assignable(gout, returns); if (bad) this.refuse('B005', b.path, `graph out → '${opName}' returns: ${bad}`, `${at}/graph`); }

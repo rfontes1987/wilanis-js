@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
   "label": "Remove entries",
-  "description": "Domain graph behind DELETE /monitor: one removal per id, all at once, and the graph answers only when every one of them has settled. A missing entry refuses the whole batch; the list answered keeps the order asked.",
-  "in": "@monitor/domain/EntryIds.shape.json",
+  "description": "Domain graph behind DELETE /monitor. It takes the list of ids itself: one removal per id, all at once, and the graph answers only when every one of them has settled. A missing entry refuses the whole batch; the list answered keeps the order asked.",
+  "in": "string[]",
   "out": {
     "type": "@monitor/domain/Entry.shape.json[]",
     "from": "removed"
@@ -14,7 +14,7 @@
       "label": "Remove each entry",
       "description": "monitor.remove once per id; the element is the id itself",
       "run": "@monitor/domain/monitor.port.json#remove",
-      "over": "{{in.ids}}",
+      "over": "{{in}}",
       "bind": {
         "id": ""
       }

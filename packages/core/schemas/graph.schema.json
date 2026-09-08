@@ -50,7 +50,7 @@
       }
     },
     "in": {
-      "description": "What the graph takes, read as {{in.field}}. Absent: takes nothing.",
+      "description": "What the graph takes: a shape, read as {{in.field}}, or any other type (a list, a scalar), read whole as {{in}}. Absent: takes nothing.",
       "$ref": "common.schema.json#/$defs/typeRef"
     },
     "out": {
