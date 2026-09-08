@@ -4,11 +4,11 @@
  */
 
 export type Kind =
-  | 'project' | 'plugin' | 'port' | 'binding' | 'graph' | 'trigger'
+  | 'project' | 'plugin' | 'port' | 'binding' | 'graph' | 'trigger' | 'policy'
   | 'trigger-kind' | 'connection-kind' | 'connection' | 'codec' | 'feature' | 'shape' | 'scenario' | 'resolvers';
 
 export const KINDS: Kind[] = [
-  'project', 'plugin', 'port', 'binding', 'graph', 'trigger',
+  'project', 'plugin', 'port', 'binding', 'graph', 'trigger', 'policy',
   'trigger-kind', 'connection-kind', 'connection', 'codec', 'feature', 'shape', 'scenario', 'resolvers',
 ];
 
@@ -68,7 +68,7 @@ export type Value = unknown;
 export type Values = Record<string, Value>;
 
 /** One resolver: a named read of the trigger kind's context, request.params.id or request.headers['user-agent']. Nothing runs. */
-export interface ResolverRead { read: string; label?: string; description?: string }
+export interface ResolverRead { read: string; label?: string; description?: string; /** read as present: every trigger reaching it must guarantee it, by its kind or by a policy that proves it (A006) */ required?: boolean }
 /** The resolvers a feature reads from the request, in one edge document a data graph or a binding names. */
 export interface ResolversDoc extends Envelope { resolvers: Record<string, ResolverRead> }
 
@@ -80,6 +80,13 @@ export interface ProjectDoc extends Envelope {
   aliases?: Record<string, string>;
   /** use: the alias root; from: the npm package that ships it (absent for the runtime's builtins @std and @cli). */
   plugins: { use: string; from?: string; settings?: Record<string, unknown> }[];
+  /**
+   * Trees this one includes: npm packages whose `features/` load as if they sat here, judged by every rule, bound
+   * by bindings and profiles. `features` picks which of the package's features come along (default: all). An
+   * include's aliases come along; its connections, plugins, settings, startup and profiles do not -- configuring
+   * a tree is the host's job, and a port the include leaves unbound is the host's to bind.
+   */
+  includes?: { from: string; features?: string[] }[];
   secrets?: Record<string, string>;
   /** What runs once when the tree is served, in order, after every plugin's postLoad and before any trigger kind starts: `required` (the default) stops serve when the step refuses. */
   startup?: StartupStep[];
@@ -87,9 +94,18 @@ export interface ProjectDoc extends Envelope {
   /** The blob registry's directory; absent: under the system temp dir. */
   blobs?: { dir?: string };
 }
+/**
+ * What a guarding plugin adds to every trigger kind's context once it has identified the caller (request.principal,
+ * request.session, request.challenge), and the reasons it refuses with on its own -- a credential that does not
+ * verify -- which every trigger giving it a credential must map like any other reason (T005).
+ */
+export interface GuardDoc { context: InlineObject; refuses?: Record<string, string>; credentials: Record<string, GuardCredential> }
+/** One credential the guard verifies: the type a trigger's attachment must give it, and the context fields it yields once verified. */
+export interface GuardCredential { type: TypeSpec; yields: string[]; description?: string }
 export interface PluginDoc extends Envelope {
   settings?: InlineObject;
-  grants: { ports?: string[]; triggerKinds?: string[]; connectionKinds?: string[]; codecs?: string[] };
+  grants: { ports?: string[]; triggerKinds?: string[]; connectionKinds?: string[]; codecs?: string[]; shapes?: string[] };
+  guard?: GuardDoc;
 }
 /**
  * `refuses`: running it ends the graph on purpose; its static `reason` input names the outcome, and a trigger
@@ -119,7 +135,31 @@ export interface GraphDoc extends Envelope {
 }
 /** What a trigger fires: one run node. The node type is implicit -- trigger.schema.json declares it. */
 export interface FireNode { description?: string; label?: string; run: string; in?: Values }
-export interface TriggerDoc extends Envelope { kind: string; settings: Record<string, unknown>; in?: TypeRef; out?: TypeRef; fire: FireNode }
+/**
+ * One policy attached to a trigger: the policy, and `in` -- the credentials this trigger gives the guard, by the names the
+ * guard's plugin.json declares (`token`, `challenge`), each read from the kind's context like any input; a list is the
+ * places one may sit, the first present wins. A bare path attaches a policy that reads what an earlier attachment supplied.
+ */
+export interface PolicyUse { policy: string; in?: Values; description?: string }
+export type PolicyRef = string | PolicyUse;
+export const policyPath = (p: PolicyRef) => (typeof p === 'string' ? p : p.policy);
+/**
+ * `policies`: what gates this trigger, in order -- the first that does not allow answers, and the trigger maps each reason
+ * they can refuse with like any other (T005). Absent, the trigger is public: no credential is read, no caller identified.
+ */
+export interface TriggerDoc extends Envelope { kind: string; settings: Record<string, unknown>; in?: TypeRef; out?: TypeRef; policies?: PolicyRef[]; fire: FireNode }
+/**
+ * How a policy answers one reason its decision can refuse with: `deny` ends the run there; `challenge` opens a
+ * challenge of `method` through the guarding plugin, and the caller is told how to answer it. Allow is the
+ * decision finishing, so it is never written.
+ */
+export interface Outcome { effect: 'deny' | 'challenge'; method?: string; description?: string }
+/**
+ * A gate on a trigger: `decide` fires a domain port operation the way a trigger's `fire` does, reading what the kind
+ * and the guard hand as request.*; the graph behind it allows by answering and refuses with a reason, and `outcomes`
+ * says what each reason means. Validating a credential never happens here: the guard has already done that.
+ */
+export interface PolicyDoc extends Envelope { decide: FireNode; outcomes: Record<string, Outcome>; /** request.* paths present once this policy allows -- request.principal, request.session -- which a required resolver may lean on (A006) */ proves?: string[] }
 /** `refusals`: the dotted settings path holding the map from a refusal's reason to how this kind answers it; every reason a trigger can reach must be a key there (T005). */
 export interface TriggerKindDoc extends Envelope { settings: InlineObject; context: InlineObject; refusals?: string }
 export interface ConnectionKindDoc extends Envelope { settings: InlineObject }
@@ -133,7 +173,7 @@ export interface ScenarioDoc extends Envelope {
 }
 
 export interface DocByKind {
-  project: ProjectDoc; plugin: PluginDoc; port: PortDoc; binding: BindingDoc; graph: GraphDoc; trigger: TriggerDoc;
+  project: ProjectDoc; plugin: PluginDoc; port: PortDoc; binding: BindingDoc; graph: GraphDoc; trigger: TriggerDoc; policy: PolicyDoc;
   'trigger-kind': TriggerKindDoc; 'connection-kind': ConnectionKindDoc; connection: ConnectionDoc; codec: CodecDoc;
   feature: FeatureDoc; shape: ShapeDoc; scenario: ScenarioDoc; resolvers: ResolversDoc;
 }
@@ -153,6 +193,8 @@ export interface Loaded<T extends AnyDoc = AnyDoc> {
   layer?: Layer;
   /** The plugin alias that shipped it, if native. */
   native?: string;
+  /** The package it was included from, when it is another tree's document rather than this one's. */
+  included?: string;
   /** Where it is on disk, so a reader can open it: under the tree, or under the plugin's package. */
   file?: string;
 }

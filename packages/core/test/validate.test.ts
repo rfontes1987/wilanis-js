@@ -20,6 +20,7 @@ const minimal: Record<Kind, Record<string, unknown>> = {
   binding: { port: '@features/f/f.port.json', operations: { get: { graph: '@features/f/graphs/g.graph.json' } } },
   graph: { nodes: [run('a')] },
   trigger: { kind: '@cli/cli.trigger-kind.json', settings: {}, fire: { run: '@features/f/domain/f.port.json#get' } },
+  policy: { decide: { run: '@features/f/domain/f.port.json#decide' }, outcomes: {} },
   'trigger-kind': { settings: { fields: {} }, context: { fields: {} } },
   'connection-kind': { settings: { fields: {} } },
   connection: { kind: '@http/http.connection-kind.json', settings: {} },

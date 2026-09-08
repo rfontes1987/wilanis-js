@@ -34,6 +34,36 @@
     "out": {
       "$ref": "common.schema.json#/$defs/typeRef"
     },
+    "policies": {
+      "description": "The policies that gate this trigger, in order: each decides over what the kind and the guard hand as request.*, and the first that does not allow answers. An attachment gives the guard the credentials it verifies, read from the kind's context like any input: { \"policy\": \"...\", \"in\": { \"token\": \"{{request.headers.authorization}}\" } } -- a list is the places a credential may sit, the first present wins. A bare path attaches a policy that reads what an earlier attachment supplied. Every reason a policy can refuse with is mapped like any other (T005). Absent: the trigger is public.",
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "common.schema.json#/$defs/path"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "policy": {
+                "$ref": "common.schema.json#/$defs/path"
+              },
+              "in": {
+                "description": "credential name -> a read of the kind's context, or a list of reads (the first present wins). The names are the guard's: token, challenge.",
+                "$ref": "common.schema.json#/$defs/values"
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "policy"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
     "fire": {
       "description": "What this trigger invokes: one run node. `run` names a domain port operation (path#operation) and `in` gives every value it takes, reading {{request.*}} from the kind's context. The node type is not written -- a trigger fires exactly one operation, so this schema is the declaration. A trigger never names a graph: it states what it wants done, and the port's binding decides how.",
       "type": "object",

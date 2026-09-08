@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/policy.schema.json",
+  "title": "policy",
+  "description": "A gate on a way in. A trigger names one or more policies; each fires a domain port operation the way a trigger's `fire` does, reading what the kind and the guarding plugin hand as request.* (the principal, the session, a challenge). The graph behind it allows by answering, and refuses with a reason where it does not; `outcomes` says what each reason means: deny, or challenge the caller. A policy never validates a credential -- the guard has done that before any policy runs -- it decides what a verified (or absent) identity may do.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "The kind of this document: its published schema URL, or the alias @wilanis/policy.schema.json.",
+      "enum": [
+        "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/policy.schema.json",
+        "@wilanis/policy.schema.json"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "label": {
+      "description": "A short human name for this document, shown wherever a reader sees it instead of its path. Absent: the file name stands in.",
+      "type": "string",
+      "minLength": 1
+    },
+    "decide": {
+      "description": "The decision: one run node. `run` names a domain port operation (path#operation) and `in` gives every value it takes, reading {{request.*}} -- request.principal, request.session, request.challenge from the guard, and whatever the kind hands. A read that may be missing (an anonymous caller has no principal) feeds an input the operation declares optional.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "label": {
+          "description": "A short human name for this decision, shown wherever a reader sees it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "run": {
+          "$ref": "common.schema.json#/$defs/opRef"
+        },
+        "in": {
+          "$ref": "common.schema.json#/$defs/values"
+        }
+      },
+      "required": [
+        "run"
+      ],
+      "additionalProperties": false
+    },
+    "outcomes": {
+      "description": "reason -> what it means. Every reason the decision can refuse with is a key here, and every key is a reason it reaches (A002, A003). `deny` ends the run; `challenge` asks the guard to open a challenge of `method` and tells the caller how to answer it. Allowing is the decision answering, so it is never written.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "common.schema.json#/$defs/ident"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "effect": {
+            "enum": [
+              "deny",
+              "challenge"
+            ]
+          },
+          "method": {
+            "description": "challenge only: the method the guard opens, one its settings declare (otp).",
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "effect"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "proves": {
+      "description": "request.* paths that are present once this policy allows -- request.principal, request.session for a policy that denies anonymous callers. A resolver declared required may lean on it (A006): the trigger the resolver is read under names this policy, so the read never finds nothing.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^request(?:\\.[A-Za-z0-9_]+|\\[(?:'[^'\\]]*'|\"[^\"\\]]*\")\\])+$"
+      },
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "$schema",
+    "description",
+    "decide",
+    "outcomes"
+  ],
+  "additionalProperties": false
+}

@@ -111,7 +111,7 @@ export class Compiler {
         // a refusal is the nested graph's declared outcome: it passes up as it is, reason and message, so the
         // trigger can answer it; a fault is named by the graph and node it broke in
         const refused = refusalOf(report);
-        if (refused) throw new Refusal(refused.reason, refused.message);
+        if (refused) throw new Refusal(refused.reason, refused.message, refused.detail);
         const failed = Object.entries(report.nodes).find(([, n]) => n.status === 'failed');
         throw new Error(`${spec.name}: ${failed ? `${failed[0]}: ${failed[1].error}` : 'failed'}`);
       }

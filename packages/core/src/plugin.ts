@@ -3,7 +3,8 @@
  * plugin.json, ports, trigger kinds, connection kinds, codecs, shapes -- JSON files a reader can open, the way
  * a library ships headers), the handlers behind its native
  * operations, the runtimes behind its trigger kinds, the codecs behind its content types, and two hooks:
- * `check` for its own rules, `postLoad` for work that happens once the tree is loaded and judged.
+ * `check` for its own rules, `postLoad` for work that happens once the tree is loaded and judged -- and, for the one
+ * plugin that identifies callers, a `guard`.
  *
  * A plugin package exports its PluginModule as the default export; project.json names the package in
  * `plugins[].from` and the runtime imports it. @std and @cli are built into the runtime and need no `from`.
@@ -122,6 +123,40 @@ export interface Codec {
 /** content type -> codec, as the plugin's settings table declares it. */
 export type Codecs = Record<string, Codec>;
 
+/** What a guard is handed on every fire of a trigger that attaches a policy. */
+export interface GuardArgs {
+  trigger: TriggerDoc;
+  /** The trigger kind, canonical. */
+  kind: string;
+  /** The kind's context as assembled so far; what `identify` answers is added to it. */
+  request: Record<string, unknown>;
+  /** The credentials the trigger's policy attachments gave, by the names the guard's plugin.json declares, read from the context; absent when the request carried none. */
+  credentials: Record<string, unknown>;
+  /** The same, as written on the trigger: the {{request.*}} reads, so the guard can tell a caller where to present an answer. */
+  reads: Record<string, unknown>;
+  /** The guarding plugin's settings from project.json, secrets substituted. */
+  settings: Record<string, unknown>;
+  env: Record<string, unknown>;
+}
+/**
+ * The one plugin that identifies callers. The runtime calls it around every fire of a gated trigger, for every
+ * trigger kind alike: `identify` before any policy, `challenge` when a policy's outcome asks for one, `settle`
+ * after the run. Validating a credential lives here and nowhere else; what a verified caller may do is the
+ * policies' decision. Its `plugin.json` declares `guard`: the context it adds and the reasons it refuses with.
+ */
+export interface Guard {
+  /**
+   * Verify the credentials the trigger gave and answer what the context gains: request.principal, request.session,
+   * request.challenge. A credential that is there and does not verify is refused here with one of the plugin's
+   * declared reasons; an absent one is not -- the caller is anonymous and the policies decide.
+   */
+  identify(a: GuardArgs): Promise<{ context: Record<string, unknown> } | { refuse: { reason: string; message: string; detail?: Record<string, unknown> } }>;
+  /** Open a challenge a policy outcome asked for; answers what the caller is told, and the detail (its id, how to answer) that rides with the refusal. */
+  challenge(a: GuardArgs & { policy: string; reason: string; message: string; method?: string }): Promise<{ message: string; detail: Record<string, unknown> }>;
+  /** After the trigger's operation ran: consume what was single-use, stamp what was proven. */
+  settle?(a: GuardArgs & { report: Report }): Promise<void>;
+}
+
 /** What a plugin's `check` sees: the resolved tree, its own settings, and the way to refuse. */
 export interface PluginCheckContext {
   scope: Scope;
@@ -157,6 +192,8 @@ export interface PluginModule {
   triggers?: Record<string, TriggerRuntime>;
   /** codec path -> implementation */
   codecs?: Record<string, Codec>;
+  /** Identifies callers and opens challenges; at most one plugin of a tree has one, and its plugin.json declares `guard`. */
+  guard?: Guard;
   /** Plugin-specific rules (X codes), run by `checkTree` after the generic ones. */
   check?(ctx: PluginCheckContext): void;
   /**

@@ -1,14 +1,15 @@
 /**
  * wilanis check. Judges the whole tree statically so that nothing refuses at load. Rule families:
  *   D documents   R references   L layers/effects/visibility   G graphs   P static fields/resolvers
- *   B bindings/profiles   T triggers   C connections/settings   S scenarios   X plugin-specific
+ *   B bindings/profiles   T triggers   A access (policies, credentials)   C connections/settings   S scenarios
+ *   X plugin-specific
  */
 import type { LoadResult } from '@wilanis/core';
 import {
   isMap, isRun, isSwitch, RefusalList, type BindingDoc, type Fields, type GraphDoc, type Loaded, type Node,
-  type Operation, type PortDoc, type ProjectDoc, type ResolversDoc, type ShapeDoc, type TriggerDoc, type TypeSpec, type ConnectionDoc,
+  type Operation, type PolicyDoc, type PortDoc, type ProjectDoc, type ResolversDoc, type ShapeDoc, type TriggerDoc, type TypeSpec, type ConnectionDoc, policyPath,
 } from '@wilanis/core';
-import { Scope, WHOLE_TEMPLATE, splitPath, type OpHit } from '@wilanis/core';
+import { Scope, WHOLE_TEMPLATE, READ_PATH, splitPath, type OpHit } from '@wilanis/core';
 import { assignable, conforms, EMPTY_OBJECT, hasVars, show, STRING, substitute, typeAt, TypeError_, type Read, type Type } from '@wilanis/core';
 import { expr } from '@wilanis/core';
 import { readPath } from '@wilanis/engine';
@@ -52,6 +53,7 @@ class Checker {
     for (const r of this.s.registry.all('resolvers')) this.checkResolversDoc(r);
     for (const g of this.s.registry.all('graph')) this.checkGraph(g, this.s.roleOf(g.path));
     for (const b of this.s.registry.all('binding')) this.checkBinding(b);
+    for (const p of this.s.registry.all('policy')) this.checkPolicy(p);
     for (const t of this.s.registry.all('trigger')) this.checkTrigger(t);
     for (const sc of this.s.registry.all('scenario')) if (!this.s.get('trigger', sc.doc.trigger)) this.refuse('S001', sc.path, `scenario names unknown trigger '${sc.doc.trigger}'`, 'trigger', 'wilanis ls trigger');
     this.checkStartup(); // last: it walks bindings and graphs, so every resolvers document must already be read
@@ -203,7 +205,8 @@ class Checker {
       const path = splitPath(spec.read).slice(1);
       const read = this.s.requestRead(path);
       if (typeof read === 'string') { this.refuse('P002', r.path, `resolver '${name}': ${read}`, `${at}/read`, 'wilanis describe <trigger kind> shows what each kind hands as request.*'); continue; }
-      out[name] = { path, read };
+      // a resolver declared required is read as present; every trigger reaching it must then guarantee it (A006)
+      out[name] = { path, read: spec.required ? { type: read.type, optional: false } : read, required: Boolean(spec.required) };
     }
     this.resolverReads.set(r.path, out);
   }
@@ -222,9 +225,9 @@ class Checker {
   }
 
   /** The request.* paths a set of reads touches through the resolvers they name: what a trigger kind must hand. */
-  private requestNeedsOf(resolvers: Record<string, ResolverRead>, reads: string[][], file: string): { path: string[]; file: string }[] {
-    const out: { path: string[]; file: string }[] = [];
-    for (const p of reads) { const r = resolvers[p[0]]; if (r) out.push({ path: [...r.path, ...p.slice(1)], file }); }
+  private requestNeedsOf(resolvers: Record<string, ResolverRead>, reads: string[][], file: string): RequestNeed[] {
+    const out: RequestNeed[] = [];
+    for (const p of reads) { const r = resolvers[p[0]]; if (r) out.push({ path: [...r.path, ...p.slice(1)], file, required: r.required ? r.path : undefined }); }
     return out;
   }
 
@@ -404,9 +407,36 @@ class Checker {
     const readsIn = new Set<string>(), readsConst = new Set<string>(), readNodes = new Set<string>();
     const outTypes = new Map<string, Type | undefined>();
     const computing = new Set<string>();
-    const present = new Map<string, Set<string>>(); // node -> source paths a routing switch proved present
+    // first pass, syntactic: what each node reads, and what a routing switch proves present for the node it routes to
+    const deps = new Map<string, Set<string>>();
+    const present = new Map<string, Set<string>>();
+    for (const n of nodes.values()) {
+      const d = new Set<string>();
+      for (const p of this.s.templateReads(isMap(n) ? [n.in ?? {}, n.over] : n.in ?? {})) if (nodes.has(p[0])) d.add(p[0]);
+      deps.set(n.id, d);
+      if (!isSwitch(n)) continue;
+      for (const rule of n.rules) {
+        let parsed: expr.Expr;
+        try { parsed = expr.parse(rule.when); } catch { continue; } // refused below, where the rule is judged
+        // has(x) on a read input proves that path present for the node the rule routes to
+        const proved = new Set<string>();
+        const walk = (e: expr.Expr) => {
+          if (e.t === 'bin' && e.op === '&&') { walk(e.l); walk(e.r); }
+          else if (e.t === 'has') { const v = n.in[e.p[0]]; const whole = typeof v === 'string' ? WHOLE_TEMPLATE.exec(v) : null; if (whole) proved.add([whole[1], ...e.p.slice(1)].join('.')); }
+        };
+        walk(parsed);
+        if (proved.size) present.set(rule.to, new Set([...(present.get(rule.to) ?? []), ...proved]));
+      }
+    }
+    /** What a node may take as present: what routed it, and what routed anything it reads -- a node downstream of a routed one runs only after it did. */
+    const provedFor = (id: string, seen = new Set<string>()): Set<string> => {
+      if (seen.has(id)) return new Set(); seen.add(id);
+      const out = new Set(present.get(id) ?? []);
+      for (const d of deps.get(id) ?? []) for (const p of provedFor(d, seen)) out.add(p);
+      return out;
+    };
     let reading: string | undefined;
-    const narrowed = (src: string) => { const set = reading ? present.get(reading) : undefined; return Boolean(set && [...set].some(p => src === p || src.startsWith(p + '.'))); };
+    const narrowed = (src: string) => Boolean(reading && [...provedFor(reading)].some(p => src === p || src.startsWith(p + '.')));
 
     const nodeOut = (id: string): Type | undefined => {
       if (outTypes.has(id)) return outTypes.get(id);
@@ -424,8 +454,13 @@ class Checker {
       return t;
     };
 
-    /** Type one root a value reads: the input, a constant, a resolver, or a node. */
+    /** Type one root a value reads: the input, a constant, a resolver, or a node. A path the routing switch proved present loses its optionality wherever the node reads it, inside an object or a list as much as alone. */
     const rootRead = (root: string, path: string[]): Read | string | undefined => {
+      const r = rootReadRaw(root, path);
+      if (r && typeof r === 'object' && r.optional && narrowed([root, ...path].join('.'))) return { type: r.type, optional: false };
+      return r;
+    };
+    const rootReadRaw = (root: string, path: string[]): Read | string | undefined => {
       if (root === 'in') {
         if (!inType) return `reads in.${path.join('.')} but the graph declares no in`;
         readsIn.add(path[0] ?? '*');
@@ -456,12 +491,8 @@ class Checker {
     const readFor = (id: string) => (value: unknown, at: string): Read | undefined => { const prev = reading; reading = id; try { return valueRead(value, at); } finally { reading = prev; } };
 
     const routedBy = new Map<string, string>();
-    const deps = new Map<string, Set<string>>();
     for (const n of nodes.values()) {
       const at = `nodes/${n.id}`;
-      const d = new Set<string>();
-      for (const p of this.s.templateReads(isMap(n) ? [n.in ?? {}, n.over] : n.in ?? {})) if (nodes.has(p[0])) d.add(p[0]);
-      deps.set(n.id, d);
       const read = readFor(n.id);
 
       if (isSwitch(n)) {
@@ -469,17 +500,8 @@ class Checker {
         for (const [k, v] of Object.entries(n.in)) { const r = read(v, `${at}/in/${k}`); if (r) inputs[k] = r; }
         for (const [i, rule] of n.rules.entries()) {
           try {
-            const parsed = expr.parse(rule.when);
-            const t = expr.check(parsed, inputs);
+            const t = expr.check(expr.parse(rule.when), inputs);
             if (t.kind !== 'boolean') this.refuse('G011', file, `rule ${i}: '${rule.when}' is ${show(t)}, not boolean`, `${at}/rules/${i}/when`);
-            // has(x) on a read input proves that path present for the node the rule routes to
-            const proved = new Set<string>();
-            const walk = (e: expr.Expr) => {
-              if (e.t === 'bin' && e.op === '&&') { walk(e.l); walk(e.r); }
-              else if (e.t === 'has') { const v = n.in[e.p[0]]; const whole = typeof v === 'string' ? WHOLE_TEMPLATE.exec(v) : null; if (whole) proved.add([whole[1], ...e.p.slice(1)].join('.')); }
-            };
-            walk(parsed);
-            if (proved.size) present.set(rule.to, new Set([...(present.get(rule.to) ?? []), ...proved]));
           } catch (e) { this.refuse('G011', file, `rule ${i}: ${(e as Error).message}`, `${at}/rules/${i}/when`); }
         }
         for (const target of [...n.rules.map(r => r.to), n.else]) {
@@ -579,8 +601,9 @@ class Checker {
       if (!tin) this.refuse('T003', file, 'fire.in is given but the trigger declares no in', 'fire/in');
       else {
         const read = this.s.valueRead(doc.fire.in, (root, path) => root === 'request' ? typeAt(ctx, path) : `'${root}': a trigger's input reads request.* only`);
+        // a read that may be missing (a query key, a flag, a header) may feed a required field: the edge judges the input
+        // when it arrives, and a request without it is refused there (a 400, a usage error), never run
         if (typeof read === 'string') this.refuse('T003', file, `fire.in: ${read}`, 'fire/in', `wilanis describe ${doc.kind} shows what this kind hands`);
-        else if (read?.optional) this.refuse('T003', file, 'fire.in reads a value that may be missing', 'fire/in');
         else if (read) { const bad = assignableWire(read.type, tin); if (bad) this.refuse('T003', file, `fire.in → in: ${bad}`, 'fire/in'); }
       }
     }
@@ -594,25 +617,133 @@ class Checker {
     if (tout && gout) { const bad = assignable(gout, tout); if (bad) this.refuse('T002', file, `${doc.fire.run} → out: ${bad}`, 'out'); }
     // request reachability: every request.* a resolver reads under this trigger must be in the kind's context
     const profiles = this.s.profiles().length ? this.s.profiles() : [undefined];
+    const decides = (doc.policies ?? []).map(ref => this.s.get('policy', policyPath(ref))).filter((p): p is Loaded<PolicyDoc> => Boolean(p)).map(p => p.doc.decide.run);
+    const proven = (doc.policies ?? []).flatMap(ref => this.s.get('policy', policyPath(ref))?.doc.proves ?? []).map(p => splitPath(p).slice(1).join('.'));
     for (const prof of profiles) {
-      for (const need of this.opNeeds(doc.fire.run, prof)) {
+      for (const run of [doc.fire.run, ...decides]) for (const need of this.opNeeds(run, prof)) {
         const rr = typeAt(ctx, need.path);
-        if (typeof rr === 'string') this.refuse('T004', file, `${need.file} reads request.${need.path.join('.')} but trigger kind '${doc.kind}' hands no such value${prof ? ` (profile '${prof}')` : ''}`, 'kind', 'fire this operation from a kind that hands it, or bind the port differently under a profile');
+        if (typeof rr === 'string') { this.refuse('T004', file, `${need.file} reads request.${need.path.join('.')} but trigger kind '${doc.kind}' hands no such value${prof ? ` (profile '${prof}')` : ''}`, 'kind', 'fire this operation from a kind that hands it, or bind the port differently under a profile'); continue; }
+        // a resolver declared required is read as present: this trigger's kind must hand it always, or a policy of this trigger must prove it
+        if (need.required) {
+          const own = typeAt(ctx, need.required);
+          const guaranteed = (typeof own === 'object' && !own.optional) || proven.some(p => { const q = need.required!.join('.'); return q === p || q.startsWith(p + '.'); });
+          if (!guaranteed) this.refuse('A006', file, `${need.file} reads request.${need.required.join('.')} as required, but trigger kind '${doc.kind}' hands it only sometimes and no policy of this trigger proves it${prof ? ` (profile '${prof}')` : ''}`, 'policies', `gate this trigger with a policy whose proves lists "request.${need.required.join('.')}", or drop required from the resolver and route around its absence`);
+        }
       }
     }
+    this.checkAccess(t, ctx);
     // refusals: the graph says why it refused, in one word; the kind says how that word is answered. Each
-    // reason this trigger can reach must be mapped, and nothing may be mapped that it cannot reach.
+    // reason this trigger can reach -- through what it fires, what gates it, and the guard that identifies
+    // its caller -- must be mapped, and nothing may be mapped that it cannot reach.
     if (kind.doc.refusals) {
       const at = kind.doc.refusals, atPath = `settings/${at.replace(/\./g, '/')}`;
       const table = readPath(doc.settings, at.split('.'));
       const mapped = table && typeof table === 'object' && !Array.isArray(table) ? (table as Record<string, unknown>) : {};
       const reachable = new Map<string, string>();
-      for (const prof of profiles) for (const r of refusalsReachable(this.s, doc.fire.run, prof)) if (!reachable.has(r.reason)) reachable.set(r.reason, r.file);
+      for (const prof of profiles) for (const r of refusalsOfTrigger(this.s, doc, prof)) if (!reachable.has(r.reason)) reachable.set(r.reason, r.file);
       for (const [reason, from] of reachable) if (mapped[reason] === undefined) this.refuse('T005', file, `${from} may refuse with reason '${reason}', which settings.${at} does not map`, atPath, `add "${reason}" under settings.${at}: how this trigger answers that outcome`);
-      for (const reason of Object.keys(mapped)) if (!reachable.has(reason)) this.refuse('T006', file, `settings.${at} maps reason '${reason}', but nothing '${doc.fire.run}' reaches refuses with it`, `${atPath}/${reason}`, 'remove it, or spell the reason the way the graph does');
+      for (const reason of Object.keys(mapped)) if (!reachable.has(reason)) this.refuse('T006', file, `settings.${at} maps reason '${reason}', but nothing this trigger fires, gates on or identifies with refuses with it`, `${atPath}/${reason}`, 'remove it, or spell the reason the way the graph does');
     }
   }
 
+  // ---- access: policies and the credentials they are given ------------------------------------------
+
+  /**
+   * A policy on its own: it decides through a domain port operation, reads the request only, and says what
+   * every reason its decision can refuse with means. What its reads are worth under a kind is judged where
+   * a trigger attaches it (A001), since the context differs per kind.
+   */
+  checkPolicy(p: Loaded<PolicyDoc>) {
+    const doc = p.doc, file = p.path;
+    const o = this.s.op(doc.decide.run);
+    if (typeof o === 'string') { this.refuse('R001', file, o, 'decide/run', 'wilanis ls port'); return; }
+    if (o.port.native) { this.refuse('L006', file, `policy decides through native operation '${doc.decide.run}'`, 'decide/run', 'a policy decides through a domain port; the port\'s binding reaches the native operation'); return; }
+    const v = this.s.visibility(p, o.port); if (v) this.refuse('L005', file, v, 'decide/run');
+    for (const read of this.s.templateReads(doc.decide.in)) if (read[0] !== 'request') this.refuse('A001', file, `decide.in reads '${read[0]}', but a policy's input reads request.* only`, 'decide/in', 'read what the kind and the guard hand: request.principal, request.session, request.challenge, request.headers...');
+    // what the policy proves present once it allows: request.* paths the guard or a kind hands; a resolver declared required leans on it (A006)
+    for (const [i, p] of (doc.proves ?? []).entries()) {
+      const segs = READ_PATH.test(p) ? splitPath(p) : [];
+      if (segs[0] !== 'request' || segs.length < 2) { this.refuse('A001', file, `proves names '${p}', which is not a request.* path`, `proves/${i}`, 'write request.principal, request.session...'); continue; }
+      const r = this.s.requestRead(segs.slice(1));
+      if (typeof r === 'string') this.refuse('A001', file, `proves names request.${segs.slice(1).join('.')}: ${r}`, `proves/${i}`, 'wilanis describe the guarding plugin shows what it hands');
+    }
+    const gin = Object.keys(o.op.accepts ?? {}).length ? this.quiet({ fields: o.op.accepts! }) : undefined;
+    if (doc.decide.in !== undefined && !gin) this.refuse('A001', file, `decide.in is given but '${doc.decide.run}' takes no input`, 'decide/in', 'remove in');
+    if (gin && doc.decide.in === undefined) this.refuse('A001', file, `'${doc.decide.run}' takes ${show(gin)} but decide gives nothing`, 'decide', 'write in: what the decision reads from the request');
+    // outcomes: each reason the decision can reach means something here, and nothing here is out of reach
+    const profiles = this.s.profiles().length ? this.s.profiles() : [undefined];
+    const reachable = new Map<string, string>();
+    for (const prof of profiles) for (const r of refusalsReachable(this.s, doc.decide.run, prof)) if (!reachable.has(r.reason)) reachable.set(r.reason, r.file);
+    for (const [reason, from] of reachable) if (!doc.outcomes[reason]) this.refuse('A002', file, `${from} may refuse with reason '${reason}', which outcomes does not map`, 'outcomes', `add "${reason}": { "effect": "deny" } or { "effect": "challenge", "method": "..." }`);
+    for (const [reason, out] of Object.entries(doc.outcomes)) {
+      if (!reachable.has(reason)) this.refuse('A003', file, `outcomes maps reason '${reason}', but nothing '${doc.decide.run}' reaches refuses with it`, `outcomes/${reason}`, 'remove it, or spell the reason the way the graph does');
+      if (out.effect === 'challenge' && !out.method) this.refuse('A002', file, `outcome '${reason}' challenges but names no method`, `outcomes/${reason}`, 'name the method the guard opens: "method": "otp"');
+      if (out.effect === 'deny' && out.method) this.refuse('A002', file, `outcome '${reason}' denies, so a method means nothing`, `outcomes/${reason}/method`, 'remove method, or make the effect a challenge');
+    }
+  }
+
+  /**
+   * What gates a trigger, under its own kind. Each attachment's `in` gives the guard a credential it declares, read
+   * where this kind hands something and of the type the guard asks (A004); each policy's input types under this kind's
+   * context and fits the decision's contract, an optional read feeding an optional input (A001); a policy that reads
+   * what the guard hands leans on a credential yielding it, which some attachment of this trigger must give (A005); a
+   * credential no policy of the trigger reads is refused too (A004), since nothing would ever decide on it.
+   */
+  private checkAccess(t: Loaded<TriggerDoc>, ctx: Type) {
+    const doc = t.doc, file = t.path;
+    const guard = this.s.guard();
+    const creds = guard?.doc.guard?.credentials ?? {};
+    const handed = new Set(Object.keys(guard?.doc.guard?.context.fields ?? {}));
+    const uses = doc.policies ?? [];
+    const given = new Set<string>();
+    for (const [i, use] of uses.entries()) {
+      if (typeof use === 'string') continue;
+      for (const [name, value] of Object.entries(use.in ?? {})) {
+        const at = `policies/${i}/in/${name}`;
+        const cred = creds[name];
+        if (!cred) {
+          if (guard) this.refuse('A004', file, `'${name}' is not a credential the guard verifies (it verifies ${Object.keys(creds).join(', ') || 'none'})`, at, `wilanis describe ${guard.path}`);
+          else this.refuse('A004', file, `'${name}' is given as a credential, but no plugin of this project identifies callers`, at, 'add a guarding plugin to project.json → plugins, such as @wilanis/plugin-auth');
+          continue;
+        }
+        const want = this.quiet(cred.type);
+        // a list is the places the credential may sit, the first present wins: each place is judged on its own
+        for (const alt of Array.isArray(value) ? value : [value]) {
+          const read = this.s.valueRead(alt, (root, path) => root === 'request' ? typeAt(ctx, path) : `'${root}': a credential is read from the request`);
+          if (typeof read === 'string') { this.refuse('A004', file, `credential '${name}': ${read}`, at, `wilanis describe ${doc.kind} shows what this kind hands`); continue; }
+          if (read && want) { const bad = assignableWire(read.type, want); if (bad) this.refuse('A004', file, `credential '${name}' → ${show(want)}: ${bad}`, at, `wilanis describe ${guard!.path} shows what the guard takes`); }
+        }
+        given.add(name);
+      }
+    }
+    const yielded = new Set([...given].flatMap(n => creds[n]?.yields ?? []));
+    const needed = new Set<string>();
+    for (const [i, use] of uses.entries()) {
+      const ref = policyPath(use);
+      const p = this.s.get('policy', ref);
+      if (!p) { this.refuse('R001', file, `unknown policy '${ref}'`, `policies/${i}`, 'wilanis ls policy'); continue; }
+      const v = this.s.visibility(t, p); if (v) this.refuse('L005', file, v, `policies/${i}`);
+      const o = this.s.op(p.doc.decide.run);
+      if (typeof o === 'string' || o.port.native) continue; // refused at the policy
+      for (const r of this.s.templateReads(p.doc.decide.in)) {
+        if (r[0] !== 'request') continue;
+        if (!guard) { if (typeof typeAt(ctx, r.slice(1)) === 'string') this.refuse('A005', file, `policy '${p.path}' reads request.${r[1]}, which no trigger kind hands and no plugin of this project identifies callers to supply`, `policies/${i}`, 'add a guarding plugin to project.json → plugins, such as @wilanis/plugin-auth'); continue; }
+        if (!handed.has(r[1])) continue;
+        needed.add(r[1]);
+        if (yielded.has(r[1])) continue;
+        const from = Object.entries(creds).filter(([, c]) => c.yields.includes(r[1])).map(([n]) => n);
+        this.refuse('A005', file, `policy '${p.path}' reads request.${r[1]}, which the guard hands once it verified ${from.length ? `a ${from.join(' or a ')}` : 'nothing it verifies'}, but no attachment on this trigger gives one`, `policies/${i}`, from.length ? `write { "policy": "${ref}", "in": { "${from[0]}": "{{request.headers.authorization}}" } } -- the read is where this kind hands the credential` : 'a policy reads only what the guard hands');
+      }
+      const gin = Object.keys(o.op.accepts ?? {}).length ? this.quiet({ fields: o.op.accepts! }) : undefined;
+      if (!gin || p.doc.decide.in === undefined) continue;
+      const read = this.s.valueRead(p.doc.decide.in, (root, path) => root === 'request' ? typeAt(ctx, path) : `'${root}': a policy's input reads request.* only`);
+      if (typeof read === 'string') { this.refuse('A001', file, `policy '${p.path}' under kind '${doc.kind}': ${read}`, `policies/${i}`, `wilanis describe ${doc.kind} shows what this kind hands`); continue; }
+      if (!read) continue;
+      const bad = assignable(read.type, gin);
+      if (bad) this.refuse('A001', file, `policy '${p.path}' under kind '${doc.kind}': decide.in → ${p.doc.decide.run}: ${bad}`, `policies/${i}`, 'a read that may be missing (an anonymous caller) feeds an input the operation declares required: false, and the graph decides on has(...)');
+    }
+    for (const name of given) if (!(creds[name]?.yields ?? []).some(y => needed.has(y))) this.refuse('A004', file, `credential '${name}' is given, but no policy of this trigger reads what it yields (request.${(creds[name]?.yields ?? []).join(', request.')})`, 'policies', 'drop it, or attach a policy that decides on it');
+  }
 
   /**
    * A domain graph earns its place by doing something the port call alone cannot: composing more than one
@@ -635,7 +766,7 @@ class Checker {
   }
 
   /** Every request.* path reachable from a domain port operation: through the binding that meets it. */
-  private opNeeds(opRef: string, profile: string | undefined, seen = new Set<string>()): { path: string[]; file: string }[] {
+  private opNeeds(opRef: string, profile: string | undefined, seen = new Set<string>()): RequestNeed[] {
     const o = this.s.op(opRef);
     if (typeof o === 'string' || o.port.native) return [];
     const b = this.s.bindingFor(o.path, profile);
@@ -653,7 +784,7 @@ class Checker {
   }
 
   /** Every request.* path read under a graph: its own reads through its resolvers, and per node the one binding operation it reaches. */
-  private requestNeeds(graphPath: string, profile: string | undefined, seen = new Set<string>()): { path: string[]; file: string }[] {
+  private requestNeeds(graphPath: string, profile: string | undefined, seen = new Set<string>()): RequestNeed[] {
     if (seen.has(graphPath)) return []; seen.add(graphPath);
     const g = this.s.registry.get('graph', graphPath); if (!g) return [];
     const reads = g.doc.nodes.flatMap(n => this.s.templateReads(isSwitch(n) ? n.in : isMap(n) ? [n.in ?? {}, n.over] : n.in ?? {}));
@@ -688,6 +819,23 @@ export function refusalsReachable(scope: Scope, opRef: string, profile?: string,
   return bop.run ? callRefusals(scope, bop.run, bop.in, b.path, o.opName, profile, seen) : [];
 }
 
+/**
+ * Every reason a trigger can be answered with: what it fires, what each of its policies decides through,
+ * and -- when an attachment gives the guard a credential -- the guard's own reasons, a credential that does not
+ * verify among them.
+ */
+export function refusalsOfTrigger(scope: Scope, t: TriggerDoc, profile?: string): ReachableRefusal[] {
+  const out = refusalsReachable(scope, t.fire.run, profile);
+  for (const ref of t.policies ?? []) {
+    const p = scope.get('policy', policyPath(ref));
+    if (p) out.push(...refusalsReachable(scope, p.doc.decide.run, profile));
+  }
+  const guard = scope.guard();
+  const gives = (t.policies ?? []).some(u => typeof u !== 'string' && Object.keys(u.in ?? {}).length);
+  if (gives && guard) for (const reason of Object.keys(guard.doc.guard!.refuses ?? {})) out.push({ reason, file: guard.path, node: 'identify' });
+  return out;
+}
+
 /** One call site: the literal reason when the operation refuses, else whatever the operation reaches. */
 function callRefusals(scope: Scope, run: string, given: Record<string, unknown> | undefined, file: string, node: string, profile: string | undefined, seen: Set<string>): ReachableRefusal[] {
   const o = scope.op(run);
@@ -704,7 +852,11 @@ function graphRefusals(scope: Scope, graphPath: string, profile: string | undefi
   return out;
 }
 
-/** Assignability at the edge: wire text (query, route placeholders, headers, form fields) may feed any scalar; the codec/trigger coerces and judges it at run time. */
+/**
+ * Assignability at the edge: wire text (query, route placeholders, headers, form fields, flags) may feed any scalar,
+ * and a value that may be missing may feed a required field -- the trigger coerces and judges the input when it
+ * arrives, and a request missing it is refused there rather than run.
+ */
 function assignableWire(from: Type, to: Type): string | null {
   if (from.kind === 'string' && !from.enum && (to.kind === 'string' || to.kind === 'number' || to.kind === 'boolean')) return null;
   if (from.kind === 'list' && to.kind === 'list') return assignableWire(from.of, to.of);
@@ -712,7 +864,6 @@ function assignableWire(from: Type, to: Type): string | null {
     for (const [k, tf] of Object.entries(to.fields)) {
       const ff = from.fields[k];
       if (!ff) { if (tf.required) return `missing required field '${k}'`; continue; }
-      if (tf.required && !ff.required) return `field '${k}' is optional but required here`;
       const r = assignableWire(ff.type, tf.type); if (r) return `field '${k}': ${r}`;
     }
     return null;
@@ -720,8 +871,11 @@ function assignableWire(from: Type, to: Type): string | null {
   return assignable(from, to);
 }
 
-/** One resolver as judged: the segments below request, and the read's type and optionality. */
-interface ResolverRead { path: string[]; read: Read }
+/** One request.* path read under a trigger: where, and -- when the resolver declared itself required -- the resolver's own path, which the trigger must guarantee. */
+interface RequestNeed { path: string[]; file: string; required?: string[] }
+
+/** One resolver as judged: the segments below request, the read's type and optionality, and whether the document declared it required. */
+interface ResolverRead { path: string[]; read: Read; required?: boolean }
 
 /** A read continued below a typed root: the root's optionality carries into what is read beneath it. */
 function readAt(base: Read, path: string[]): Read | string {

@@ -4,7 +4,7 @@
  * under a profile, classifying graphs as domain or data, and typing values with {{templates}}.
  */
 import {
-  splitOp, type BindingDoc, type Kind, type Loaded, type Operation, type PortDoc, type ProjectDoc,
+  splitOp, type BindingDoc, type Kind, type Loaded, type Operation, type PluginDoc, type PortDoc, type ProjectDoc,
   type Registry, type TriggerKindDoc, type DocByKind,
 } from './model.js';
 import { TypeResolver, type Type, UNKNOWN, STRING, typeAt, typeOfValue, substitute, type Read } from './types.js';
@@ -108,7 +108,8 @@ export class Scope {
    * A trigger kind's context type for one trigger. A `type` setting binds its variable to the type it names
    * (body: $Body); a string setting binds its {name} placeholders to an object of required strings (route:
    * $Params), so the kind knows what its runtime guarantees. Without the trigger's settings a placeholder
-   * object is open, since the names are unknown.
+   * object is open, since the names are unknown. The guarding plugin's context (principal, session, challenge)
+   * is added to every kind's: it is handed by the guard, not the kind, so a policy reads it under any kind.
    */
   contextType(kind: TriggerKindDoc, settings: Record<string, unknown> = {}): Type {
     const subst: Record<string, Type> = {};
@@ -122,7 +123,25 @@ export class Scope {
       for (const m of v.matchAll(PLACEHOLDER)) fields[m[1]] = { type: STRING, required: true };
       subst[f.binds] = { kind: 'object', fields, open: false };
     }
-    return substitute(this.types.inline(kind.context), subst);
+    const fields = { ...kind.context.fields };
+    const guard = this.guard();
+    if (guard) {
+      Object.assign(fields, guard.doc.guard!.context.fields);
+      // a guard's context may name a variable its plugin's settings bind: session attributes are the shape the project names
+      const given = this.project?.plugins.find(x => x.use === guard.native)?.settings ?? {};
+      for (const [k, f] of Object.entries(guard.doc.settings?.fields ?? {})) {
+        if (!f.binds || f.type !== 'type') continue;
+        const v = given[k];
+        if (typeof v === 'string') { try { subst[f.binds] = this.types.spec(v); } catch { /* the plugin's check reports it */ } }
+        subst[f.binds] ??= { kind: 'object', fields: {}, open: UNKNOWN };
+      }
+    }
+    return substitute(this.types.inline({ fields, open: kind.context.open }), subst);
+  }
+
+  /** The plugin document that declares a guard, when the project names such a plugin. */
+  guard(): Loaded<PluginDoc> | undefined {
+    return this.registry.all('plugin').find(p => p.doc.guard && this.project?.plugins.some(x => x.use === p.native));
   }
 
   /** Every trigger kind's context that has `path`; used to type request.* reads in resolvers (kind unknown there). */

@@ -61,6 +61,37 @@
         "additionalProperties": false
       }
     },
+    "includes": {
+      "description": "Trees this one includes, by npm package name, never a path: each package's features/ loads as if it sat in this tree -- the same paths, the same rules, bound by bindings and profiles, visible through exports and dependsOn. `features` picks which of its features come along (default: all). The include's aliases come along (D007 on a collision); its connections, plugins, settings, startup and profiles do not: configuring a tree is the host's job, and a port the include leaves unbound is the host's to bind (B002 says which). A feature both local and included is refused (D009); a package that is not a wilanis tree, or one using a plugin this project does not name, is D010.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "description": "The npm package that ships the tree, installed in this project's package.json.",
+            "type": "string",
+            "minLength": 1
+          },
+          "features": {
+            "description": "The features to include, by name; absent: every feature the package ships.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true,
+            "minItems": 1
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from"
+        ],
+        "additionalProperties": false
+      }
+    },
     "blobs": {
       "description": "The blob registry: where uploaded and generated files are kept while a run uses them. Files never pass through the engine; a graph holds a handle and the registry holds the bytes.",
       "type": "object",

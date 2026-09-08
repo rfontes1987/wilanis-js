@@ -1,12 +1,14 @@
 /**
  * The one expression grammar, used by switch rules (and list.filter/sort params). Deliberately small and
- * statically typed against the node's inputs: has(path), comparisons, && || !, len(x), literals, paths.
+ * statically typed against the node's inputs: has(path), comparisons, membership, && || !, len(x), literals, paths.
  *
  *   expr := or ; or := and ('||' and)* ; and := unary ('&&' unary)* ; unary := '!' unary | cmp
- *   cmp  := primary (('=='|'!='|'<'|'<='|'>'|'>=') primary)?
+ *   cmp  := primary (('=='|'!='|'<'|'<='|'>'|'>='|'in') primary)?
  *   primary := number | string | true | false | path | has '(' path ')' | len '(' expr ')' | '(' expr ')'
+ *
+ * `x in list` is true when the list holds x: `'admin' in principal.roles`.
  */
-import { BOOLEAN, NUMBER, STRING, typeAt, show, type Type } from './types.js';
+import { BOOLEAN, NUMBER, STRING, UNKNOWN, typeAt, show, type Type } from './types.js';
 
 export type Expr =
   | { t: 'lit'; v: string | number | boolean }
@@ -14,7 +16,7 @@ export type Expr =
   | { t: 'has'; p: string[] }
   | { t: 'len'; e: Expr }
   | { t: 'not'; e: Expr }
-  | { t: 'bin'; op: '&&' | '||' | '==' | '!=' | '<' | '<=' | '>' | '>='; l: Expr; r: Expr };
+  | { t: 'bin'; op: '&&' | '||' | '==' | '!=' | '<' | '<=' | '>' | '>=' | 'in'; l: Expr; r: Expr };
 
 type Tok = { k: 'num'; v: number } | { k: 'str'; v: string } | { k: 'id'; v: string } | { k: 'op'; v: string };
 
@@ -78,6 +80,7 @@ export function parse(src: string): Expr {
   const cmp = (): Expr => {
     const l = primary();
     for (const op of ['==', '!=', '<=', '>=', '<', '>'] as const) if (isOp(op)) { i++; return { t: 'bin', op, l, r: primary() }; }
+    if (peek()?.k === 'id' && (peek() as { v: string }).v === 'in') { i++; return { t: 'bin', op: 'in', l, r: primary() }; }
     return l;
   };
   const unary = (): Expr => { if (isOp('!')) { i++; return { t: 'not', e: unary() }; } return cmp(); };
@@ -88,14 +91,30 @@ export function parse(src: string): Expr {
   return e;
 }
 
-/** Type-check against the node's input types (root = input name). Answers the expression's type. */
-export function check(e: Expr, inputs: Record<string, { type: Type; optional?: boolean }>): Type {
+/** The paths a conjunction proves present: every has(p) reachable through && alone. */
+function provedBy(e: Expr, out = new Set<string>()): Set<string> {
+  if (e.t === 'has') out.add(e.p.join('.'));
+  else if (e.t === 'bin' && e.op === '&&') { provedBy(e.l, out); provedBy(e.r, out); }
+  return out;
+}
+
+/**
+ * Type-check against the node's input types (root = input name). Answers the expression's type. A read through a
+ * value that may be missing is refused unless a has() on the left of the same && proved it present:
+ * `has(principal) && principal.realm == 'employee'` reads what it proved.
+ */
+export function check(e: Expr, inputs: Record<string, { type: Type; optional?: boolean }>, proved = new Set<string>()): Type {
   const at = (p: string[]): { type: Type; optional: boolean } => {
     const root = inputs[p[0]];
     if (!root) throw new ExprError(`'${p[0]}' is not an input of this node (inputs: ${Object.keys(inputs).join(', ') || 'none'})`);
-    const r = typeAt(root.type, p.slice(1));
+    // the longest prefix a has() proved present is where optionality starts being counted again
+    let from = 1, optional = Boolean(root.optional);
+    for (let i = p.length; i >= 1; i--) if (proved.has(p.slice(0, i).join('.'))) { from = i; optional = false; break; }
+    let base = root.type;
+    if (from > 1) { const b = typeAt(root.type, p.slice(1, from)); if (typeof b === 'string') throw new ExprError(`${p.join('.')}: ${b}`); base = b.type; }
+    const r = typeAt(base, p.slice(from));
     if (typeof r === 'string') throw new ExprError(`${p.join('.')}: ${r}`);
-    return { type: r.type, optional: r.optional || Boolean(root.optional) };
+    return { type: r.type, optional: optional || r.optional };
   };
   switch (e.t) {
     case 'lit': return typeof e.v === 'string' ? STRING : typeof e.v === 'number' ? NUMBER : BOOLEAN;
@@ -105,12 +124,20 @@ export function check(e: Expr, inputs: Record<string, { type: Type; optional?: b
       if (r.optional) throw new ExprError(`${e.p.join('.')} may be missing -- guard it with has(${e.p.join('.')}) first`);
       return r.type;
     }
-    case 'len': { const t = check(e.e, inputs); if (t.kind !== 'list' && t.kind !== 'string') throw new ExprError(`len() takes a list or string, not ${show(t)}`); return NUMBER; }
-    case 'not': { const t = check(e.e, inputs); if (t.kind !== 'boolean') throw new ExprError(`! takes a boolean, not ${show(t)}`); return BOOLEAN; }
+    case 'len': { const t = check(e.e, inputs, proved); if (t.kind !== 'list' && t.kind !== 'string') throw new ExprError(`len() takes a list or string, not ${show(t)}`); return NUMBER; }
+    case 'not': { const t = check(e.e, inputs, proved); if (t.kind !== 'boolean') throw new ExprError(`! takes a boolean, not ${show(t)}`); return BOOLEAN; }
     case 'bin': {
-      const l = check(e.l, inputs), r = check(e.r, inputs);
+      // what the left of an && proves present, the right may read
+      const l = check(e.l, inputs, proved), r = check(e.r, inputs, e.op === '&&' ? new Set([...proved, ...provedBy(e.l)]) : proved);
       if (e.op === '&&' || e.op === '||') {
         if (l.kind !== 'boolean' || r.kind !== 'boolean') throw new ExprError(`${e.op} takes booleans`);
+        return BOOLEAN;
+      }
+      if (e.op === 'in') {
+        if (r.kind !== 'list' && r.kind !== 'unknown') throw new ExprError(`in looks into a list, not ${show(r)}`);
+        const of = r.kind === 'list' ? r.of : UNKNOWN;
+        if (!(l.kind === of.kind || l.kind === 'unknown' || of.kind === 'unknown')) throw new ExprError(`a ${show(l)} is never in ${show(r)}`);
+        if (l.kind === 'object' || l.kind === 'list') throw new ExprError(`in looks for a scalar, not ${show(l)}`);
         return BOOLEAN;
       }
       const same = l.kind === r.kind || l.kind === 'unknown' || r.kind === 'unknown';
@@ -142,6 +169,7 @@ export function evaluate(e: Expr, values: Record<string, unknown>): unknown {
       if (e.op === '&&') return Boolean(evaluate(e.l, values)) && Boolean(evaluate(e.r, values));
       if (e.op === '||') return Boolean(evaluate(e.l, values)) || Boolean(evaluate(e.r, values));
       const l = evaluate(e.l, values) as never, r = evaluate(e.r, values) as never;
+      if (e.op === 'in') return Array.isArray(r) && (r as unknown[]).includes(l);
       switch (e.op) {
         case '==': return l === r; case '!=': return l !== r;
         case '<': return l < r; case '<=': return l <= r; case '>': return l > r; case '>=': return l >= r;

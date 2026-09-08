@@ -5,7 +5,7 @@ import type { KernelSpec } from '../src/index.js';
 const handlers = {
   double: async ({ in: i }: { in: Record<string, unknown> }) => Number(i.x) * 2,
   boom: async () => { throw new Error('boom'); },
-  refuse: async ({ in: i }: { in: Record<string, unknown> }) => { throw new Refusal(String(i.reason), `no ${i.what}`); },
+  refuse: async ({ in: i }: { in: Record<string, unknown> }) => { throw new Refusal(String(i.reason), `no ${i.what}`, i.detail as Record<string, unknown> | undefined); },
   echo: async ({ in: i }: { in: Record<string, unknown> }) => i,
   sleepOrBoom: async ({ in: i }: { in: Record<string, unknown> }) => {
     await new Promise(res => setTimeout(res, Number(i.ms)));
@@ -193,6 +193,16 @@ describe('kernel', () => {
     const fault = await new Kernel(handlers).run({ name: 't', output: ['a'], nodes: { a: { kind: 'call', handler: 'boom', in: {} } } }, {});
     expect(fault.nodes.a.reason).toBeUndefined();
     expect(refusalOf(fault)).toBeUndefined();
+  });
+  it('a refusal may carry detail beside its words -- a challenge id, how to answer -- and refusalOf hands it on, through a map too', async () => {
+    const detail = { value: { challenge: { id: 'K7Q2' }, how: 'again with --code' } };
+    const spec: KernelSpec = { name: 't', output: ['a'], nodes: { a: { kind: 'call', handler: 'refuse', in: { reason: { value: 'otp' }, what: { value: 'code' }, detail } } } };
+    const r = await new Kernel(handlers).run(spec, {});
+    expect(r.nodes.a.detail).toEqual({ challenge: { id: 'K7Q2' }, how: 'again with --code' });
+    expect(refusalOf(r)).toEqual({ reason: 'otp', message: 'no code', detail: { challenge: { id: 'K7Q2' }, how: 'again with --code' } });
+    const over = { value: [{ reason: 'otp', what: 'code', detail: { challenge: { id: 'X' } } }] };
+    const m = await new Kernel(handlers).run({ name: 't', output: ['m'], nodes: { m: { kind: 'map', handler: 'refuse', over, in: {}, bind: { reason: ['reason'], what: ['what'], detail: ['detail'] }, onItemFailure: 'fail' } } }, {});
+    expect(refusalOf(m)).toEqual({ reason: 'otp', message: 'no code', detail: { challenge: { id: 'X' } } });
   });
   it('a map element that refuses refuses the map with its reason; an element that breaks is the map\'s fault', async () => {
     const over = { value: [{ reason: 'missing', what: 'a' }, { reason: 'conflict', what: 'b' }] };

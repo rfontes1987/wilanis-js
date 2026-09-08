@@ -54,7 +54,8 @@ export type NodeStatus = 'pending' | 'running' | 'done' | 'failed' | 'cancelled'
  * what a reader is told. Any other throw is a fault: something the graph did not declare.
  */
 export class Refusal extends Error {
-  constructor(readonly reason: string, message: string) { super(message); this.name = 'Refusal'; }
+  /** `detail`: what the caller needs beside the words -- a challenge's id and how to answer it. Answered with the reason and message, never read by a graph. */
+  constructor(readonly reason: string, message: string, readonly detail?: Record<string, unknown>) { super(message); this.name = 'Refusal'; }
 }
 
 export interface NodeReport {
@@ -66,6 +67,8 @@ export interface NodeReport {
   error?: string;
   /** The handler refused on purpose: the reason it gave, a word a caller acts on. Absent on a fault. */
   reason?: string;
+  /** What a refusal carries beside its words, when it does: answered to the caller as it is. */
+  detail?: Record<string, unknown>;
   /** switch: the node it routed to. */
   selected?: string;
   /** call bound to a graph: the nested run. */

@@ -43,6 +43,10 @@
           },
           "description": {
             "type": "string"
+          },
+          "required": {
+            "description": "true: the value is read as present, so it may feed a required input. Every trigger whose run reaches this read must then guarantee it: its kind hands the path always, or one of its policies lists it under proves (A006). What a policy proves is what the guard hands once the caller is identified: request.principal, request.session.",
+            "type": "boolean"
           }
         },
         "required": [

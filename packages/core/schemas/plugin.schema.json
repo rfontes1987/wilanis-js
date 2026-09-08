@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/plugin.schema.json",
   "title": "plugin",
-  "description": "Native code, described: the settings a project may pass it, and what it grants -- ports (native), trigger kinds, connection kinds, codecs. Everything effectful enters through a grant. A plugin is an alias root: @http/http.port.json.",
+  "description": "Native code, described: the settings a project may pass it, and what it grants -- ports (native), trigger kinds, connection kinds, codecs, shapes. Everything effectful enters through a grant. A plugin is an alias root: @http/http.port.json.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -54,8 +54,68 @@
             "$ref": "common.schema.json#/$defs/path"
           },
           "uniqueItems": true
+        },
+        "shapes": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/path"
+          },
+          "uniqueItems": true
         }
       },
+      "additionalProperties": false
+    },
+    "guard": {
+      "description": "Declared by the one plugin that identifies callers. `credentials` are what it verifies -- token, challenge -- each with the type a trigger's policy attachment must give it and the context fields it yields once verified; `context` is what it adds to every trigger kind's context: request.principal, request.session, request.challenge, what policies and resolvers read. `refuses` lists the reasons it refuses with on its own (a credential that does not verify), each with what it means; a trigger giving a credential must map them (T005).",
+      "type": "object",
+      "properties": {
+        "context": {
+          "$ref": "common.schema.json#/$defs/inlineObject"
+        },
+        "refuses": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "common.schema.json#/$defs/ident"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "credentials": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "common.schema.json#/$defs/ident"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "$ref": "common.schema.json#/$defs/type"
+              },
+              "yields": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/ident"
+                },
+                "uniqueItems": true,
+                "minItems": 1
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "yields"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "context",
+        "credentials"
+      ],
       "additionalProperties": false
     }
   },

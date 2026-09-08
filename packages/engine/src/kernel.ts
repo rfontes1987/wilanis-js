@@ -205,16 +205,16 @@ export class Kernel {
                 return { ok: true as const, value };
               } catch (e) {
                 el.error = (e as Error).message; el.status = 'failed';
-                if (e instanceof Refusal) el.reason = e.reason;
-                return { ok: false as const, error: el.error, reason: el.reason };
+                if (e instanceof Refusal) { el.reason = e.reason; if (e.detail) el.detail = e.detail; }
+                return { ok: false as const, error: el.error, reason: el.reason, detail: el.detail };
               } finally { el.endedAt = Date.now(); }
             }));
             if (n.onItemFailure !== 'collect') {
               const i = results.findIndex(r => !r.ok);
               if (i >= 0) {
                 // an element that refused refuses the map, with its reason; an element that broke is a fault of the map
-                const r = results[i] as { error: string; reason?: string };
-                throw r.reason !== undefined ? new Refusal(r.reason, r.error) : new Error(`map '${id}' element ${i}: ${r.error}`);
+                const r = results[i] as { error: string; reason?: string; detail?: Record<string, unknown> };
+                throw r.reason !== undefined ? new Refusal(r.reason, r.error, r.detail) : new Error(`map '${id}' element ${i}: ${r.error}`);
               }
             }
             const out = n.onItemFailure === 'collect' ? results : results.map(r => (r as { value: unknown }).value);
@@ -223,7 +223,7 @@ export class Kernel {
         } catch (e) {
           rep.status = 'failed';
           rep.error = (e as Error).message;
-          if (e instanceof Refusal) rep.reason = e.reason;
+          if (e instanceof Refusal) { rep.reason = e.reason; if (e.detail) rep.detail = e.detail; }
           failed = true;
           for (const x of Object.keys(spec.nodes)) if (status(x) === 'pending') nodes[x].status = 'cancelled';
         } finally {
@@ -273,8 +273,8 @@ export class Kernel {
  * run's refusal reaches the node that ran it, so the top level answers for the whole run. Absent when the
  * run answered, blocked, or failed on a fault.
  */
-export function refusalOf(report: Report): { reason: string; message: string } | undefined {
+export function refusalOf(report: Report): { reason: string; message: string; detail?: Record<string, unknown> } | undefined {
   if (report.status !== 'failed') return undefined;
   const n = Object.values(report.nodes).find(n => n.status === 'failed');
-  return n?.reason !== undefined ? { reason: n.reason, message: n.error ?? '' } : undefined;
+  return n?.reason !== undefined ? { reason: n.reason, message: n.error ?? '', ...(n.detail ? { detail: n.detail } : {}) } : undefined;
 }
