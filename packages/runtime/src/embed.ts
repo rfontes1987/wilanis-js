@@ -5,13 +5,13 @@
  */
 import { Compiler, buildEnv, runGraph, type CompileOptions, type Compiled } from '@wilanis/compiler';
 import type { Report } from '@wilanis/engine';
-import type { StartupStep, TriggerDoc } from '@wilanis/core';
+import { policyPath, type GuardArgs, type StartupStep, type TriggerDoc } from '@wilanis/core';
 import type { PluginModule, Codecs, Hold, Serving } from '@wilanis/core';
 import type { Scope } from '@wilanis/core';
 import { conforms, type BlobStore, type Type } from '@wilanis/core';
 import { TEMPLATE, WHOLE_TEMPLATE, splitPath } from '@wilanis/core';
 import { FileBlobStore } from './blobs.js';
-import { readPath } from '@wilanis/engine';
+import { readPath, refusalOf } from '@wilanis/engine';
 
 /** Fill a templated literal from roots (request, ...). Whole templates take the value; embedded ones interpolate. */
 export function fillTemplates(value: unknown, roots: Record<string, unknown>): unknown {
@@ -43,16 +43,23 @@ export class Embedder {
   readonly secrets: Record<string, string>;
   /** What `holds` operations have started, in the order they started it: the runtime stops them in reverse. */
   readonly held: { label: string; stop: () => Promise<void> }[] = [];
+  /** A run whose effects are stubbed (rehearse, fuzz, regress): nothing leaves the process, and nothing gates it. */
+  readonly stubbed: boolean;
+  /** The one plugin that identifies callers, when the project names one. */
+  private readonly guard: PluginModule | undefined;
 
   constructor(readonly scope: Scope, readonly plugins: PluginModule[], opts: CompileOptions & { env?: NodeJS.ProcessEnv; blobs?: BlobStore; root?: string } = {}) {
     this.compiler = new Compiler(scope, plugins, opts);
     const processEnv = opts.env ?? process.env;
     const built = buildEnv(scope, processEnv);
     this.secrets = Object.fromEntries(Object.entries(scope.project?.secrets ?? {}).map(([k, v]) => [k, processEnv[v] ?? '']));
-    this.blobs = opts.blobs ?? new FileBlobStore(opts.root ?? process.cwd(), scope.project?.blobs?.dir);
+    const root = opts.root ?? process.cwd();
+    this.blobs = opts.blobs ?? new FileBlobStore(root, scope.project?.blobs?.dir);
     const hold: Hold = what => { this.held.push(what); };
-    this.env = { ...built.env, blobs: this.blobs, hold };
+    this.env = { ...built.env, blobs: this.blobs, hold, root };
     this.missingSecrets = built.missing;
+    this.stubbed = Boolean(opts.stubEffects);
+    this.guard = plugins.find(p => p.guard);
   }
 
   /** Give `holds` operations the tree being served, as env.serving. Only `start` calls this: a stubbed run holds nothing. */
@@ -84,8 +91,72 @@ export class Embedder {
     return runGraph(compiled, { initial: { in: input }, signal: opts.signal, env: opts.blobs ? { ...this.env, blobs: opts.blobs } : this.env });
   }
 
+  /**
+   * The trigger's in/out types, resolved. A policy rehearsed as a trigger declares no `in` and writes `fire.in`
+   * all the same; its input is then what the decision accepts.
+   */
   types(trigger: TriggerDoc): { in?: Type; out?: Type } {
-    return { in: trigger.in ? this.scope.types.ref(trigger.in) : undefined, out: trigger.out ? this.scope.types.ref(trigger.out) : undefined };
+    const accepts = () => { const o = this.scope.op(trigger.fire.run); return typeof o === 'string' || !Object.keys(o.op.accepts ?? {}).length ? undefined : this.scope.types.fields(o.op.accepts); };
+    return { in: trigger.in ? this.scope.types.ref(trigger.in) : trigger.fire.in !== undefined ? accepts() : undefined, out: trigger.out ? this.scope.types.ref(trigger.out) : undefined };
+  }
+
+  /**
+   * The gate before a run. The guard verifies the credentials the trigger's policy attachments give, and what it
+   * establishes joins the request; then every policy decides, in order. Answers the report that ends the run
+   * -- the guard's refusal, a policy's denial, a challenge carrying its detail -- or nothing when the trigger
+   * may fire. A stubbed run is never gated: its generated context already carries a principal, and the
+   * policies are rehearsed as roots of their own.
+   */
+  private async gate(trigger: TriggerDoc, request: Record<string, unknown>, opts: FireOptions): Promise<Report | undefined> {
+    if (this.stubbed || !trigger.policies?.length) return undefined;
+    const args = this.guardArgs(trigger, request);
+    if (this.guard) {
+      const id = await this.guard.guard!.identify(args);
+      if ('refuse' in id) return refused(`${this.guard.root} guard`, 'identify', id.refuse.reason, id.refuse.message, id.refuse.detail);
+      Object.assign(request, id.context);
+    }
+    for (const use of trigger.policies) {
+      const ref = policyPath(use);
+      const p = this.scope.get('policy', ref);
+      if (!p) throw new Error(`unknown policy '${ref}'`);
+      const compiled = this.operation(p.doc.decide.run);
+      const input = fillTemplates(p.doc.decide.in ?? {}, { request });
+      const report = await runGraph(compiled, { initial: { in: input, request }, signal: opts.signal, env: opts.blobs ? { ...this.env, blobs: opts.blobs } : this.env });
+      if (report.status === 'done') continue;
+      const decided: Report = { ...report, graph: p.path };
+      const outcome = refusalOf(report);
+      if (!outcome) return decided; // the decision broke: a fault, answered as one
+      const effect = p.doc.outcomes[outcome.reason];
+      if (effect?.effect === 'challenge' && this.guard) {
+        const ch = await this.guard.guard!.challenge({ ...args, policy: p.path, reason: outcome.reason, message: outcome.message, method: effect.method });
+        const [id, node] = Object.entries(decided.nodes).find(([, n]) => n.status === 'failed')!;
+        decided.nodes = { ...decided.nodes, [id]: { ...node, error: ch.message, detail: ch.detail } };
+      }
+      return decided;
+    }
+    return undefined;
+  }
+
+  /**
+   * What the guard is handed: the credentials the trigger's policy attachments give, read from the context -- a list is
+   * the places one may sit, the first present wins; a value with nothing in it is no credential -- and the reads as
+   * written, so the guard can say where an answer goes.
+   */
+  private guardArgs(trigger: TriggerDoc, request: Record<string, unknown>): GuardArgs {
+    const settings = this.guard ? (this.env.plugins as Record<string, Record<string, unknown>>)[this.guard.root] ?? {} : {};
+    const credentials: Record<string, unknown> = {}, reads: Record<string, unknown> = {};
+    const present = (v: unknown): boolean => v !== undefined && v !== '' && !(v && typeof v === 'object' && !Array.isArray(v) && !Object.values(v as Record<string, unknown>).some(present));
+    for (const use of trigger.policies ?? []) {
+      if (typeof use === 'string') continue;
+      for (const [name, raw] of Object.entries(use.in ?? {})) {
+        reads[name] ??= raw;
+        if (credentials[name] !== undefined) continue;
+        const filled = fillTemplates(raw, { request });
+        const value = Array.isArray(raw) ? (filled as unknown[]).find(present) : filled;
+        if (present(value)) credentials[name] = value;
+      }
+    }
+    return { trigger, kind: this.scope.canon(trigger.kind), request, credentials, reads, settings, env: this.env };
   }
 
   /** The codec table of a plugin's settings, resolved to implementations: content type -> codec. */
@@ -115,10 +186,13 @@ export class Embedder {
   }
 
   async fire(trigger: TriggerDoc, input: unknown, request: Record<string, unknown>, opts: FireOptions = {}): Promise<Report> {
+    const gated = await this.gate(trigger, request, opts);
+    if (gated) return gated;
     const compiled = this.operation(trigger.fire.run);
     const initial: Record<string, unknown> = { request };
     if (input !== undefined) initial.in = input;
     const report = await runGraph(compiled, { initial, stubs: opts.stubs, signal: opts.signal, env: opts.blobs ? { ...this.env, blobs: opts.blobs } : this.env });
+    if (this.guard?.guard!.settle && !this.stubbed && trigger.policies?.length) await this.guard.guard!.settle({ ...this.guardArgs(trigger, request), report });
     if (report.status === 'done' && trigger.out) {
       const t = this.types(trigger).out!;
       const output = prune(report.output, t); // a closed out shape keeps only what it declares
@@ -128,6 +202,12 @@ export class Embedder {
     }
     return report;
   }
+}
+
+/** A report of a run that ended before any graph ran: the guard refused the credential. */
+function refused(graph: string, node: string, reason: string, message: string, detail?: Record<string, unknown>): Report {
+  const now = Date.now();
+  return { graph, status: 'failed', nodes: { [node]: { status: 'failed', handler: graph, reason, error: message, ...(detail ? { detail } : {}) } }, startedAt: now, endedAt: now };
 }
 
 /** Drop keys a closed object type does not declare, recursively. Open objects and unknown pass through. */

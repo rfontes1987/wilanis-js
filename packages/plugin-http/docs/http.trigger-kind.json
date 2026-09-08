@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger-kind.schema.json",
   "label": "HTTP route",
-  "description": "A route. The body is decoded by the consumes codec into request.body (typed by settings.body); query, route placeholders (request.params, each one required), headers and the principal are in the context too. The trigger's input mapping picks what the graph gets; access is checked before the graph runs; the answer is encoded by the produces codec with the status the response block chooses. A refusal (a graph ending on purpose with a reason) is answered as { reason, message } with the status response.refusals maps that reason to; every reason the route can reach must be mapped (T005). A fault is a 500.",
+  "description": "A route. The body is decoded by the consumes codec into request.body (typed by settings.body); query, route placeholders (request.params, each one required), headers and cookies are in the context too, and the guarding plugin adds the caller it identified (request.principal, request.session, request.challenge) for triggers whose policy attachments give it a credential. The trigger's input mapping picks what the graph gets; the trigger's policies decide before the graph runs; the answer is encoded by the produces codec with the status the response block chooses, and sets the cookies response.cookies takes from it. A refusal (a graph ending on purpose with a reason, a policy denying, the guard refusing a credential) is answered as { reason, message } plus what it carries, with the status response.refusals maps that reason to; every reason the route can reach must be mapped (T005). A fault is a 500.",
   "settings": {
     "fields": {
       "route": {
@@ -37,24 +37,6 @@
         "required": false,
         "description": "the edge type of the decoded body (request.body); declaring it means a body is expected, so a request without one is a 400. Absent: the body is the trigger's in"
       },
-      "access": {
-        "type": {
-          "fields": {
-            "open": {
-              "type": "boolean",
-              "required": false,
-              "description": "true: no token needed"
-            },
-            "roles": {
-              "type": "string[]",
-              "required": false,
-              "description": "the principal must hold one of these"
-            }
-          }
-        },
-        "required": false,
-        "description": "absent: a valid token is required, any role"
-      },
       "response": {
         "type": {
           "fields": {
@@ -89,11 +71,19 @@
               },
               "required": false,
               "description": "reason -> status: how each refusal the route can reach is answered, e.g. { \"missing\": 404, \"upstream\": 502 }. The body is { reason, message }."
+            },
+            "cookies": {
+              "type": {
+                "fields": {},
+                "open": "@http/Cookie.shape.json"
+              },
+              "required": false,
+              "description": "cookie name -> what it takes from the answer and how it is set: { \"session\": { \"from\": \"accessToken\", \"omit\": true, \"httpOnly\": true, \"maxAge\": 900 } }"
             }
           }
         },
         "required": false,
-        "description": "how the route answers: the status of an answer, and one status per refusal reason"
+        "description": "how the route answers: the status of an answer, one status per refusal reason, and the cookies it sets"
       }
     }
   },
@@ -112,6 +102,13 @@
         },
         "description": "lower-cased names"
       },
+      "cookies": {
+        "type": {
+          "fields": {},
+          "open": "string"
+        },
+        "description": "the request's cookies by name, from the cookie header"
+      },
       "query": {
         "type": {
           "fields": {},
@@ -125,29 +122,6 @@
       "body": {
         "type": "$Body",
         "description": "present whenever settings.body is declared"
-      },
-      "principal": {
-        "type": {
-          "fields": {
-            "subject": {
-              "type": "string"
-            },
-            "roles": {
-              "type": "string[]"
-            },
-            "claims": {
-              "type": {
-                "fields": {},
-                "open": true
-              }
-            },
-            "token": {
-              "type": "string",
-              "secret": true
-            }
-          }
-        },
-        "required": false
       }
     }
   },

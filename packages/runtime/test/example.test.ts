@@ -3,16 +3,19 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, w
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadTree, schemaRef, schemaUrl, type PluginModule } from '@wilanis/core';
+import { loadTree, schemaRef, schemaUrl, type PluginModule, type ResolvedInclude } from '@wilanis/core';
 import { checkTree } from '@wilanis/compiler';
 import http from '@wilanis/plugin-http';
 import blobs from '@wilanis/plugin-blob';
 import reload from '@wilanis/plugin-reload';
+import auth from '@wilanis/plugin-auth';
 import { BUILTIN_PLUGINS, describe as describeDoc, loadProject, rehearse, start } from '../src/index.js';
 
 const EXAMPLE = fileURLToPath(new URL('../../../example', import.meta.url));
-const PLUGINS = { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs, '@reload': reload };
-const codes = (root: string) => checkTree(loadTree(root, PLUGINS)).items.map(r => r.code);
+const PLUGINS = { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs, '@reload': reload, '@auth': auth };
+/** The tree the example includes, as the runtime would resolve it from the example's node_modules. */
+const INCLUDES: ResolvedInclude[] = [{ from: '@wilanis/access', dir: fileURLToPath(new URL('../../../libraries/access', import.meta.url)), features: ['access'] }];
+const codes = (root: string) => checkTree(loadTree(root, PLUGINS, INCLUDES)).items.map(r => r.code);
 
 /** A plugin's docs directory, written from name -> document. */
 function docsDir(docs: Record<string, unknown>): string {
@@ -50,29 +53,29 @@ describe('the example tree', () => {
   it('rehearses every branch of every switch, whatever the seed', async () => {
     // solved from the rules, so no seed can leave a branch untried
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-      const r = await rehearse(loadTree(EXAMPLE, PLUGINS), { seed });
+      const r = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed });
       expect(r.ok, `seed ${seed}: ${r.lines.join('\n')}`).toBe(true);
       expect(r.lines.join('\n')).not.toMatch(/NEVER RUN|BROKE|BLOCKED|WRONG ROUTE/);
     }
   });
   it('reports each decision once, under the graph that declares it', async () => {
-    const r = await rehearse(loadTree(EXAMPLE, PLUGINS), { seed: 1 });
+    const r = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed: 1 });
     const text = r.lines.join('\n');
     // list-rows is reached from two triggers (the listing and the digest), and is one decision even so
     expect(text.match(/list-rows  switch 'route'/g)).toHaveLength(1);
     // delete-row is reached directly by the single delete and once per element by the batch delete's map
     expect(text.match(/delete-row  switch 'route'/g)).toHaveLength(1);
-    expect(text).toMatch(/every branch settled -- 17 branch\(es\), 7 decision\(s\), 7 graph\(s\)/);
+    expect(text).toMatch(/every branch settled -- 37 branch\(es\), 15 decision\(s\), 15 graph\(s\)/);
   });
   it('reaches both the answer and the declared failure of every data graph', async () => {
-    const r = await rehearse(loadTree(EXAMPLE, PLUGINS), { seed: 1 });
+    const r = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed: 1 });
     const text = r.lines.join('\n');
     // the six data graphs each answer on one branch and refuse on purpose on the others
     expect(text.match(/refused on purpose at 'failed' as upstream/g)).toHaveLength(6);
     // the three graphs behind an id declare what a missing id means, and say so in one word the trigger maps
     expect(text.match(/refused on purpose at 'missing' as missing: "no entry /g)).toHaveLength(3);
-    // every branch that answers names the node it answered from, never a bare status word
-    expect(text.match(/answered from '/g)).toHaveLength(8);
+    // every branch that answers names the node it answered from, never a bare status word: the monitor's eight, and the access feature's
+    expect(text.match(/answered from '/g)).toHaveLength(16);
     // the rule is shown as a condition, not as a bare expression next to a node id
     expect(text).toMatch(/when status == 200 && has\(body\)/);
     expect(text).toMatch(/anything else/);
@@ -80,7 +83,7 @@ describe('the example tree', () => {
   });
   it('rehearses a switch inside a mapped operation through the first element, whatever the seed', async () => {
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-      const r = await rehearse(loadTree(EXAMPLE, PLUGINS), { seed, verbose: true });
+      const r = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed, verbose: true });
       const text = r.lines.join('\n');
       // the batch delete reaches the delete-row decision through its map, and every branch of it settles
       expect(text).toMatch(/delete-row  switch 'route'  3\/3 branches  \[via delete-entries, delete-entry\]/);
@@ -89,7 +92,7 @@ describe('the example tree', () => {
   it('loads its plugin packages through project.json → plugins[].from', async () => {
     const l = await loadProject(EXAMPLE);
     expect(l.refusals.items).toEqual([]);
-    expect(l.plugins.map(p => p.root).sort()).toEqual(['@blob', '@cli', '@http', '@reload', '@std']);
+    expect(l.plugins.map(p => p.root).sort()).toEqual(['@auth', '@blob', '@cli', '@http', '@reload', '@std']);
   });
 });
 
@@ -105,7 +108,7 @@ describe('plugin packages and hooks', () => {
     expect(await codesOf('@wilanis/no-such-plugin')).toContain('D006');
   });
   it('every document a plugin ships is a file a reader can open, and describe says where', () => {
-    const l = loadTree(EXAMPLE, PLUGINS);
+    const l = loadTree(EXAMPLE, PLUGINS, INCLUDES);
     for (const f of l.registry.files.filter(f => f.native)) {
       expect(f.file, f.path).toBeDefined();
       expect(existsSync(f.file!), f.path).toBe(true);
@@ -348,7 +351,7 @@ describe('sabotage', () => {
     expect(sabotage('features/monitor/data/create-row.graph.json', d => { d.nodes[0].in.headers = { 'x-forwarded-user-agent': '{{caller}}' }; })).toContain('G003');
   });
   it('P002 a resolver reading a path no trigger kind hands', () => {
-    expect(sabotage('features/monitor/edge/request.resolvers.json', d => { d.resolvers.agent.read = 'request.cookies.session'; })).toContain('P002');
+    expect(sabotage('features/monitor/edge/request.resolvers.json', d => { d.resolvers.agent.read = 'request.nowhere.session'; })).toContain('P002');
   });
   it('P003 a resolver named like a root', () => {
     expect(sabotage('features/monitor/edge/request.resolvers.json', d => { d.resolvers.in = { read: 'request.headers.host' }; })).toContain('P003');
@@ -442,5 +445,56 @@ describe('sabotage', () => {
   });
   it('R001 an alias to nowhere', () => {
     expect(sabotage('features/monitor/domain/digest.graph.json', d => { d.nodes[0].run = '@monitor/nope.port.json#listAll'; })).toContain('R001');
+  });
+});
+
+describe('sabotage: access, as the example attaches the included policies', () => {
+  it('A004 a credential the guard does not verify, one read where the kind hands nothing, and one no policy of the trigger reads', () => {
+    expect(sabotage('features/monitor/edge/record-entry.trigger.json', t => { t.policies[0].in = { badge: '{{request.headers.authorization}}' }; })).toContain('A004');
+    expect(sabotage('features/monitor/edge/record-entry.trigger.json', t => { t.policies[0].in = { token: '{{request.flags.token}}' }; })).toContain('A004');
+    expect(sabotage('features/monitor/edge/record-entry.trigger.json', t => { t.policies[0].in.challenge = { id: '{{request.query.cid}}', code: '{{request.query.code}}' }; })).toEqual(['A004']);
+  });
+  it('A005 a policy reading the caller on a trigger that gives the guard nothing', () => {
+    expect(sabotage('features/monitor/edge/record-entry.trigger.json', t => { t.policies = ['@access/edge/employees-only.policy.json', '@access/edge/can-record.policy.json']; delete t.settings.response.refusals.invalid_credential; })).toEqual(['A005', 'A005']);
+  });
+  it('T005 a policy\'s reason the trigger does not map; T006 a mapped reason no policy reaches once the policy is gone', () => {
+    expect(sabotage('features/monitor/edge/record-entry.trigger.json', t => { delete t.settings.response.refusals.forbidden; })).toEqual(['T005']);
+    expect(sabotage('features/monitor/edge/record-entry.trigger.json', t => { t.policies.pop(); })).toEqual([]);
+    expect(sabotage('features/monitor/edge/record-entry.trigger.json', t => { delete t.policies; delete t.settings.response.refusals.invalid_credential; })).toEqual(['T006', 'T006']);
+  });
+  it('R001 a trigger naming a policy that is not there', () => {
+    expect(sabotage('features/hello/edge/hello-gated.trigger.json', t => { t.policies = ['@access/edge/nope.policy.json']; })).toContain('R001');
+  });
+  it('D009 a local feature the include also ships; D010 an include that is not a tree, or one asking a feature it does not ship or a plugin the project lacks', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wilanis-'));
+    cpSync(EXAMPLE, dir, { recursive: true, filter: p => !p.includes('node_modules') });
+    mkdirSync(join(dir, 'features/access'), { recursive: true });
+    writeFileSync(join(dir, 'features/access/feature.json'), JSON.stringify({ $schema: schemaRef('feature'), description: 'mine' }));
+    expect(codes(dir)).toContain('D009');
+    rmSync(dir, { recursive: true, force: true });
+    const lib = INCLUDES[0];
+    expect(checkTree(loadTree(EXAMPLE, PLUGINS, [{ ...lib, dir: tmpdir() }])).items.map(r => r.code)).toContain('D010');
+    expect(checkTree(loadTree(EXAMPLE, PLUGINS, [{ ...lib, features: ['access', 'nope'] }])).items.map(r => r.code)).toContain('D010');
+    expect(sabotage('project.json', p => { p.plugins = p.plugins.filter((x: any) => x.use !== '@cli'); })).toContain('D010');
+  });
+  it('an included document says where it came from, and the include brings its alias along', () => {
+    const load = loadTree(EXAMPLE, PLUGINS, INCLUDES);
+    const policy = load.registry.get('policy', load.resolve('@access/edge/signed-in.policy.json'));
+    expect(policy?.included).toBe('@wilanis/access');
+    expect(policy?.file).toContain('libraries/access/features/access/edge/signed-in.policy.json');
+    expect(load.registry.get('trigger', '@features/monitor/edge/record-entry.trigger.json')?.included).toBeUndefined();
+    expect(describeDoc(load, '@access/edge/signed-in.policy.json')).toContain('included from  @wilanis/access');
+    // the dev feature and the connections of the library stay behind
+    expect(load.registry.get('feature', '@features/access-dev/feature.json')).toBeUndefined();
+    expect(load.registry.all('connection').map(c => c.path).sort()).toEqual(['@connections/customers.connection.json', '@connections/employees.connection.json', '@connections/monitor-api.connection.json']);
+  });
+  it('the `in` operator: a role check in a switch rule, and a branch the rehearsal can steer both ways', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wilanis-'));
+    cpSync(EXAMPLE, dir, { recursive: true, filter: p => !p.includes('node_modules') });
+    const r = await rehearse(loadTree(dir, PLUGINS, INCLUDES), { seed: 5 });
+    rmSync(dir, { recursive: true, force: true });
+    const lines = r.lines.filter(l => l.includes("'recorder' in principal.roles") || l.includes('require-recorder'));
+    expect(lines.some(l => l.includes("answered from 'granted'"))).toBe(true);
+    expect(r.ok).toBe(true);
   });
 });

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/connection-kind.schema.json",
+  "label": "OIDC issuer",
+  "description": "An OpenID Connect issuer (Okta, Auth0, Keycloak...) asked to verify a username and password with the password grant. The identity token it answers is verified against the issuer's published keys, and the identity read from it; our own token is what the caller then gets, never the issuer's.",
+  "settings": {
+    "fields": {
+      "issuer": {
+        "type": "string",
+        "description": "the issuer URL; <issuer>/.well-known/openid-configuration is read"
+      },
+      "clientId": {
+        "type": "string"
+      },
+      "clientSecret": {
+        "type": "string",
+        "secret": true
+      },
+      "scope": {
+        "type": "string",
+        "required": false,
+        "description": "default 'openid profile'"
+      },
+      "groupsClaim": {
+        "type": "string",
+        "required": false,
+        "description": "the claim holding the groups; default groups"
+      },
+      "timeoutMs": {
+        "type": "number",
+        "required": false
+      }
+    }
+  }
+}

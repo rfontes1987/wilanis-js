@@ -28,6 +28,8 @@ export interface Domain {
   gt?: number; gte?: number; lt?: number; lte?: number;
   /** Bounds on len(path): the path is a list of at least/at most this many elements. */
   minLen?: number; maxLen?: number;
+  /** The path is a list holding each of these (`x in path`) / none of these (`!(x in path)`). */
+  has?: unknown[]; lacks?: unknown[];
   /** The path must be truthy / falsy, used when a bare path is the whole predicate. */
   truthy?: boolean;
 }
@@ -74,6 +76,10 @@ function narrow(a: Domain, b: Domain): Maybe<Domain> {
     if (d.eq !== undefined && JSON.stringify(d.eq) !== JSON.stringify(b.eq)) return UNSAT;
     d.eq = b.eq; d.present = true;
   }
+  // membership: what the list must hold implies the list is there; what it must lack does not
+  if (b.has) { if (d.absent) return UNSAT; d.has = [...(d.has ?? []), ...b.has]; d.present = true; }
+  if (b.lacks) d.lacks = [...(d.lacks ?? []), ...b.lacks];
+  if (d.has && d.lacks && d.has.some(x => d.lacks!.some(y => JSON.stringify(x) === JSON.stringify(y)))) return UNSAT;
   // an exact value must survive every bound and exclusion gathered for the path
   if (d.absent && (d.eq !== undefined || d.present || d.truthy || d.minLen !== undefined)) return UNSAT;
   if (d.eq !== undefined && !fits(d.eq, d)) return UNSAT;
@@ -95,7 +101,10 @@ function fits(v: unknown, d: Domain): boolean {
   if (Array.isArray(v)) {
     if (d.minLen !== undefined && v.length < d.minLen) return false;
     if (d.maxLen !== undefined && v.length > d.maxLen) return false;
-  }
+    const holds = (x: unknown) => v.some(y => JSON.stringify(x) === JSON.stringify(y));
+    if (d.has?.some(x => !holds(x))) return false;
+    if (d.lacks?.some(holds)) return false;
+  } else if (d.has?.length) return false;
   return true;
 }
 
@@ -148,6 +157,11 @@ type Cmp = keyof typeof NEGATE;
 
 /** Solve one comparison. One side must be a literal; comparing two paths has no canonical answer. */
 function compare(e: expr.Expr & { t: 'bin' }, want: boolean): Demands[] {
+  // `lit in path`: the list must hold the literal, or must not
+  if (e.op === 'in') {
+    if (e.l.t !== 'lit' || e.r.t !== 'path') return [];
+    return [{ [key(e.r.p)]: want ? { has: [e.l.v], present: true } : { lacks: [e.l.v] } }];
+  }
   const sides: [expr.Expr, expr.Expr] = [e.l, e.r];
   const li = sides.findIndex(s => s.t === 'lit');
   if (li < 0) return []; // path vs path: unsolvable, no alternatives
@@ -198,6 +212,7 @@ function nameable(e: expr.Expr): boolean {
     case 'len': return false;
     case 'bin': {
       if (e.op === '&&' || e.op === '||') return nameable(e.l) || nameable(e.r);
+      if (e.op === 'in') return e.l.t === 'lit' && e.r.t === 'path';
       // a comparison names something when one side is a literal and the other a path or len(path)
       const sides = [e.l, e.r];
       if (!sides.some(s => s.t === 'lit')) return false;
@@ -289,6 +304,14 @@ function unlike(v: number, d: Domain): number {
 export function satisfy(d: Domain, generated: unknown, t?: Type, seed = 1): unknown {
   if (d.absent) return undefined;
   if (d.eq !== undefined) return d.eq;
+  if (d.has?.length || d.lacks?.length) {
+    // the generated list, less what it must lack, plus what it must hold; a list demanded to lack a value can stay empty
+    const base = Array.isArray(generated) ? generated : d.has?.length ? [] : Array.isArray(fresh(t, seed)) ? (fresh(t, seed) as unknown[]) : [];
+    const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
+    const kept = base.filter(x => !d.lacks?.some(y => same(x, y)));
+    for (const x of d.has ?? []) if (!kept.some(y => same(x, y))) kept.push(x);
+    return kept;
+  }
   if (d.minLen !== undefined || d.maxLen !== undefined) {
     const base = Array.isArray(generated) ? generated : Array.isArray(fresh(t, seed)) ? (fresh(t, seed) as unknown[]) : [];
     const want = d.minLen !== undefined ? Math.max(base.length, d.minLen) : Math.min(base.length, d.maxLen!);
@@ -554,7 +577,9 @@ export function casesFor(
           continue;
         }
         if (src.ref === 'in' || src.ref === 'request' || src.ref === 'const') { unreachable.push(dotted); continue; }
-        const target = [...prefix, src.ref].join('.');
+        // an operation met by a delegation lowers to a wrapper spec holding one node `op`, so what the seed recorded for it sits one level deeper
+        const direct = [...prefix, src.ref].join('.');
+        const target = generated(direct) === undefined && !typeOf(direct) && (generated(`${direct}.op`) !== undefined || typeOf(`${direct}.op`)) ? `${direct}.op` : direct;
         const full = [...src.path, ...within];
         const base = target in stubs ? stubs[target] : generated(target);
         const want = satisfy(domain, getPath(base, full), typeAtPath(typeOf(target), full), seed);

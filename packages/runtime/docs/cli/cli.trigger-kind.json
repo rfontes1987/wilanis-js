@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger-kind.schema.json",
   "label": "Command",
-  "description": "Fired from the command line: wilanis run <trigger path> [--flag=value ...] [--file path] [--out path] [args...]. The context hands flags (as strings), args, cwd, and the file named by --file as a blob; the trigger's input mapping picks what the graph gets. The answer is printed as JSON; a blob answer is streamed to --out, or to stdout. A refusal prints as { reason, message } and exits 1.",
+  "description": "Fired from the command line: wilanis run <trigger path> [--flag=value ...] [--file path] [--out path] [args...]. The context hands flags (as strings), args, cwd, and the file named by --file as a blob; the trigger's input mapping picks what the graph gets. The answer is printed as JSON; a blob answer is streamed to --out, or to stdout. A refusal prints as { reason, message } -- a challenge with its id and how to answer it beside them -- and exits 1.",
   "settings": {
     "fields": {
       "command": {

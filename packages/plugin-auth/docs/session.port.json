@@ -1,0 +1,73 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "label": "Sessions",
+  "description": "The session a token belongs to, and its attributes -- values a graph stores on one call and reads on another, keyed by the credential the caller presents. The attributes have the shape settings.session names; every write is judged against it, and `type` names it where the operation is called so the checker can too. The session id is what the guard hands as request.session.id, read through a resolvers document.",
+  "operations": {
+    "get": {
+      "description": "The attributes of a session. Fails when there is no such session.",
+      "accepts": {
+        "session": {
+          "type": "string",
+          "description": "the session id: {{sid}} from a resolver reading request.session.id"
+        },
+        "type": {
+          "type": "type",
+          "binds": "$S",
+          "description": "the session shape settings.session names"
+        }
+      },
+      "returns": "$S"
+    },
+    "set": {
+      "description": "Merge values into a session's attributes and answer them whole. Each key is an attribute of the shape; the merged result must conform to it.",
+      "accepts": {
+        "session": {
+          "type": "string"
+        },
+        "values": {
+          "type": {
+            "fields": {},
+            "open": true
+          },
+          "description": "attribute -> value; keys not in the shape are refused by the checker (X104)"
+        },
+        "type": {
+          "type": "type",
+          "binds": "$S"
+        }
+      },
+      "returns": "$S"
+    },
+    "remove": {
+      "description": "Drop attributes from a session and answer what remains. A required attribute cannot be dropped.",
+      "accepts": {
+        "session": {
+          "type": "string"
+        },
+        "keys": {
+          "type": "string[]"
+        },
+        "type": {
+          "type": "type",
+          "binds": "$S"
+        }
+      },
+      "returns": "$S"
+    },
+    "end": {
+      "description": "End a session: its refresh token is void and its access tokens no longer verify. Answers whether there was one to end.",
+      "accepts": {
+        "session": {
+          "type": "string"
+        }
+      },
+      "returns": {
+        "fields": {
+          "ended": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

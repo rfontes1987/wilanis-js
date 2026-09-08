@@ -23,6 +23,9 @@
       "path": "packages/plugin-reload"
     },
     {
+      "path": "packages/plugin-auth"
+    },
+    {
       "path": "packages/view"
     }
   ]

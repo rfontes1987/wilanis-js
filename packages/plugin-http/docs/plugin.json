@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/plugin.schema.json",
   "label": "HTTP",
-  "description": "HTTP out, HTTP connections, HTTP triggers, body codecs. Settings say which codec handles which content type; a content type mapped to the blob codec is stored as a file and carried as a handle.",
+  "description": "HTTP out, HTTP connections, HTTP triggers, body codecs. Settings say which codec handles which content type; a content type mapped to the blob codec is stored as a file and carried as a handle. Who may call a route is not this plugin's business: a trigger attaches its policies and gives the guard the token where the route reads it (a header, a cookie), and the guarding plugin (@wilanis/plugin-auth) identifies the caller.",
   "settings": {
     "fields": {
       "port": {
@@ -15,35 +15,6 @@
           "open": "string"
         },
         "description": "content type -> codec document path, e.g. \"application/json\": \"@http/codecs/json.codec.json\""
-      },
-      "jwt": {
-        "type": {
-          "fields": {
-            "jwksUrl": {
-              "type": "string",
-              "required": false
-            },
-            "secret": {
-              "type": "string",
-              "required": false,
-              "secret": true
-            },
-            "issuer": {
-              "type": "string",
-              "required": false
-            },
-            "audience": {
-              "type": "string",
-              "required": false
-            },
-            "rolesClaim": {
-              "type": "string",
-              "required": false,
-              "description": "claim holding the role(s); default role"
-            }
-          }
-        },
-        "required": false
       }
     }
   },
@@ -64,6 +35,9 @@
       "@http/codecs/form.codec.json",
       "@http/codecs/multipart.codec.json",
       "@http/codecs/blob.codec.json"
+    ],
+    "shapes": [
+      "@http/Cookie.shape.json"
     ]
   }
 }

@@ -12,6 +12,7 @@
   },
   "workspaces": [
     "packages/*",
+    "libraries/*",
     "example"
   ],
   "scripts": {
@@ -20,7 +21,7 @@
     "test": "npm run build && vitest run",
     "check:example": "npm run build && wilanis check example",
     "rehearse:example": "npm run build && wilanis rehearse example",
-    "release": "npm test && npm publish -w packages/engine -w packages/core -w packages/compiler -w packages/runtime -w packages/plugin-http -w packages/plugin-blob -w packages/plugin-reload -w packages/view"
+    "release": "npm test && npm publish -w packages/engine -w packages/core -w packages/compiler -w packages/runtime -w packages/plugin-http -w packages/plugin-blob -w packages/plugin-reload -w packages/plugin-auth -w libraries/access -w packages/view"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",

@@ -1,23 +1,26 @@
 {
-  "name": "@wilanis/plugin-http",
+  "name": "@wilanis/plugin-auth",
   "version": "0.1.0",
-  "description": "The @http plugin for wilanis: routes as triggers, outbound requests, connections and body codecs.",
+  "description": "The @auth plugin for wilanis: identifies callers before any policy runs -- our own tokens, issued at sign-in and verified on every gated trigger; sessions with typed attributes; one-time challenges; directories a credential is verified against.",
   "type": "module",
   "license": "Apache-2.0",
   "author": "Rafael Fontes <rfontes1987@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rfontes1987/wilanis-js.git",
-    "directory": "packages/plugin-http"
+    "directory": "packages/plugin-auth"
   },
-  "homepage": "https://github.com/rfontes1987/wilanis-js/tree/main/packages/plugin-http#readme",
+  "homepage": "https://github.com/rfontes1987/wilanis-js/tree/main/packages/plugin-auth#readme",
   "bugs": "https://github.com/rfontes1987/wilanis-js/issues",
   "keywords": [
     "wilanis",
     "dataflow",
     "json-schema",
     "declarative",
-    "http",
+    "auth",
+    "jwt",
+    "session",
+    "otp",
     "plugin"
   ],
   "exports": {
@@ -37,18 +40,19 @@
   },
   "dependencies": {
     "@wilanis/core": "0.1.0",
-    "@wilanis/engine": "0.1.0"
+    "@wilanis/engine": "0.1.0",
+    "jose": "^6.0.0"
+  },
+  "devDependencies": {
+    "@wilanis/runtime": "0.1.0",
+    "@wilanis/plugin-http": "0.1.0",
+    "@wilanis/plugin-blob": "0.1.0",
+    "@wilanis/plugin-reload": "0.1.0"
   },
   "publishConfig": {
     "access": "public"
   },
   "engines": {
     "node": ">=22"
-  },
-  "devDependencies": {
-    "@wilanis/runtime": "0.1.0",
-    "@wilanis/plugin-blob": "0.1.0",
-    "@wilanis/plugin-reload": "0.1.0",
-    "jose": "^6.0.0"
   }
 }

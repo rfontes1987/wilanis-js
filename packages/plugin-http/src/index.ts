@@ -3,7 +3,6 @@
  * Which codec handles which content type is the project's explicit table in this plugin's settings.
  */
 import { createServer, type ServerResponse } from 'node:http';
-import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { fileURLToPath } from 'node:url';
 import type { TriggerDoc } from '@wilanis/core';
 import type { PluginModule, TriggerRuntime, Codecs, Hold, Serving } from '@wilanis/core';
@@ -80,10 +79,52 @@ async function request({ in: i, ctx }: { in: Record<string, unknown>; ctx: { env
 
 // ---- trigger runtime --------------------------------------------------------------------------------
 
+/** A cookie the answer sets: the field of the answer it takes (`from`), or `clear` for one to drop; `omit` keeps the field out of the body. */
+interface CookieOut { from?: string; clear?: boolean; omit?: boolean; httpOnly?: boolean; secure?: boolean; sameSite?: 'strict' | 'lax' | 'none'; maxAge?: number; path?: string }
 interface HttpSettings {
   route: string; method: string; consumes?: string; produces?: string; body?: string;
-  access?: { open?: boolean; roles?: string[] };
-  response?: { status?: { from?: string; map?: Record<string, number>; default?: number }; refusals?: Record<string, number> };
+  response?: { status?: { from?: string; map?: Record<string, number>; default?: number }; refusals?: Record<string, number>; cookies?: Record<string, CookieOut> };
+}
+
+/** The request's cookies, by name, from the one header they travel in. */
+function parseCookies(header: string | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of (header ?? '').split(';')) {
+    const i = part.indexOf('='); if (i < 0) continue;
+    const k = part.slice(0, i).trim(); if (!k) continue;
+    try { out[k] = decodeURIComponent(part.slice(i + 1).trim()); } catch { out[k] = part.slice(i + 1).trim(); }
+  }
+  return out;
+}
+
+/** One Set-Cookie line. */
+function setCookie(name: string, value: string, c: CookieOut): string {
+  const parts = [`${name}=${encodeURIComponent(value)}`, `Path=${c.path ?? '/'}`];
+  if (c.clear) parts.push('Max-Age=0'); else if (c.maxAge !== undefined) parts.push(`Max-Age=${Math.floor(c.maxAge)}`);
+  if (c.httpOnly !== false) parts.push('HttpOnly');
+  if (c.secure) parts.push('Secure');
+  parts.push(`SameSite=${(c.sameSite ?? 'lax').replace(/^./, ch => ch.toUpperCase())}`);
+  return parts.join('; ');
+}
+
+/**
+ * The cookies an answer sets, and the body once the fields those cookies took are omitted where the route says so.
+ * A cookie whose field the answer lacks is not set: the route said where the value comes from, and there is none.
+ */
+function cookiesOf(settings: HttpSettings, output: unknown): { headers: string[]; body: unknown } {
+  const table = settings.response?.cookies;
+  if (!table) return { headers: [], body: output };
+  const headers: string[] = [];
+  let body = output;
+  for (const [name, c] of Object.entries(table)) {
+    if (c.clear) { headers.push(setCookie(name, '', c)); continue; }
+    if (!c.from) continue;
+    const v = readPath(output, c.from.split('.'));
+    if (v === undefined || v === null) continue;
+    headers.push(setCookie(name, String(v), c));
+    if (c.omit && body && typeof body === 'object' && !Array.isArray(body) && c.from.split('.').length === 1) { const { [c.from]: _, ...rest } = body as Record<string, unknown>; body = rest; }
+  }
+  return { headers, body };
 }
 
 function compileRoute(route: string): { re: RegExp; keys: string[] } {
@@ -101,18 +142,20 @@ function statusFor(settings: HttpSettings, report: Report): number {
 }
 
 /**
- * How a report is answered on the wire. An answer takes the status the response block chooses from it. A
- * refusal -- the graph ending on purpose -- is answered as `{ reason, message }` with the status the trigger
- * maps that reason to under response.refusals; T005 has already made sure every reachable reason is mapped,
- * so a reason without one can only mean the tree changed under a running server, and is answered as a fault.
- * A fault (a node that broke) and a blocked run are 500 with what went wrong.
+ * How a report is answered on the wire. An answer takes the status the response block chooses from it, and sets
+ * the cookies response.cookies takes from it. A refusal -- the graph ending on purpose, a policy denying, the
+ * guard refusing a credential -- is answered as `{ reason, message }` plus whatever detail it carries (a
+ * challenge's id and how to answer it), with the status the trigger maps that reason to under response.refusals;
+ * T005 has already made sure every reachable reason is mapped, so a reason without one can only mean the tree
+ * changed under a running server, and is answered as a fault. A fault (a node that broke) and a blocked run are
+ * 500 with what went wrong.
  */
-export function encode(trigger: TriggerDoc, report: Report): { status: number; body: unknown } {
+export function encode(trigger: TriggerDoc, report: Report): { status: number; body: unknown; cookies?: string[] } {
   const settings = trigger.settings as unknown as HttpSettings;
   const refused = refusalOf(report);
   if (refused) {
     const status = settings.response?.refusals?.[refused.reason];
-    if (status !== undefined) return { status, body: refused };
+    if (status !== undefined) return { status, body: { reason: refused.reason, message: refused.message, ...(refused.detail ?? {}) } };
     return { status: 500, body: { error: `refused with reason '${refused.reason}', which response.refusals does not map: ${refused.message}` } };
   }
   if (report.status === 'failed') {
@@ -120,7 +163,8 @@ export function encode(trigger: TriggerDoc, report: Report): { status: number; b
     return { status: 500, body: { error: failed ? `${failed[0]}: ${failed[1].error}` : 'failed' } };
   }
   if (report.status === 'blocked') return { status: 500, body: { error: `blocked: needs ${report.needs?.join(', ')}` } };
-  return { status: statusFor(settings, report), body: report.output };
+  const { headers, body } = cookiesOf(settings, report.output);
+  return { status: statusFor(settings, report), body, ...(headers.length ? { cookies: headers } : {}) };
 }
 
 /**
@@ -135,23 +179,14 @@ const listen: Handler = async ({ in: input, ctx }) => {
   const { log } = serving;
   const settings = env.plugins?.[ROOT] ?? {};
   const port = Number(input.port ?? settings.port ?? 8080);
-  const jwt = (settings.jwt ?? {}) as { jwksUrl?: string; secret?: string; issuer?: string; audience?: string; rolesClaim?: string };
-  const jwks = jwt.jwksUrl ? createRemoteJWKSet(new URL(jwt.jwksUrl)) : undefined;
-  const key = jwt.secret ? new TextEncoder().encode(jwt.secret) : undefined;
   // read afresh per request: a reload swaps the tree under a socket that stays open
   const routesNow = () => serving.triggers(P('http.trigger-kind.json')).map(t => ({ t, s: t.settings as unknown as HttpSettings, ...compileRoute((t.settings as unknown as HttpSettings).route) }));
-  const verify = async (token: string): Promise<JWTPayload> => {
-    const opts = { issuer: jwt.issuer, audience: jwt.audience };
-    if (jwks) return (await jwtVerify(token, jwks, opts)).payload;
-    if (key) return (await jwtVerify(token, key, opts)).payload;
-    throw new Error(`no jwt settings: set ${ROOT} settings.jwt.secret or jwksUrl`);
-  };
   // a blob answer is piped from the registry to the socket; a value is encoded and sent whole
-  const send = async (res: ServerResponse, status: number, body: unknown, produces = 'application/json', scope?: BlobStore) => {
+  const send = async (res: ServerResponse, status: number, body: unknown, produces = 'application/json', scope?: BlobStore, cookies?: string[]) => {
     const codec = serving.codecs(ROOT)[produces.toLowerCase()] ?? json;
     const enc = body === undefined ? { body: Buffer.alloc(0), contentType: produces, length: 0 } : await codec.encode(body, undefined, scope ?? serving.blobs);
     const length = enc.length ?? (enc.body instanceof Readable ? undefined : enc.body.length);
-    res.writeHead(status, { 'content-type': enc.contentType, ...(length !== undefined ? { 'content-length': length } : {}), ...(enc.headers ?? {}) });
+    res.writeHead(status, { 'content-type': enc.contentType, ...(length !== undefined ? { 'content-length': length } : {}), ...(enc.headers ?? {}), ...(cookies?.length ? { 'set-cookie': cookies } : {}) });
     if (enc.body instanceof Readable) await pipeline(enc.body, res); else res.end(enc.body);
   };
 
@@ -169,18 +204,7 @@ const listen: Handler = async ({ in: input, ctx }) => {
       for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers[k.toLowerCase()] = v;
       const query: Record<string, string> = {}; url.searchParams.forEach((v, k) => { query[k] = v; });
       const m = re.exec(url.pathname)!; const params: Record<string, string> = {}; keys.forEach((k, i) => { params[k] = decodeURIComponent(m[i + 1]); });
-
-      let principal: Record<string, unknown> | undefined;
-      if (!s.access?.open) {
-        const token = (headers.authorization ?? '').replace(/^Bearer\s+/i, '');
-        if (!token) return send(res, 401, { error: 'a bearer token is required' }, produces);
-        let claims: JWTPayload;
-        try { claims = await verify(token); } catch (e) { return send(res, 401, { error: `invalid token: ${(e as Error).message}` }, produces); }
-        const raw = claims[jwt.rolesClaim ?? 'role'] ?? (claims as Record<string, unknown>).roles;
-        const roles = Array.isArray(raw) ? raw.map(String) : raw ? [String(raw)] : [];
-        principal = { subject: String(claims.sub ?? ''), roles, claims, token };
-        if (s.access?.roles?.length && !roles.some(r => s.access!.roles!.includes(r))) return send(res, 403, { error: `requires one of ${s.access.roles.join(', ')}` }, produces);
-      }
+      const cookies = parseCookies(headers.cookie);
 
       let body: unknown;
       const hasBody = Number(headers['content-length'] ?? 0) > 0 || (headers['transfer-encoding'] ?? '').includes('chunked');
@@ -199,13 +223,14 @@ const listen: Handler = async ({ in: input, ctx }) => {
         try { body = await codec.decode(req, headers['content-type'] ?? ct, declared, scope); }
         catch (e) { return send(res, 400, { error: (e as Error).message }, produces); }
       }
-      const request: Record<string, unknown> = { method: req.method, path: url.pathname, headers, query, params, ...(body !== undefined ? { body } : {}), ...(principal ? { principal } : {}) };
+      const request: Record<string, unknown> = { method: req.method, path: url.pathname, headers, query, params, cookies, ...(body !== undefined ? { body } : {}) };
       const built = serving.inputFor(t, request);
       if ('error' in built) return send(res, 400, { error: built.error }, produces);
+      // the runtime gates the run: the guard identifies the caller and the trigger's policies decide before the operation fires
       const report = await serving.fire({ trigger: t, input: built.input, request, blobs: scope });
-      const { status, body: answer } = encode(t, report);
+      const { status, body: answer, cookies: set } = encode(t, report);
       log(`${req.method} ${url.pathname} → ${status} (${Date.now() - started}ms, ${t.fire.run} ${report.status})`);
-      return await send(res, status, answer, produces, scope);
+      return await send(res, status, answer, produces, scope, set);
     } catch (e) {
       log(`error: ${(e as Error).message}`);
       if (!res.headersSent) return send(res, 500, { error: (e as Error).message });

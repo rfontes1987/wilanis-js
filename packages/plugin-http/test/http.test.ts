@@ -3,17 +3,19 @@ import { createServer, type Server } from 'node:http';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SignJWT } from 'jose';
 import { fileURLToPath } from 'node:url';
-import { loadTree } from '@wilanis/core';
+import { loadTree, type ResolvedInclude } from '@wilanis/core';
 import { checkTree } from '@wilanis/compiler';
 import { BUILTIN_PLUGINS, start } from '@wilanis/runtime';
 import http, { encode } from '../src/index.js';
 import blobs from '@wilanis/plugin-blob';
 import reload from '@wilanis/plugin-reload';
+import auth from '@wilanis/plugin-auth';
 import { Throttle } from '../src/throttle.js';
 
 const EXAMPLE = fileURLToPath(new URL('../../../example', import.meta.url));
+/** The tree the example includes, as the runtime would resolve it from the example's node_modules. */
+const INCLUDES: ResolvedInclude[] = [{ from: '@wilanis/access', dir: fileURLToPath(new URL('../../../libraries/access', import.meta.url)), features: ['access'] }];
 const UPSTREAM = 54322;
 const SECRET = 'secret-secret-secret-secret-secret-1';
 
@@ -24,22 +26,21 @@ const logs: string[] = [];
 const inFlight = { now: 0, peak: 0 };
 
 /**
- * The example, pointed at a fake mockapi on localhost and with one route put behind a token, so the plugin's
- * access check is exercised without the example itself needing a secret.
+ * The example, pointed at a fake mockapi on localhost. Its write routes are gated by the access feature's policies,
+ * so the tests sign in as bo -- an employee holding the recorder role -- through the example's own route and
+ * present our token; nothing about access is edited.
  */
 function localCopy(): string {
   const d = mkdtempSync(join(tmpdir(), 'wilanis-http-'));
   cpSync(EXAMPLE, d, { recursive: true, filter: p => !p.includes('node_modules') });
   const edit = (rel: string, f: (doc: any) => void) => { const p = join(d, rel); const doc = JSON.parse(readFileSync(p, 'utf8')); f(doc); writeFileSync(p, JSON.stringify(doc)); };
   edit('connections/monitor-api.connection.json', c => { c.settings.baseUrl = `http://localhost:${UPSTREAM}/api/v1`; });
-  edit('project.json', p => { p.plugins.find((x: any) => x.use === '@http').settings.jwt = { secret: '{{secrets.jwt}}', rolesClaim: 'role' }; p.secrets = { jwt: 'MONITOR_JWT_SECRET' }; });
-  edit('features/monitor/edge/record-entry.trigger.json', t => { t.settings.access = { roles: ['recorder'] }; });
   edit('connections/monitor-api.connection.json', c => { c.settings.throttle = { concurrency: 2 }; });
   // a multipart upload beside the raw one: the file is one part of a form, a note another
   const S = 'https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/';
   edit('project.json', p => { p.plugins.find((x: any) => x.use === '@http').settings.codecs['multipart/form-data'] = '@http/codecs/multipart.codec.json'; });
   writeFileSync(join(d, 'features/monitor/edge/UploadForm.shape.json'), JSON.stringify({ $schema: S + 'shape.schema.json', description: 'a form with a file and a note', layer: 'edge', fields: { file: { type: 'blob' }, note: { type: 'string' } } }));
-  writeFileSync(join(d, 'features/monitor/edge/upload-form.trigger.json'), JSON.stringify({ $schema: S + 'trigger.schema.json', description: 'POST /monitor/upload as a form', kind: '@http/http.trigger-kind.json', settings: { route: '/monitor/upload', method: 'POST', consumes: 'multipart/form-data', produces: 'application/json', access: { open: true }, body: '@features/monitor/edge/UploadForm.shape.json', response: { status: { default: 201 }, refusals: { upstream: 502 } } }, in: '@features/monitor/edge/CsvUpload.shape.json', out: '@features/monitor/edge/EntryView.shape.json[]', fire: { run: '@features/monitor/domain/monitor.port.json#import', in: { file: '{{request.body.file}}' } } }));
+  writeFileSync(join(d, 'features/monitor/edge/upload-form.trigger.json'), JSON.stringify({ $schema: S + 'trigger.schema.json', description: 'POST /monitor/upload as a form', kind: '@http/http.trigger-kind.json', settings: { route: '/monitor/upload', method: 'POST', consumes: 'multipart/form-data', produces: 'application/json', body: '@features/monitor/edge/UploadForm.shape.json', response: { status: { default: 201 }, refusals: { upstream: 502 } } }, in: '@features/monitor/edge/CsvUpload.shape.json', out: '@features/monitor/edge/EntryView.shape.json[]', fire: { run: '@features/monitor/domain/monitor.port.json#import', in: { file: '{{request.body.file}}' } } }));
   return d;
 }
 
@@ -72,10 +73,12 @@ beforeAll(async () => {
   process.env.MONITOR_JWT_SECRET = SECRET;
   dir = localCopy();
   // a copy outside the workspace cannot resolve plugins[].from through node_modules, so the plugins are handed in
-  const load = loadTree(dir, { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs, '@reload': reload });
+  const load = loadTree(dir, { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs, '@reload': reload, '@auth': auth }, INCLUDES);
   expect(checkTree(load).items).toEqual([]);
   ({ stop } = await start(load, { log: s => logs.push(s) }));
-  token = await new SignJWT({ role: 'recorder' }).setProtectedHeader({ alg: 'HS256' }).setSubject('u1').sign(new TextEncoder().encode(SECRET));
+  const signedIn = await fetch('http://localhost:8080/api/v1/auth-employees', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'bo', password: 'bo-pass' }) });
+  expect(signedIn.status).toBe(200);
+  token = (await signedIn.json() as { accessToken: string }).accessToken;
 });
 afterAll(async () => { await stop(); await new Promise<void>(r => upstream.close(() => r())); rmSync(dir, { recursive: true, force: true }); });
 
@@ -94,7 +97,10 @@ describe('http trigger kind against a mockapi-shaped upstream', () => {
     expect(r.status).toBe(200); expect(r.body).toEqual([]);
   });
   it('400 on a query value outside the enum', async () => { expect((await call('GET', '/monitor?method=bogus')).status).toBe(400); });
-  it('401 without a token on a route that requires one', async () => { expect((await call('POST', '/monitor', { url: 'https://b.example/', method: 'PUT' })).status).toBe(401); });
+  it('401 as anonymous without a token on a gated route: the policy refused, and the route maps the reason', async () => {
+    const r = await call('POST', '/monitor', { url: 'https://b.example/', method: 'PUT' });
+    expect(r.status).toBe(401); expect(r.body).toEqual({ reason: 'anonymous', message: 'sign in first: no token was presented' });
+  });
   it('records with the recorder the domain chose, answers 201', async () => {
     const r = await call('POST', '/monitor', { url: 'https://b.example/', method: 'PUT' }, true);
     expect(r.status).toBe(201); expect(r.body).toEqual({ id: '2', url: 'https://b.example/', method: 'PUT', ua: 'wilanis-example/0.1.0' });
@@ -104,7 +110,7 @@ describe('http trigger kind against a mockapi-shaped upstream', () => {
   it('deletes a batch of ids: one DELETE each, paced by the connection throttle, answered once all are gone', async () => {
     for (const i of [3, 4, 5, 6, 7]) rows.push({ id: String(i), url: `https://${i}.example/`, method: 'GET', ua: 'curl/8' });
     inFlight.peak = 0;
-    const r = await call('DELETE', '/monitor', { ids: ['3', '4', '5', '6', '7'] });
+    const r = await call('DELETE', '/monitor', { ids: ['3', '4', '5', '6', '7'] }, true);
     expect(r.status).toBe(200);
     // the answer is every deleted entry, in the order asked, pruned to the edge shape
     expect(r.body).toEqual([3, 4, 5, 6, 7].map(i => ({ id: String(i), url: `https://${i}.example/`, method: 'GET', ua: 'curl/8' })));
@@ -115,7 +121,7 @@ describe('http trigger kind against a mockapi-shaped upstream', () => {
   });
   it('refuses the whole batch as missing when one id does not exist, after every deletion settled', async () => {
     rows.push({ id: '8', url: 'https://8.example/', method: 'GET' });
-    const r = await call('DELETE', '/monitor', { ids: ['8', 'nope'] });
+    const r = await call('DELETE', '/monitor', { ids: ['8', 'nope'] }, true);
     // the element's refusal is the map's, and the map's is the route's: the reason travels up as it is
     expect(r.status).toBe(404);
     expect(r.body).toEqual({ reason: 'missing', message: 'no entry nope' });
@@ -135,15 +141,15 @@ describe('http trigger kind against a mockapi-shaped upstream', () => {
     expect(encode(trigger, { ...refused, nodes: { n: { status: 'failed' as const, error: 'boom' } } })).toEqual({ status: 500, body: { error: 'n: boom' } });
   });
   it('400 on a batch whose body is not the declared shape', async () => {
-    expect((await call('DELETE', '/monitor', { ids: 'nope' })).status).toBe(400);
-    expect((await call('DELETE', '/monitor')).status).toBe(400);
+    expect((await call('DELETE', '/monitor', { ids: 'nope' }, true)).status).toBe(400);
+    expect((await call('DELETE', '/monitor', undefined, true)).status).toBe(400);
   });
 });
 
 describe('files through the blob registry', () => {
   it('uploads a CSV as a blob: the body streams into the registry, the graph gets a handle, every row is recorded', async () => {
     const csv = 'url,method\nhttps://csv-1.example/,GET\n"https://csv-2.example/?a=1,2",POST\n';
-    const r = await fetch('http://localhost:8080/monitor.csv', { method: 'POST', headers: { 'content-type': 'text/csv' }, body: csv });
+    const r = await fetch('http://localhost:8080/monitor.csv', { method: 'POST', headers: { 'content-type': 'text/csv', authorization: `Bearer ${token}` }, body: csv });
     expect(r.status).toBe(201);
     expect(await r.json()).toEqual([
       { id: expect.any(String), url: 'https://csv-1.example/', method: 'GET', ua: 'wilanis-example/0.1.0' },
@@ -176,7 +182,7 @@ describe('files through the blob registry', () => {
   });
   it('a CSV row that is not an entry is a fault of the import, and nothing is recorded', async () => {
     const before = rows.length;
-    const r = await fetch('http://localhost:8080/monitor.csv', { method: 'POST', headers: { 'content-type': 'text/csv' }, body: 'url,method\nhttps://x.example/,TRACE\n' });
+    const r = await fetch('http://localhost:8080/monitor.csv', { method: 'POST', headers: { 'content-type': 'text/csv', authorization: `Bearer ${token}` }, body: 'url,method\nhttps://x.example/,TRACE\n' });
     expect(r.status).toBe(500);
     expect((await r.json()).error).toContain('row 2.method');
     expect(rows.length).toBe(before);

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "label": "Challenges",
+  "description": "One-time challenges a policy opens when its outcome says `challenge`. The guard opens one and tells the caller its id and how to obtain a code; a trigger of the tree issues the code through `issue` -- printed by the example, delivered by mail or SMS in a real tree, which is the binding's business -- and the guard verifies the code the caller presents next time, hashed, within its attempts and its time.",
+  "operations": {
+    "issue": {
+      "description": "Give an open challenge its code. `issued` is false for a challenge that is unknown, expired or spent; otherwise its id, the code and when it expires.",
+      "accepts": {
+        "id": {
+          "type": "string",
+          "description": "the challenge id the caller was told"
+        }
+      },
+      "returns": {
+        "fields": {
+          "issued": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "required": false
+          },
+          "code": {
+            "type": "string",
+            "required": false
+          },
+          "expiresAt": {
+            "type": "string",
+            "required": false
+          }
+        }
+      }
+    }
+  }
+}

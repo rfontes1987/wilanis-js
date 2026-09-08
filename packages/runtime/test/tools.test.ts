@@ -3,17 +3,20 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadTree } from '@wilanis/core';
+import { loadTree, type ResolvedInclude } from '@wilanis/core';
 import { checkTree } from '@wilanis/compiler';
 import http from '@wilanis/plugin-http';
 import blobs from '@wilanis/plugin-blob';
 import reload from '@wilanis/plugin-reload';
+import auth from '@wilanis/plugin-auth';
 import { Readable } from 'node:stream';
 import { BUILTIN_PLUGINS, fuzz, init, regress, runTrigger, scaffold } from '../src/index.js';
 import { isBlobHandle, schemaUrl } from '@wilanis/core';
 
 const EXAMPLE = fileURLToPath(new URL('../../../example', import.meta.url));
-const PLUGINS = { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs, '@reload': reload };
+/** The tree the example includes, as the runtime would resolve it from the example's node_modules. */
+const INCLUDES: ResolvedInclude[] = [{ from: '@wilanis/access', dir: fileURLToPath(new URL('../../../libraries/access', import.meta.url)), features: ['access'] }];
+const PLUGINS = { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs, '@reload': reload, '@auth': auth };
 const tmp = () => mkdtempSync(join(tmpdir(), 'wilanis-tools-'));
 const read = (p: string) => JSON.parse(readFileSync(p, 'utf8'));
 
@@ -68,27 +71,27 @@ describe('wilanis fuzz and regress', () => {
   it('fuzz writes one scenario per trigger per seed, and regress replays every one as the same', async () => {
     const dir = tmp();
     cpSync(EXAMPLE, dir, { recursive: true, filter: p => !p.includes('node_modules') });
-    const written = await fuzz(loadTree(dir, PLUGINS), { runs: 2 });
-    // nine triggers, two seeds each
-    expect(written).toHaveLength(18);
+    const written = await fuzz(loadTree(dir, PLUGINS, INCLUDES), { runs: 2 });
+    // seventeen triggers -- the example's and the included access tree's -- two seeds each
+    expect(written).toHaveLength(34);
     expect(readdirSync(join(dir, 'scenarios')).sort()).toEqual(written.map(w => w.split('/').pop()!).sort());
     const sc = read(join(dir, 'scenarios', 'get-entry.1.scenario.json'));
     expect(sc.trigger).toBe('@features/monitor/edge/get-entry.trigger.json');
     expect(['done', 'failed']).toContain(sc.expect.status);
     // the scenarios are documents of the tree: they load, and they pass check
-    const again = loadTree(dir, PLUGINS);
-    expect(again.registry.all('scenario')).toHaveLength(18);
+    const again = loadTree(dir, PLUGINS, INCLUDES);
+    expect(again.registry.all('scenario')).toHaveLength(34);
     expect(checkTree(again).items).toEqual([]);
     const r = await regress(again);
     expect(r.ok, r.lines.join('\n')).toBe(true);
-    expect(r.lines).toHaveLength(18);
+    expect(r.lines).toHaveLength(34);
     expect(r.lines.every(l => l.endsWith(': same'))).toBe(true);
     // a graph that changes is caught: the answering node under a new name is a node the scenario never saw
     const g = join(dir, 'features/monitor/data/get-row.graph.json');
     const doc = read(g);
     doc.nodes.find((n: any) => n.id === 'row').id = 'entry'; doc.nodes.find((n: any) => n.id === 'route').rules[1].to = 'entry'; doc.out.from = ['entry', 'missing', 'failed'];
     writeFileSync(g, JSON.stringify(doc));
-    const changed = await regress(loadTree(dir, PLUGINS));
+    const changed = await regress(loadTree(dir, PLUGINS, INCLUDES));
     expect(changed.ok).toBe(false);
     expect(changed.lines.some(l => l.includes('get-entry') && !l.endsWith(': same'))).toBe(true);
     expect(existsSync(join(dir, 'scenarios'))).toBe(true);

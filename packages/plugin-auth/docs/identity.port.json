@@ -1,0 +1,40 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "label": "Identity",
+  "description": "Verifying a credential against a directory: the one place a password is judged. Answers what happened and, when the credential is good, who it belongs to; the graph decides what a rejection or an unreachable directory means (bad_credentials, directory_unavailable), the way it decides what an HTTP 404 means.",
+  "operations": {
+    "verify": {
+      "description": "Judge a username and password against a directory connection. `status` is verified, rejected (the directory knew the user and refused the password, or knew no such user) or unavailable (it could not be asked); `identity` is present when verified.",
+      "accepts": {
+        "connection": {
+          "type": "string",
+          "static": true,
+          "description": "a connection of kind @auth/directory.connection-kind.json or @auth/oidc.connection-kind.json"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string",
+          "secret": true
+        }
+      },
+      "returns": {
+        "fields": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "rejected",
+              "unavailable"
+            ]
+          },
+          "identity": {
+            "type": "@auth/Identity.shape.json",
+            "required": false
+          }
+        }
+      }
+    }
+  }
+}

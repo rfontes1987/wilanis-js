@@ -11,7 +11,7 @@ import { runGraph, type EffectInfo } from '@wilanis/compiler';
 import type { Handler, Report } from '@wilanis/engine';
 import { refusalOf } from '@wilanis/engine';
 import { generate, rng, substitute, hasVars, show, type Type } from '@wilanis/core';
-import { schemaUrl, splitOp, type Kind, type Loaded, type ScenarioDoc, type TriggerDoc, type TriggerKindDoc, type PortDoc, type GraphDoc, type BindingDoc, type AnyDoc } from '@wilanis/core';
+import { schemaUrl, splitOp, policyPath, type Kind, type Loaded, type ScenarioDoc, type TriggerDoc, type TriggerKindDoc, type PortDoc, type GraphDoc, type BindingDoc, type AnyDoc, type PolicyDoc } from '@wilanis/core';
 import { casesFor, nonEmpty, setPath, switchesOf, type FoundSwitch } from './branches.js';
 
 // ---- stubbing ---------------------------------------------------------------------------------------
@@ -67,6 +67,29 @@ export function generatedFire(emb: Embedder, t: Loaded<TriggerDoc>, seed: number
     return { input, request };
   }
   return { input: undefined, request };
+}
+
+/**
+ * Every policy as a trigger of each kind that attaches it, for the gates that run triggers. A policy's decision
+ * is a domain operation fired with an input read from the context, the way a trigger's is; rehearsed as a
+ * root of its own, every branch of the decision graph is walked with a caller that is there and one that is
+ * not. The settings are borrowed from an attaching trigger, since a kind's context (route placeholders, the
+ * body's shape) is written in them; a policy nothing attaches is rehearsed under the first trigger's kind.
+ */
+export function policyRoots(load: LoadResult): Loaded<TriggerDoc>[] {
+  const out: Loaded<TriggerDoc>[] = [];
+  const triggers = load.registry.all('trigger');
+  for (const p of load.registry.all('policy')) {
+    const attaching = triggers.filter(t => (t.doc.policies ?? []).some(ref => load.resolve(policyPath(ref)) === p.path));
+    const seen = new Set<string>();
+    for (const t of attaching.length ? attaching : triggers.slice(0, 1)) {
+      const kind = load.resolve(t.doc.kind);
+      if (seen.has(kind)) continue; seen.add(kind);
+      const doc: TriggerDoc = { $schema: schemaUrl('trigger'), description: p.doc.description, label: p.doc.label, kind: t.doc.kind, settings: t.doc.settings, fire: p.doc.decide };
+      out.push({ ...p, kind: 'trigger', doc } as unknown as Loaded<TriggerDoc>);
+    }
+  }
+  return out;
 }
 
 type FailedNode = Report['nodes'][string] & { id: string };
@@ -176,7 +199,8 @@ export async function rehearse(load: LoadResult, opts: { seed?: number; profile?
   const lines: string[] = [];
   const decisions: Decision[] = [];
   const settledGraphs: { trigger: string; graph: string; status: string; declared?: string; error?: string }[] = [];
-  for (const t of load.registry.all('trigger')) {
+  // every trigger, and every policy as a trigger of each kind that attaches it: a decision is walked like any other graph
+  for (const t of [...load.registry.all('trigger'), ...policyRoots(load)]) {
     const found = await rehearseTrigger(load, t, seed, opts, decisions);
     if (!found) {
       // no switch anywhere under this trigger: one run is the whole of it
@@ -503,7 +527,7 @@ export function ls(load: LoadResult, kind?: Kind): string[] {
   return load.registry.files
     .filter(f => !kind || f.kind === kind)
     .sort((a, b) => a.kind.localeCompare(b.kind) || a.path.localeCompare(b.path))
-    .map(f => `${f.kind.padEnd(16)} ${f.path}${f.native ? '  (native)' : ''}`);
+    .map(f => `${f.kind.padEnd(16)} ${f.path}${f.native ? '  (native)' : f.included ? `  (included from ${f.included})` : ''}`);
 }
 
 export function describe(load: LoadResult, ref: string): string {
@@ -513,7 +537,7 @@ export function describe(load: LoadResult, ref: string): string {
   if (!doc) return `no document at '${ref}'`;
   // a native document is a plugin's: say which, and the package it came from, so who implements it is not a code detail
   const from = doc.native ? scope.project?.plugins.find(p => p.use === doc.native)?.from : undefined;
-  const grantedBy = doc.native ? [`granted by  ${doc.native}${from ? `  (${from})` : '  (built into the runtime)'}`] : [];
+  const grantedBy = doc.native ? [`granted by  ${doc.native}${from ? `  (${from})` : '  (built into the runtime)'}`] : doc.included ? [`included from  ${doc.included}`] : [];
   const lines = [`${doc.kind}  ${doc.path}`, ...(doc.file ? [`file  ${doc.file}`] : []), ...grantedBy, doc.doc.description, ''];
   const showType = (t: unknown) => { try { return show(scope.types.spec(t as string)); } catch { return JSON.stringify(t); } };
   if (doc.kind === 'port') {
@@ -528,6 +552,44 @@ export function describe(load: LoadResult, ref: string): string {
     if ('context' in d) { lines.push('context (request.*):'); for (const [k, f] of Object.entries(d.context.fields)) lines.push(`    ${k}${f.required === false ? '?' : ''}: ${typeof f.type === 'string' ? f.type : showType(f.type)}${f.description ? '  -- ' + f.description : ''}`); }
     if (d.refusals) lines.push(`refusals: settings.${d.refusals} maps each reason a trigger can reach to how it is answered (T005, T006)`);
     if ('grants' in (d as unknown as { grants?: unknown })) lines.push(`grants: ${JSON.stringify((d as unknown as { grants: unknown }).grants)}`);
+    const guard = (d as unknown as { guard?: { context: { fields: Record<string, { type: unknown; required?: boolean; description?: string }> }; refuses?: Record<string, string>; credentials?: Record<string, { type: unknown; yields: string[]; description?: string }> } }).guard;
+    if (guard) {
+      lines.push('guard: identifies callers before any policy runs');
+      lines.push('  adds to request.*:'); for (const [k, f] of Object.entries(guard.context.fields)) lines.push(`    ${k}${f.required === false ? '?' : ''}: ${typeof f.type === 'string' ? f.type : showType(f.type)}${f.description ? '  -- ' + f.description : ''}`);
+      for (const [r, why] of Object.entries(guard.refuses ?? {})) lines.push(`  refuses '${r}': ${why}`);
+      lines.push('  takes, where a trigger attaches a policy ("in"):'); for (const [k, c] of Object.entries(guard.credentials ?? {})) lines.push(`    ${k}: ${typeof c.type === 'string' ? c.type : showType(c.type)}  yields request.${c.yields.join(', request.')}${c.description ? '  -- ' + c.description : ''}`);
+    }
+  } else if (doc.kind === 'shape') {
+    lines.push(JSON.stringify(doc.doc, null, 2));
+    // who makes or writes values of this shape: every node or delegation whose static `type` names it, with the keys it gives --
+    // for a session shape, the link from each attribute to the operation that fills it
+    const writers: string[] = [];
+    const literal = (v: unknown) => v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v as Record<string, unknown>) : [];
+    const note = (file: string, where: string, run: string, given: Record<string, unknown> | undefined) => {
+      // a `type` field naming the shape (object#make, session#set), or an input the contract declares as the shape (issue's attributes)
+      const keys: string[] = [];
+      let hit = typeof given?.type === 'string' && scope.canon(given.type) === doc.path;
+      if (hit) keys.push(...literal(given?.values), ...literal(given?.value));
+      const o = scope.op(run);
+      if (typeof o !== 'string') for (const [k, f] of Object.entries(o.op.accepts ?? {})) if (typeof f.type === 'string' && scope.canon(f.type) === doc.path && given?.[k] !== undefined) { hit = true; keys.push(...literal(given[k])); }
+      if (hit) writers.push(`    ${file}#${where}  via ${run}${keys.length ? `  (${keys.join(', ')})` : ''}`);
+    };
+    for (const g of load.registry.all('graph')) for (const n of g.doc.nodes) if ('run' in n) note(g.path, n.id, n.run, n.in);
+    for (const b of load.registry.all('binding')) for (const [name, op] of Object.entries(b.doc.operations)) if (op.run) note(b.path, name, op.run, op.in);
+    if (writers.length) lines.push('made or written by (the attributes each gives):', ...writers);
+  } else if (doc.kind === 'policy') {
+    const d = doc.doc as PolicyDoc;
+    lines.push(`decides through  ${d.decide.run}`);
+    for (const [k, v] of Object.entries(d.decide.in ?? {})) lines.push(`    ${k} ← ${typeof v === 'string' ? v : JSON.stringify(v)}`);
+    lines.push('outcomes (allow is the decision answering):');
+    for (const [reason, o] of Object.entries(d.outcomes)) lines.push(`    ${reason} → ${o.effect}${o.method ? ` (${o.method})` : ''}${o.description ? '  -- ' + o.description : ''}`);
+    const gated = load.registry.all('trigger').filter(t => (t.doc.policies ?? []).some(ref => load.resolve(policyPath(ref)) === doc.path));
+    lines.push(gated.length ? `gates: ${gated.map(t => t.path).join(', ')}` : 'gates: nothing yet -- name it under a trigger\'s policies');
+  } else if (doc.kind === 'trigger') {
+    const d = doc.doc as TriggerDoc;
+    lines.push(JSON.stringify(doc.doc, null, 2));
+    if (d.policies?.length) lines.push(`policies, in order: ${d.policies.map(policyPath).join(', ')}`);
+    for (const u of d.policies ?? []) if (typeof u !== 'string' && u.in) for (const [k, v] of Object.entries(u.in)) lines.push(`  gives the guard '${k}' read from ${JSON.stringify(v)}`);
   } else {
     lines.push(JSON.stringify(doc.doc, null, 2));
   }
@@ -558,6 +620,7 @@ export function map(load: LoadResult): string[] {
   };
   for (const t of load.registry.all('trigger')) {
     lines.push(`${t.path}  (${t.doc.kind})`);
+    for (const use of t.doc.policies ?? []) { const ref = policyPath(use); const p = scope.get('policy', ref); lines.push(`  gated by ${p?.path ?? `?? ${ref}`}${p ? ` → ${p.doc.decide.run}` : ''}${typeof use !== 'string' && use.in ? `  given ${Object.keys(use.in).join(', ')}` : ''}`); }
     const o = load.registry.get('port', load.resolve(t.doc.fire.run.split('#')[0]));
     const opName = t.doc.fire.run.split('#')[1];
     lines.push(`  ${t.doc.fire.run}`);
@@ -626,7 +689,11 @@ export function scaffold(root: string, kind: string, target: string, opts: Recor
     case 'trigger':
       files.push([into(target, 'edge', 'trigger'), { $schema: S('trigger'), description: 'TODO', kind: opts.kind ?? '@http/http.trigger-kind.json', settings: { route: '/todo', method: 'GET', produces: 'application/json' }, fire: { run: opts.run ?? '@features/TODO/domain/TODO.port.json#todo' } }]);
       break;
-    default: throw new Error(`unknown kind '${kind}'; one of project, feature, shape, port, graph, binding, trigger, resolvers`);
+    case 'policy':
+      // a gate: decides through a domain operation over what the guard hands, and says what each reason means
+      files.push([into(target, 'edge', 'policy'), { $schema: S('policy'), description: 'TODO', decide: { run: opts.run ?? '@features/TODO/domain/TODO.port.json#todo', in: { principal: '{{request.principal}}' } }, outcomes: { anonymous: { effect: 'deny' } } }]);
+      break;
+    default: throw new Error(`unknown kind '${kind}'; one of project, feature, shape, port, graph, binding, trigger, policy, resolvers`);
   }
   const written: string[] = [];
   for (const [rel, doc] of files) {

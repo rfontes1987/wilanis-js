@@ -1,0 +1,52 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "Cookie to set",
+  "description": "How an answer sets one cookie: the field of the answer it takes (`from`), or `clear` to drop the cookie whatever the answer; `omit` keeps the field out of the body once the cookie has it. HttpOnly unless said otherwise, SameSite=Lax by default, Path=/ by default.",
+  "layer": "edge",
+  "fields": {
+    "from": {
+      "type": "string",
+      "required": false,
+      "description": "the field of the answer whose value the cookie takes; absent with clear"
+    },
+    "clear": {
+      "type": "boolean",
+      "required": false,
+      "description": "true: the cookie is dropped (Max-Age=0), whatever the answer"
+    },
+    "omit": {
+      "type": "boolean",
+      "required": false,
+      "description": "true: the field is left out of the body once the cookie has it"
+    },
+    "httpOnly": {
+      "type": "boolean",
+      "required": false,
+      "description": "default true"
+    },
+    "secure": {
+      "type": "boolean",
+      "required": false
+    },
+    "sameSite": {
+      "type": "string",
+      "required": false,
+      "enum": [
+        "strict",
+        "lax",
+        "none"
+      ],
+      "description": "default lax"
+    },
+    "maxAge": {
+      "type": "number",
+      "required": false,
+      "description": "seconds; absent: a session cookie"
+    },
+    "path": {
+      "type": "string",
+      "required": false,
+      "description": "default /"
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "label": "Tokens",
+  "description": "Our tokens. A sign-in graph issues them once a directory verified the credential, writing the realm and roles the business decided on; nothing downstream issues a token this tree accepts. Issuing opens a session; refreshing rotates the refresh token and keeps the session; the guard verifies the access token on every gated trigger.",
+  "operations": {
+    "issue": {
+      "description": "Sign an access token for a subject and open its session, with the attributes given. Answers the token pair and the session id.",
+      "accepts": {
+        "subject": {
+          "type": "string",
+          "description": "who: the directory's stable subject"
+        },
+        "realm": {
+          "type": "string",
+          "description": "which sign-in this is: the principal's realm, a word the domain chose"
+        },
+        "roles": {
+          "type": "string[]"
+        },
+        "attributes": {
+          "type": "unknown",
+          "required": false,
+          "description": "the session's initial attributes, of the shape settings.session names"
+        }
+      },
+      "returns": "@auth/Tokens.shape.json"
+    },
+    "refresh": {
+      "description": "Trade a refresh token for a new pair: the old one is void whether or not this succeeds. `refreshed` is false for a token that is unknown, spent or expired.",
+      "accepts": {
+        "refreshToken": {
+          "type": "string",
+          "secret": true
+        }
+      },
+      "returns": {
+        "fields": {
+          "refreshed": {
+            "type": "boolean"
+          },
+          "tokens": {
+            "type": "@auth/Tokens.shape.json",
+            "required": false
+          }
+        }
+      }
+    }
+  }
+}
