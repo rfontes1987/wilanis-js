@@ -179,7 +179,7 @@ npx wilanis check example          # is the tree consistent?
 npx wilanis rehearse example       # run every branch of every route, world stubbed
 npx wilanis map example            # how does a request flow?
 npx wilanis-view example           # draw it, on http://127.0.0.1:4400/
-npx wilanis serve example          # serve it for real on :8080
+npx wilanis start example          # run what its startup declares: on :8080
 ```
 
 Start your own project:
@@ -275,38 +275,51 @@ A plugin package exports its `PluginModule` as the default export. Two hooks on 
 - `check(ctx)` adds the plugin's own rules (the `X` codes) to `wilanis check`.
 - `postLoad(ctx)` runs once after the tree is loaded and judged, before any trigger starts, with the
   plugin's settings (secrets substituted), the registry, the scope and the environment. Open connections,
-  warm caches, register parsers here. It may hand back a teardown, run when the runtime stops. `serve`
+  warm caches, register parsers here. It may hand back a teardown, run when the runtime stops. `start`
   and a real `run` call it; the stubbed gates (`rehearse`, `fuzz`, `regress`, `run --seed`) do not.
 
-### Before the first request
+### What a tree starts
 
 `postLoad` is a plugin's own wiring, written in TypeScript, and a reader of the tree cannot see it. What
-*this* project does before it serves is declared instead, in `project.json → startup`:
+*this* project starts is declared instead, in `project.json → startup`:
 
 ```json
 "startup": [
   { "label": "Open the pool", "run": "@board/domain/store.port.json#open" },
-  { "label": "Subscribe", "run": "@board/domain/events.port.json#subscribe", "required": false }
+  { "label": "Watch for changes", "run": "@reload/watch.port.json#watch" },
+  { "label": "Listen", "run": "@http/server.port.json#listen" }
 ]
 ```
 
-`wilanis serve` runs every plugin's `postLoad`, then these steps in order, and only then starts the trigger
-kinds -- so the HTTP server opens once the database pool is up and the topic is subscribed, never before.
+`wilanis start` runs every plugin's `postLoad`, then these steps in order -- and nothing else. **The HTTP
+server opens because the last step says so.** Delete it and nothing listens: no runtime decides on its own
+that a tree with http triggers should open a port.
 
-Each step names a **domain port operation**, never a graph, so the active profile's binding decides how it is
-met: a fake in development, the real connection in production, without touching the step. Its `in` is written
-as literals and `{{secrets.*}}`; nothing has been received yet, so a step that reads `request.*` -- or whose
-bound graph does -- is refused before it ever runs (B007, B008).
+Each step names one port operation. Most name a **domain port**, so the active profile's binding decides how
+it is met -- a fake in development, the real connection in production, without touching the step. Its `in` is
+written as literals and `{{secrets.*}}`; nothing has been received yet, so a step that reads `request.*` --
+or whose bound graph does -- is refused before it ever runs (B007, B008).
 
-A step that refuses stops the server and exits nonzero: a tree whose database is unreachable never opens its
+A step may also name a `holds` operation: one that starts something outliving the run -- a listener, a
+watcher, a subscription. A plugin grants it, `wilanis describe` marks it `(holds until stopped)`, and the
+runtime stops what it started, in reverse, when the process ends. A graph may never run one (L008): what
+answers a request cannot start a server.
+
+A step that refuses stops the start and exits nonzero: a tree whose database is unreachable never opens its
 port, rather than answering every route with a fault. Say `"required": false` for a step the tree can serve
 without, and its refusal is logged while the rest go on.
 
 ```
-$ npx wilanis serve example
-startup 1/1 Reach the entry store: ok
+$ npx wilanis start example
+startup 1/3 Reach the entry store: ok
+reload: watching /path/to/example -- an edit is served once it passes wilanis check
+startup 2/3 Watch for changes: ok
 http: listening on :8080 -- GET /monitor → @monitor/domain/monitor.port.json#list, ...
+startup 3/3 Listen: ok
 ```
+
+With `@reload` in the list, editing a document serves the new tree without closing the port; a change that
+does not pass `wilanis check` is reported and the last good tree keeps answering.
 
 ### Schemas
 

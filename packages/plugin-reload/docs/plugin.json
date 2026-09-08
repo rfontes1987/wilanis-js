@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/plugin.schema.json",
+  "label": "Reload",
+  "description": "Watch the tree and serve it again when a document changes. Meant for development: a project names it in its startup list, before whatever listens, and an edit takes effect without a restart. It judges the tree the way `wilanis check` does and serves it only when it is clean, so a half-written document never becomes what answers.",
+  "settings": {
+    "fields": {
+      "debounceMs": {
+        "type": "number",
+        "required": false,
+        "description": "how long to wait for the edits to stop before reloading, in milliseconds; default 120"
+      }
+    }
+  },
+  "grants": {
+    "ports": [
+      "@reload/watch.port.json"
+    ]
+  }
+}

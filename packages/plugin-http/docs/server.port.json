@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "label": "HTTP server",
+  "description": "The server that answers this tree's http triggers. A project's startup list names `listen` to open it: nothing opens a port on its own, so a tree that does not ask to listen does not. The routes are the http triggers themselves -- this operation names none of them.",
+  "operations": {
+    "listen": {
+      "description": "Open the port and answer every http trigger in the tree until the process stops. Answers what it opened, so a startup report says the port and how many routes it carries.",
+      "holds": true,
+      "accepts": {
+        "port": {
+          "type": "number",
+          "required": false,
+          "description": "the port to listen on; absent: the @http plugin's settings.port, and 8080 when that is absent too"
+        }
+      },
+      "returns": {
+        "fields": {
+          "port": {
+            "type": "number",
+            "description": "the port that was opened"
+          },
+          "routes": {
+            "type": "number",
+            "description": "how many http triggers it answers"
+          }
+        }
+      }
+    }
+  }
+}

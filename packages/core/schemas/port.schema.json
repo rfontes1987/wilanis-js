@@ -47,6 +47,10 @@
           "refuses": {
             "description": "True when running it ends the graph on purpose. Such an operation accepts a static `reason`: one word for the outcome (missing, conflict, upstream), which the trigger kind maps to how it answers. A rehearsal reports the node as refused on purpose.",
             "type": "boolean"
+          },
+          "holds": {
+            "description": "True when running it starts something that keeps running after the run has answered: a listener, a watcher, a subscription. Such an operation is named by a project's startup list, never by a graph; it answers what it started, and the runtime holds its teardown until the process stops.",
+            "type": "boolean"
           }
         },
         "required": [

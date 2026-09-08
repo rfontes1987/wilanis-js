@@ -515,7 +515,7 @@ export function describe(load: LoadResult, ref: string): string {
   const showType = (t: unknown) => { try { return show(scope.types.spec(t as string)); } catch { return JSON.stringify(t); } };
   if (doc.kind === 'port') {
     for (const [name, op] of Object.entries((doc.doc as PortDoc).operations)) {
-      lines.push(`#${name}${op.pure ? '  (pure)' : ''}${op.refuses ? '  (refuses on purpose)' : ''}: ${op.description}`);
+      lines.push(`#${name}${op.pure ? '  (pure)' : ''}${op.refuses ? '  (refuses on purpose)' : ''}${op.holds ? '  (holds until stopped)' : ''}: ${op.description}`);
       for (const [k, f] of Object.entries(op.accepts ?? {})) lines.push(`    in  ${k}${f.required === false ? '?' : ''}: ${f.type === 'type' ? 'type' : showType(f.type)}${f.static || f.type === 'type' ? '  (static)' : ''}${f.binds ? ` binds ${f.binds}` : ''}${f.enum ? ` ∈ ${f.enum.join('|')}` : ''}${f.description ? '  -- ' + f.description : ''}`);
       if (op.returns) lines.push(`    returns ${showType(op.returns)}`);
     }
@@ -593,7 +593,7 @@ export function scaffold(root: string, kind: string, target: string, opts: Recor
   const S = (k: Kind) => schemaUrl(k);
   switch (kind) {
     case 'project':
-      files.push(['package.json', { name: target, private: true, type: 'module', scripts: { check: 'wilanis check .', rehearse: 'wilanis rehearse .', serve: 'wilanis serve .' }, dependencies: { '@wilanis/plugin-http': '^0.1.0', '@wilanis/runtime': '^0.1.0' } }]);
+      files.push(['package.json', { name: target, private: true, type: 'module', scripts: { check: 'wilanis check .', rehearse: 'wilanis rehearse .', start: 'wilanis start .' }, dependencies: { '@wilanis/plugin-http': '^0.1.0', '@wilanis/runtime': '^0.1.0' } }]);
       files.push(['project.json', { $schema: S('project'), name: target, description: 'TODO', aliases: {}, plugins: [{ use: '@std' }, { use: '@cli' }, { use: '@http', from: '@wilanis/plugin-http', settings: { port: 8080, codecs: { 'application/json': '@http/codecs/json.codec.json' } } }], secrets: {} }]);
       break;
     case 'feature':

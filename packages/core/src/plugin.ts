@@ -32,6 +32,42 @@ export interface BlobStore {
 }
 export interface BlobScope extends BlobStore { release(): Promise<void> }
 
+/**
+ * What a `holds` operation is given, as `env.hold`: it hands back the way to stop what it started, and the
+ * runtime keeps the process alive until every held thing has been stopped, in reverse. A handler that does
+ * not hold anything never sees it; a `holds` operation that never calls it holds nothing and the run ends.
+ */
+export type Hold = (what: { label: string; stop: () => Promise<void> }) => void;
+
+/**
+ * What a `holds` operation that answers requests is given, as `env.serving`: the triggers of one kind and
+ * the way to fire them. It is read afresh on every request, so a reload can replace the tree underneath a
+ * listener whose socket stays open -- the listener holds this object, never the tree it came from.
+ */
+export interface Serving {
+  /** Every trigger of one kind in the tree as it now stands. */
+  triggers(kind: string): TriggerDoc[];
+  /** Run a trigger's operation and answer its report. */
+  fire(args: FireArgs): Promise<Report>;
+  /** The trigger's in/out types, resolved. */
+  types(t: TriggerDoc): { in?: Type; out?: Type };
+  /** Build and judge the trigger's input from the context this kind assembled (body already decoded). */
+  inputFor(t: TriggerDoc, request: Record<string, unknown>): { input: unknown } | { error: string };
+  /** content type -> codec, from a plugin's settings table. */
+  codecs(root: string): Codecs;
+  /** The tree's blob registry; a listener opens a scope per request and releases it once it has answered. */
+  blobs: BlobStore;
+  log(s: string): void;
+  /**
+   * Load and judge the tree again, and serve it if it is clean. The runtime does the loading and the judging
+   * -- a plugin never imports the compiler -- so a watcher only decides *when*. A tree that refuses is not
+   * served: the refusals come back and whatever is already listening keeps answering from the last good one.
+   */
+  reload(): Promise<{ ok: true; documents: number } | { ok: false; refusals: string }>;
+  /** The directory of the tree being served, for a watcher that has to know what to watch. */
+  root: string;
+}
+
 /** The whole of a stream, for a codec that needs the body entire (JSON, text, a form). A blob codec never calls this. */
 export async function readAll(source: Readable): Promise<Buffer> {
   const chunks: Buffer[] = [];

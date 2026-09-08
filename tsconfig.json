@@ -20,6 +20,9 @@
       "path": "packages/plugin-blob"
     },
     {
+      "path": "packages/plugin-reload"
+    },
+    {
       "path": "packages/view"
     }
   ]

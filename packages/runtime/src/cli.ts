@@ -8,7 +8,7 @@ import type { BlobHandle } from '@wilanis/core';
 import { KINDS, type Kind, type LoadResult } from '@wilanis/core';
 import { checkTree } from '@wilanis/compiler';
 import { loadProject } from './project.js';
-import { runTrigger, serve } from './serve.js';
+import { runTrigger, start } from './serve.js';
 import { describe, fuzz, init, ls, map, regress, rehearse, scaffold, summarize } from './tools.js';
 
 const USAGE = `wilanis -- declarative dataflow, judged by a compiler, run by a stateless engine
@@ -17,8 +17,8 @@ const USAGE = `wilanis -- declarative dataflow, judged by a compiler, run by a s
   wilanis rehearse [root] [--seed n] [-v]          run every trigger, and every branch of every switch
   wilanis fuzz     [root] [--runs n]               write one scenario per trigger per seed to scenarios/
   wilanis regress  [root]                          replay every scenario and diff node by node
-  wilanis serve    [root] [--profile p]            run postLoad and the project's startup steps, then
-                   every trigger kind
+  wilanis start    [root] [--profile p]            run postLoad and the project's startup steps; what
+                   listens is what those steps say
   wilanis run      <trigger> [root] [--in json] [--file path] [--out path] [--flag=v ...]
                    fire one cli trigger; --file hands a file as request.file, --out receives a blob answer
   wilanis ls       [root] [kind]                   every document, or those of one kind
@@ -75,9 +75,10 @@ async function main() {
     }
     case 'fuzz': { const l = await check(rootArg(0)); const w = await fuzz(l, { runs: flags.runs ? Number(flags.runs) : undefined, profile: flags.profile }); console.log(w.map(f => `wrote ${f}`).join('\n')); break; }
     case 'regress': { const l = await check(rootArg(0)); const r = await regress(l, { profile: flags.profile }); console.log(r.lines.join('\n') || 'no scenarios -- run wilanis fuzz first'); if (!r.ok) process.exit(1); break; }
-    case 'serve': {
+    case 'start': {
       const l = await check(rootArg(0));
-      const stop = await serve(l, { profile: flags.profile });
+      const { stop, held } = await start(l, { profile: flags.profile });
+      if (!held) { console.log('nothing is held: project.json declares no startup step that listens, so there is nothing to serve'); await stop(); break; }
       const bye = async () => { await stop(); process.exit(0); };
       process.on('SIGINT', bye); process.on('SIGTERM', bye);
       break;

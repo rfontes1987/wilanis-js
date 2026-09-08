@@ -27,6 +27,10 @@
     {
       "use": "@blob",
       "from": "@wilanis/plugin-blob"
+    },
+    {
+      "use": "@reload",
+      "from": "@wilanis/plugin-reload"
     }
   ],
   "startup": [
@@ -35,6 +39,16 @@
       "description": "Read the entries once before the HTTP server opens, so a tree whose upstream is unreachable refuses to serve instead of answering every route with a fault. The port is bound per profile, so this checks whatever storage the profile chose.",
       "run": "@monitor/domain/monitor.port.json#listAll",
       "required": true
+    },
+    {
+      "label": "Watch for changes",
+      "description": "Serve the tree again whenever a document changes, without closing the port. A change that does not pass wilanis check is reported and the last good tree keeps answering.",
+      "run": "@reload/watch.port.json#watch"
+    },
+    {
+      "label": "Listen",
+      "description": "Open the HTTP port and answer this tree's routes. Delete this step and nothing listens: a tree serves because it says so, never because a trigger exists.",
+      "run": "@http/server.port.json#listen"
     }
   ],
   "profiles": {

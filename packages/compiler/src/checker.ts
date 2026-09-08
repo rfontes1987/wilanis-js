@@ -102,7 +102,9 @@ class Checker {
       const at = `startup/${i}`;
       const o = this.s.op(step.run);
       if (typeof o === 'string') { this.refuse('B006', file, `startup step ${i}: ${o}`, `${at}/run`, 'wilanis ls port'); continue; }
-      if (o.port.native) { this.refuse('B006', file, `startup step ${i} fires native operation '${step.run}'`, `${at}/run`, "a startup step fires a domain port; the port's binding reaches the native operation"); continue; }
+      // a `holds` operation starts something that outlives the run -- a listener, a watcher. It is a plugin's
+      // to implement and has no per-profile binding, so a startup step names it directly.
+      if (o.port.native && !o.op.holds) { this.refuse('B006', file, `startup step ${i} fires native operation '${step.run}'`, `${at}/run`, "a startup step fires a domain port; the port's binding reaches the native operation"); continue; }
       const accepts = o.op.accepts ?? {};
       const takes = Object.keys(accepts).length ? this.quiet({ fields: accepts }) : undefined;
       const read = this.s.valueRead(step.in ?? {}, (root, path) => {
@@ -394,6 +396,8 @@ class Checker {
       if (role === 'domain' && o.port.native && o.op.pure !== true) this.refuse('L002', file, `domain graph runs effectful native operation '${n.run}'`, `nodes/${n.id}`, 'reach the effect through a domain port whose binding runs it');
       if (role === 'data' && !o.port.native) this.refuse('L002', file, `data graph runs domain operation '${n.run}'`, `nodes/${n.id}`, 'a data graph implements a domain port; it speaks native ports only');
       if (role === 'data' && o.port.native && o.op.pure !== true && !effects.has(`${o.path}#${o.opName}`)) this.refuse('L003', file, `node '${n.id}' runs effectful '${o.path}#${o.opName}' which the feature does not allow`, `nodes/${n.id}`, `add "${o.path}#${o.opName}" to ${effectsAt}`);
+      // what a `holds` operation starts outlives the run, so a request must never start one
+      if (o.op.holds) this.refuse('L008', file, `node '${n.id}' runs '${n.run}', which starts something that outlives the run`, `nodes/${n.id}`, 'name it in project.json → startup, where what a tree starts is declared');
     }
 
     // reads and node output types (lazy: a node's output type may depend on its type fields)

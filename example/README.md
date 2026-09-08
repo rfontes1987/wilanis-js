@@ -2,20 +2,24 @@
 
 A wilanis project: a monitor of observed HTTP calls whose routes talk to a public REST API
 (`https://6aa009e23e0d88d3d7e5525d.mockapi.io/api/v1/monitor`). Everything in this directory is JSON;
-`package.json` installs the runtime and the one plugin package it uses. The API needs no key, so nothing
-here reads a secret and `serve` runs with no environment.
+`package.json` installs the runtime and the plugin packages it uses. The API needs no key, so nothing
+here reads a secret and `start` runs with no environment.
 
 ```
 npm install
 npm run check            # wilanis check .
 npm run rehearse         # every trigger, every branch of every switch, effects stubbed
 npm run digest           # wilanis run @monitor/edge/digest.trigger.json .  -- the count and one line per entry, for real
-npm run serve            # GET /monitor[?method=], POST /monitor, GET|PUT|DELETE /monitor/{id}, DELETE /monitor, GET|POST /monitor.csv on :8080
+npm run start            # GET /monitor[?method=], POST /monitor, GET|PUT|DELETE /monitor/{id}, DELETE /monitor, GET|POST /monitor.csv on :8080
 ```
 
-`project.json → startup` names one step, `monitor.port.json#listAll`, which reads the entries once before the
-HTTP server opens: if the API is unreachable, `serve` says so and exits rather than answering every route
-with a fault. It is a domain port operation, so whichever binding the profile chose is what gets checked.
+`project.json → startup` says what this tree starts, in order, and nothing else runs. `monitor.port.json#listAll`
+reads the entries once: if the API is unreachable, `start` says so and exits rather than answering every route
+with a fault. `@reload/watch.port.json#watch` serves the tree again whenever a document changes, without
+closing the port. `@http/server.port.json#listen` opens :8080 -- **delete that step and nothing listens**, since
+no runtime opens a port merely because http triggers exist. The first is a domain port operation, so whichever
+binding the profile chose is what gets checked; the last two are `holds` operations, which a plugin grants and
+the runtime stops when the process ends.
 
 `monitor.port.json` is what the domain needs: `listAll`, `listByMethod`, `get`, `record`, `update`,
 `remove`, `parseDrafts`, `toCsv`, `removeMany`, `submit`, `list`, `digest`, `import`, `export`. `monitor-rest.binding.json` meets the first eight with a data

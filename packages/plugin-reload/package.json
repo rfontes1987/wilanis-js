@@ -1,28 +1,26 @@
 {
-  "name": "@wilanis/runtime",
+  "name": "@wilanis/plugin-reload",
   "version": "0.1.0",
-  "description": "The wilanis runtime and `wilanis` command line: embedder, gates (rehearse, fuzz, regress), discovery, start, plugin packages, with the @std and @cli plugins built in.",
+  "description": "The @reload plugin for wilanis: watch the tree and serve it again when it changes, without closing what is listening.",
   "type": "module",
   "license": "Apache-2.0",
   "author": "Rafael Fontes <rfontes1987@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rfontes1987/wilanis-js.git",
-    "directory": "packages/runtime"
+    "directory": "packages/plugin-reload"
   },
-  "homepage": "https://github.com/rfontes1987/wilanis-js/tree/main/packages/runtime#readme",
+  "homepage": "https://github.com/rfontes1987/wilanis-js/tree/main/packages/plugin-reload#readme",
   "bugs": "https://github.com/rfontes1987/wilanis-js/issues",
   "keywords": [
     "wilanis",
     "dataflow",
     "json-schema",
     "declarative",
-    "runtime",
-    "cli"
+    "hot-reload",
+    "watch",
+    "plugin"
   ],
-  "bin": {
-    "wilanis": "./bin/wilanis.js"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -32,8 +30,6 @@
   "files": [
     "dist",
     "docs",
-    "bin",
-    "templates",
     "README.md",
     "LICENSE"
   ],
@@ -41,19 +37,16 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@wilanis/compiler": "0.1.0",
     "@wilanis/core": "0.1.0",
     "@wilanis/engine": "0.1.0"
-  },
-  "devDependencies": {
-    "@wilanis/plugin-http": "0.1.0",
-    "@wilanis/plugin-blob": "0.1.0",
-    "@wilanis/plugin-reload": "0.1.0"
   },
   "publishConfig": {
     "access": "public"
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "@wilanis/runtime": "0.1.0"
   }
 }

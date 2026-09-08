@@ -9,12 +9,13 @@
     "rehearse": "wilanis rehearse .",
     "fuzz": "wilanis fuzz .",
     "regress": "wilanis regress .",
-    "serve": "wilanis serve .",
-    "digest": "wilanis run @monitor/edge/digest.trigger.json ."
+    "digest": "wilanis run @monitor/edge/digest.trigger.json .",
+    "start": "wilanis start ."
   },
   "dependencies": {
     "@wilanis/plugin-http": "0.1.0",
     "@wilanis/runtime": "0.1.0",
-    "@wilanis/plugin-blob": "0.1.0"
+    "@wilanis/plugin-blob": "0.1.0",
+    "@wilanis/plugin-reload": "^0.1.0"
   }
 }

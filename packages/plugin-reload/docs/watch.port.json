@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "label": "Watch",
+  "description": "Watching the tree for changes. A project's startup list names `watch` to keep the running tree in step with the files on disk.",
+  "operations": {
+    "watch": {
+      "description": "Watch this tree's documents and serve it again whenever one changes. What is already listening keeps its socket: only the tree behind it is replaced. A change that does not pass `wilanis check` is reported and refused, and the last good tree keeps answering.",
+      "holds": true,
+      "accepts": {
+        "debounceMs": {
+          "type": "number",
+          "required": false,
+          "description": "how long to wait for the edits to stop before reloading; absent: the @reload plugin's settings.debounceMs, and 120 when that is absent too"
+        }
+      },
+      "returns": {
+        "fields": {
+          "watching": {
+            "type": "string",
+            "description": "the directory being watched"
+          }
+        }
+      }
+    }
+  }
+}

@@ -49,7 +49,8 @@
   },
   "grants": {
     "ports": [
-      "@http/http.port.json"
+      "@http/http.port.json",
+      "@http/server.port.json"
     ],
     "triggerKinds": [
       "@http/http.trigger-kind.json"

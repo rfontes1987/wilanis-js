@@ -9,9 +9,10 @@ before changing anything; it says where things live and which direction dependen
 packages/engine/       @wilanis/engine     spec.ts kernel.ts                       depends on nothing
 packages/core/         @wilanis/core       model types expr scope load validate plugin, schemas/   → engine
 packages/compiler/     @wilanis/compiler   checker.ts compiler.ts                  → core, engine
-packages/runtime/      @wilanis/runtime    embed tools branches serve project cli, plugins/{std,cli-trigger}, docs/{std,cli}, bin/, templates/   → core, engine, compiler
+packages/runtime/      @wilanis/runtime    embed tools branches serve(start) project cli, plugins/{std,cli-trigger}, docs/{std,cli}, bin/, templates/   → core, engine, compiler
 packages/plugin-http/  @wilanis/plugin-http  index.ts codecs.ts throttle.ts, docs/  → core, engine
 packages/plugin-blob/  @wilanis/plugin-blob  index.ts, docs/                        → core, engine
+packages/plugin-reload/ @wilanis/plugin-reload  index.ts, docs/                     → core, engine
 packages/view/         @wilanis/view       model.ts serve.ts cli.ts, client/index.html, bin/   → core, compiler, runtime
 example/               a consumer project: JSON documents + package.json
 ```
@@ -26,7 +27,8 @@ Tests live next to what they test: `packages/engine/test` (kernel), `packages/co
 scope), `packages/runtime/test` (the example tree, sabotaged variants, plugin loading, postLoad, the project's
 startup steps; and the
 branch solver behind `rehearse`), `packages/plugin-http/test` (end to end against a fake upstream),
-`packages/plugin-blob/test` (the file store, the CSV parser, the operations),
+`packages/plugin-blob/test` (the file store, the CSV parser, the operations), `packages/plugin-reload/test`
+(the watcher, and what it does with a tree that refuses),
 `packages/view/test` (the view model of the example, and the server). The compiler has no test directory of
 its own: every checker rule is exercised through the example and its sabotaged variants in
 `packages/runtime/test/example.test.ts`. The runtime and the view depend on the http plugin, and the http
@@ -39,8 +41,9 @@ npm install                 # links the workspace
 npm run build               # tsc -b, project references, dependency order
 npm test                    # build, then vitest
 npx wilanis check example   # the CLI from the built runtime
+npx wilanis start example   # run what its startup declares (the http listener among them)
 npx wilanis-view example    # the viewer, on http://127.0.0.1:4400/
-npm run release             # publishes engine, core, compiler, runtime, plugin-http, plugin-blob, view in that order
+npm run release             # publishes engine, core, compiler, runtime, plugin-http, plugin-blob, plugin-reload, view in that order
 ```
 
 `npm test` must pass before a commit. Tests import the built `dist` of sibling packages, so a change in
@@ -90,12 +93,16 @@ core needs a build before its effect shows in a runtime test; `npm test` does th
   carry an external dependency are always their own package.
 - **A new CLI command.** `packages/runtime/src/cli.ts` dispatches; the work goes in `tools.ts` or
   `serve.ts` so it is callable without the CLI.
-- **Boot-time work.** What a tree does before it serves is declared in `project.json → startup`, never hidden
-  in a plugin's code: each step names a domain port operation, so the profile's binding decides how it is met
-  and a reader sees at the root what happens before the first request. `runStartup` in `serve.ts` runs them
-  between the plugins' `postLoad` and the trigger kinds; `checkStartup` in `checker.ts` judges them (B006,
-  B007, B008) and runs last, after the resolvers documents are read. A plugin's `postLoad` stays what it is:
-  that plugin's own wiring, not the project's.
+- **What a tree starts.** Everything a tree starts is declared in `project.json → startup`, never decided by
+  the runtime: `wilanis start` runs the plugins' `postLoad`, then those steps, and stops. The HTTP server
+  opens because a step names `@http/server.port.json#listen`, so a tree that names none serves nothing.
+  An operation that starts something outliving its run is marked `holds` in its port document (beside `pure`
+  and `refuses`); it reads `env.hold` to hand back its teardown and `env.serving` to reach the tree, and the
+  runtime stops what was held, in reverse, before the `postLoad` teardowns. Only a startup step may name one
+  (L008 refuses a graph that runs one), and a native `holds` operation is the one native operation a startup
+  step may name (B006 otherwise). `runStartup` and `Served` live in `serve.ts`; `checkStartup` in
+  `checker.ts` judges the steps (B006, B007, B008) and runs last, after the resolvers documents are read.
+  A plugin's `postLoad` stays what it is: that plugin's own wiring, not the project's.
 - **The project template.** `packages/runtime/templates/` is what `wilanis init` writes into a consumer
   tree. Its `CLAUDE.md` addresses an agent that writes documents, not one that changes this repository.
 
@@ -104,6 +111,4 @@ need one, stop and say so.
 
 ## Commits
 
-Author: `Rafael Fontes <rfontes1987@gmail.com>` (set as the repository's local git user). Messages are
-plain: what changed and why, in the imperative. No generated trailers, no tool or session references.
-Commit only when asked; never push or publish without an explicit request.
+Messages are plain: what changed and why, in the imperative. No generated trailers, no tool or session references.

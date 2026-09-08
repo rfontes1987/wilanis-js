@@ -1,10 +1,12 @@
-/** wilanis serve: run every plugin's postLoad, then the project's startup steps, then start every trigger kind the tree uses. wilanis run: fire one cli trigger. */
+/** wilanis start: run every plugin's postLoad, then the project's startup steps -- what listens is what those steps say. wilanis run: fire one cli trigger. */
 import { createReadStream } from 'node:fs';
 import { basename, extname } from 'node:path';
 import type { Readable } from 'node:stream';
-import { isBlobHandle, type BlobHandle, type LoadResult, type TriggerDoc } from '@wilanis/core';
+import { isBlobHandle, type BlobHandle, type LoadResult, type Serving, type TriggerDoc } from '@wilanis/core';
 import type { Embedder } from './embed.js';
 import type { Report } from '@wilanis/engine';
+import { checkTree } from '@wilanis/compiler';
+import { loadProject } from './project.js';
 import { embedderFor } from './tools.js';
 import { FileBlobStore } from './blobs.js';
 
@@ -47,27 +49,71 @@ function failureOf(report: Report): string {
   return `did not finish (${report.status})`;
 }
 
-export async function serve(load: LoadResult, opts: { profile?: string; log?: (s: string) => void } = {}): Promise<() => Promise<void>> {
+/**
+ * A tree being served, as a listener sees it. It reads `current` on every request rather than closing over
+ * one load, so `swap` can put a freshly loaded tree behind a socket that never closed -- what `@reload` does.
+ */
+export class Served {
+  constructor(private current: { load: LoadResult; emb: Embedder }, readonly log: (s: string) => void, private readonly profile?: string) {}
+  get emb() { return this.current.emb; }
+  get load() { return this.current.load; }
+
+  /**
+   * Load and judge the tree again; serve it only if it is clean. What was held stays held -- the listener is
+   * the same one, and its socket never closed -- so a reload swaps the tree a request is answered from, and
+   * a tree that refuses leaves the last good one serving.
+   */
+  async reload(): Promise<{ ok: true; documents: number } | { ok: false; refusals: string }> {
+    const load = await loadProject(this.load.root);
+    const refusals = checkTree(load);
+    if (!refusals.ok) return { ok: false, refusals: refusals.format() };
+    const emb = embedderFor(load, { profile: this.profile });
+    if (emb.missingSecrets.length) return { ok: false, refusals: `missing secrets: ${emb.missingSecrets.join(', ')}` };
+    emb.serve(this);
+    // what the old embedder held is still running and still ours: the new one answers for it when we stop
+    emb.held.push(...this.emb.held);
+    this.swap(load, emb);
+    return { ok: true, documents: load.registry.files.length };
+  }
+  /** Put a newly loaded tree behind whatever is already listening. The old embedder's held things are not stopped: the listener is the same one. */
+  swap(load: LoadResult, emb: Embedder) { this.current = { load, emb }; }
+  /** What a `holds` operation reads as env.serving: every member goes through `current`, so a swap is seen at once. */
+  serving(): Serving {
+    const held = this;
+    return {
+      triggers: kind => held.load.registry.all('trigger').filter(t => held.load.resolve(t.doc.kind) === kind).map(t => t.doc),
+      fire: ({ trigger, input, request, blobs }) => held.emb.fire(trigger, input, request, { blobs }),
+      types: t => held.emb.types(t),
+      inputFor: (t, r) => held.emb.inputFor(t, r),
+      codecs: root => held.emb.codecsOf(root),
+      get blobs() { return held.emb.blobs; },
+      log: held.log,
+      reload: () => held.reload(),
+      get root() { return held.load.root; },
+    };
+  }
+}
+
+/**
+ * Load a tree, run every plugin's postLoad, then run the project's startup steps -- and nothing else. What
+ * listens, and whether anything listens at all, is what those steps say: a tree whose startup names no
+ * `holds` operation serves nothing and this answers at once. Answers the way to stop what was held.
+ */
+export async function start(load: LoadResult, opts: { profile?: string; log?: (s: string) => void } = {}): Promise<{ stop: () => Promise<void>; held: number }> {
   const log = opts.log ?? ((s: string) => console.log(s));
   const emb = embedderFor(load, { profile: opts.profile });
   if (emb.missingSecrets.length) throw new Error(`missing secrets: ${emb.missingSecrets.join(', ')}`);
+  const served = new Served({ load, emb }, log, opts.profile);
+  emb.serve(served);
   const down = await postLoad(load, emb, log);
+  const bye = async () => {
+    for (const h of [...served.emb.held].reverse()) await h.stop();
+    await down();
+    if (emb.blobs instanceof FileBlobStore) emb.blobs.destroy();
+  };
   try { await runStartup(load, emb, log); }
-  catch (e) { await down(); if (emb.blobs instanceof FileBlobStore) emb.blobs.destroy(); throw e; }
-  const stops: (() => Promise<void>)[] = [];
-  const byKind = new Map<string, TriggerDoc[]>();
-  for (const t of load.registry.all('trigger')) { const k = load.resolve(t.doc.kind); byKind.set(k, [...(byKind.get(k) ?? []), t.doc]); }
-  for (const p of load.plugins) {
-    for (const [kindPath, runtime] of Object.entries(p.triggers ?? {})) {
-      const triggers = byKind.get(kindPath) ?? [];
-      if (!triggers.length) continue;
-      const settings = (emb.env.plugins as Record<string, Record<string, unknown>>)[p.root] ?? {};
-      stops.push(await runtime.start(triggers, ({ trigger, input, request, blobs }) => emb.fire(trigger, input, request, { blobs }), {
-        settings, registry: load.registry, log, types: t => emb.types(t), inputFor: (t, r) => emb.inputFor(t, r), codecs: emb.codecsOf(p.root), blobs: emb.blobs,
-      }));
-    }
-  }
-  return async () => { for (const s of stops) await s(); await down(); if (emb.blobs instanceof FileBlobStore) emb.blobs.destroy(); };
+  catch (e) { await bye(); throw e; }
+  return { stop: bye, held: emb.held.length };
 }
 
 /** The content type a file on disk is taken to have, by its extension; anything else is a stream of bytes. */

@@ -6,8 +6,8 @@ import { createServer, type ServerResponse } from 'node:http';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { fileURLToPath } from 'node:url';
 import type { TriggerDoc } from '@wilanis/core';
-import type { PluginModule, TriggerRuntime, Codecs } from '@wilanis/core';
-import type { Report } from '@wilanis/engine';
+import type { PluginModule, TriggerRuntime, Codecs, Hold, Serving } from '@wilanis/core';
+import type { Handler, Report } from '@wilanis/engine';
 import type { Type } from '@wilanis/core';
 import { readPath, refusalOf } from '@wilanis/engine';
 import type { PluginCheckContext } from '@wilanis/core';
@@ -123,90 +123,106 @@ export function encode(trigger: TriggerDoc, report: Report): { status: number; b
   return { status: statusFor(settings, report), body: report.output };
 }
 
+/**
+ * Open the port and answer this tree's http triggers until the process stops. A project's startup list names
+ * it; nothing here starts on its own. The routes are read from `serving` on every request rather than
+ * captured once, so a reload can put a new tree behind the socket without closing it.
+ */
+const listen: Handler = async ({ in: input, ctx }) => {
+  const env = ctx.env as { serving?: Serving; hold?: Hold; plugins?: Record<string, Record<string, unknown>> };
+  const serving = env.serving;
+  if (!serving || !env.hold) throw new Error(`'${P('server.port.json')}#listen' starts a server, so it runs from a project's startup list -- not from a graph`);
+  const { log } = serving;
+  const settings = env.plugins?.[ROOT] ?? {};
+  const port = Number(input.port ?? settings.port ?? 8080);
+  const jwt = (settings.jwt ?? {}) as { jwksUrl?: string; secret?: string; issuer?: string; audience?: string; rolesClaim?: string };
+  const jwks = jwt.jwksUrl ? createRemoteJWKSet(new URL(jwt.jwksUrl)) : undefined;
+  const key = jwt.secret ? new TextEncoder().encode(jwt.secret) : undefined;
+  // read afresh per request: a reload swaps the tree under a socket that stays open
+  const routesNow = () => serving.triggers(P('http.trigger-kind.json')).map(t => ({ t, s: t.settings as unknown as HttpSettings, ...compileRoute((t.settings as unknown as HttpSettings).route) }));
+  const verify = async (token: string): Promise<JWTPayload> => {
+    const opts = { issuer: jwt.issuer, audience: jwt.audience };
+    if (jwks) return (await jwtVerify(token, jwks, opts)).payload;
+    if (key) return (await jwtVerify(token, key, opts)).payload;
+    throw new Error(`no jwt settings: set ${ROOT} settings.jwt.secret or jwksUrl`);
+  };
+  // a blob answer is piped from the registry to the socket; a value is encoded and sent whole
+  const send = async (res: ServerResponse, status: number, body: unknown, produces = 'application/json', scope?: BlobStore) => {
+    const codec = serving.codecs(ROOT)[produces.toLowerCase()] ?? json;
+    const enc = body === undefined ? { body: Buffer.alloc(0), contentType: produces, length: 0 } : await codec.encode(body, undefined, scope ?? serving.blobs);
+    const length = enc.length ?? (enc.body instanceof Readable ? undefined : enc.body.length);
+    res.writeHead(status, { 'content-type': enc.contentType, ...(length !== undefined ? { 'content-length': length } : {}), ...(enc.headers ?? {}) });
+    if (enc.body instanceof Readable) await pipeline(enc.body, res); else res.end(enc.body);
+  };
+
+  const server = createServer(async (req, res) => {
+    const started = Date.now();
+    // one blob scope per request: what the body's codec and the graph store through it is released once answered
+    const scope = serving.blobs.scope();
+    try {
+      const url = new URL(req.url ?? '/', 'http://local');
+      const match = routesNow().find(r => r.s.method === req.method && r.re.test(url.pathname));
+      if (!match) return send(res, 404, { error: `no trigger for ${req.method} ${url.pathname}` });
+      const { t, s, re, keys } = match;
+      const produces = s.produces ?? 'application/json';
+      const headers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers[k.toLowerCase()] = v;
+      const query: Record<string, string> = {}; url.searchParams.forEach((v, k) => { query[k] = v; });
+      const m = re.exec(url.pathname)!; const params: Record<string, string> = {}; keys.forEach((k, i) => { params[k] = decodeURIComponent(m[i + 1]); });
+
+      let principal: Record<string, unknown> | undefined;
+      if (!s.access?.open) {
+        const token = (headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+        if (!token) return send(res, 401, { error: 'a bearer token is required' }, produces);
+        let claims: JWTPayload;
+        try { claims = await verify(token); } catch (e) { return send(res, 401, { error: `invalid token: ${(e as Error).message}` }, produces); }
+        const raw = claims[jwt.rolesClaim ?? 'role'] ?? (claims as Record<string, unknown>).roles;
+        const roles = Array.isArray(raw) ? raw.map(String) : raw ? [String(raw)] : [];
+        principal = { subject: String(claims.sub ?? ''), roles, claims, token };
+        if (s.access?.roles?.length && !roles.some(r => s.access!.roles!.includes(r))) return send(res, 403, { error: `requires one of ${s.access.roles.join(', ')}` }, produces);
+      }
+
+      let body: unknown;
+      const hasBody = Number(headers['content-length'] ?? 0) > 0 || (headers['transfer-encoding'] ?? '').includes('chunked');
+      if (s.body && !hasBody) return send(res, 400, { error: 'a body is required' }, produces);
+      if (hasBody) {
+        // a route that declares what it consumes takes nothing else; without a declaration the sender's content type decides
+        const sent = headers['content-type'] ? mediaType(headers['content-type']) : undefined;
+        if (s.consumes && sent && sent !== mediaType(s.consumes)) return send(res, 415, { error: `this route consumes ${s.consumes}, not ${sent}` }, produces);
+        const ct = s.consumes ?? headers['content-type'] ?? 'application/json';
+        const codec = serving.codecs(ROOT)[mediaType(ct)];
+        if (!codec) return send(res, 415, { error: `no codec for '${mediaType(ct)}'` }, produces);
+        // settings.body names the body's edge shape; without it the body IS the input. Either way the
+        // declared shape judges what arrives, so a closed shape still refuses an undeclared field.
+        const declared = s.body === t.in || !s.body ? serving.types(t).in : undefined;
+        // the request stream itself goes to the codec: a blob body is written to the registry as it arrives
+        try { body = await codec.decode(req, headers['content-type'] ?? ct, declared, scope); }
+        catch (e) { return send(res, 400, { error: (e as Error).message }, produces); }
+      }
+      const request: Record<string, unknown> = { method: req.method, path: url.pathname, headers, query, params, ...(body !== undefined ? { body } : {}), ...(principal ? { principal } : {}) };
+      const built = serving.inputFor(t, request);
+      if ('error' in built) return send(res, 400, { error: built.error }, produces);
+      const report = await serving.fire({ trigger: t, input: built.input, request, blobs: scope });
+      const { status, body: answer } = encode(t, report);
+      log(`${req.method} ${url.pathname} → ${status} (${Date.now() - started}ms, ${t.fire.run} ${report.status})`);
+      return await send(res, status, answer, produces, scope);
+    } catch (e) {
+      log(`error: ${(e as Error).message}`);
+      if (!res.headersSent) return send(res, 500, { error: (e as Error).message });
+      res.destroy();
+    } finally { await scope.release(); }
+  });
+  await new Promise<void>((ok, fail) => { server.once('error', fail); server.listen(port, () => { server.off('error', fail); ok(); }); });
+  const routes = routesNow();
+  log(`http: listening on :${port} -- ${routes.map(r => `${r.s.method} ${r.s.route} → ${r.t.fire.run}`).join(', ')}`);
+  env.hold({ label: `http :${port}`, stop: () => new Promise<void>(ok => server.close(() => ok())) });
+  return { port, routes: routes.length };
+};
+
+/** The http trigger kind starts nothing: a project's startup list opens the server by naming server.port.json#listen. */
 const runtime: TriggerRuntime = {
   encode: (t, r) => encode(t, r),
-  async start(triggers, fire, { settings, log, types, inputFor, codecs, blobs }) {
-    const port = Number(settings.port ?? 8080);
-    const jwt = (settings.jwt ?? {}) as { jwksUrl?: string; secret?: string; issuer?: string; audience?: string; rolesClaim?: string };
-    const jwks = jwt.jwksUrl ? createRemoteJWKSet(new URL(jwt.jwksUrl)) : undefined;
-    const key = jwt.secret ? new TextEncoder().encode(jwt.secret) : undefined;
-    const routes = triggers.map(t => ({ t, s: t.settings as unknown as HttpSettings, ...compileRoute((t.settings as unknown as HttpSettings).route) }));
-    const verify = async (token: string): Promise<JWTPayload> => {
-      const opts = { issuer: jwt.issuer, audience: jwt.audience };
-      if (jwks) return (await jwtVerify(token, jwks, opts)).payload;
-      if (key) return (await jwtVerify(token, key, opts)).payload;
-      throw new Error(`no jwt settings: set ${ROOT} settings.jwt.secret or jwksUrl`);
-    };
-    // a blob answer is piped from the registry to the socket; a value is encoded and sent whole
-    const send = async (res: ServerResponse, status: number, body: unknown, produces = 'application/json', scope: BlobStore = blobs) => {
-      const codec = codecs[produces.toLowerCase()] ?? json;
-      const enc = body === undefined ? { body: Buffer.alloc(0), contentType: produces, length: 0 } : await codec.encode(body, undefined, scope);
-      const length = enc.length ?? (enc.body instanceof Readable ? undefined : enc.body.length);
-      res.writeHead(status, { 'content-type': enc.contentType, ...(length !== undefined ? { 'content-length': length } : {}), ...(enc.headers ?? {}) });
-      if (enc.body instanceof Readable) await pipeline(enc.body, res); else res.end(enc.body);
-    };
-
-    const server = createServer(async (req, res) => {
-      const started = Date.now();
-      // one blob scope per request: what the body's codec and the graph store through it is released once answered
-      const scope = blobs.scope();
-      try {
-        const url = new URL(req.url ?? '/', 'http://local');
-        const match = routes.find(r => r.s.method === req.method && r.re.test(url.pathname));
-        if (!match) return send(res, 404, { error: `no trigger for ${req.method} ${url.pathname}` });
-        const { t, s, re, keys } = match;
-        const produces = s.produces ?? 'application/json';
-        const headers: Record<string, string> = {};
-        for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers[k.toLowerCase()] = v;
-        const query: Record<string, string> = {}; url.searchParams.forEach((v, k) => { query[k] = v; });
-        const m = re.exec(url.pathname)!; const params: Record<string, string> = {}; keys.forEach((k, i) => { params[k] = decodeURIComponent(m[i + 1]); });
-
-        let principal: Record<string, unknown> | undefined;
-        if (!s.access?.open) {
-          const token = (headers.authorization ?? '').replace(/^Bearer\s+/i, '');
-          if (!token) return send(res, 401, { error: 'a bearer token is required' }, produces);
-          let claims: JWTPayload;
-          try { claims = await verify(token); } catch (e) { return send(res, 401, { error: `invalid token: ${(e as Error).message}` }, produces); }
-          const raw = claims[jwt.rolesClaim ?? 'role'] ?? (claims as Record<string, unknown>).roles;
-          const roles = Array.isArray(raw) ? raw.map(String) : raw ? [String(raw)] : [];
-          principal = { subject: String(claims.sub ?? ''), roles, claims, token };
-          if (s.access?.roles?.length && !roles.some(r => s.access!.roles!.includes(r))) return send(res, 403, { error: `requires one of ${s.access.roles.join(', ')}` }, produces);
-        }
-
-        let body: unknown;
-        const hasBody = Number(headers['content-length'] ?? 0) > 0 || (headers['transfer-encoding'] ?? '').includes('chunked');
-        if (s.body && !hasBody) return send(res, 400, { error: 'a body is required' }, produces);
-        if (hasBody) {
-          // a route that declares what it consumes takes nothing else; without a declaration the sender's content type decides
-          const sent = headers['content-type'] ? mediaType(headers['content-type']) : undefined;
-          if (s.consumes && sent && sent !== mediaType(s.consumes)) return send(res, 415, { error: `this route consumes ${s.consumes}, not ${sent}` }, produces);
-          const ct = s.consumes ?? headers['content-type'] ?? 'application/json';
-          const codec = codecs[mediaType(ct)];
-          if (!codec) return send(res, 415, { error: `no codec for '${mediaType(ct)}'` }, produces);
-          // settings.body names the body's edge shape; without it the body IS the input. Either way the
-          // declared shape judges what arrives, so a closed shape still refuses an undeclared field.
-          const declared = s.body === t.in || !s.body ? types(t).in : undefined;
-          // the request stream itself goes to the codec: a blob body is written to the registry as it arrives
-          try { body = await codec.decode(req, headers['content-type'] ?? ct, declared, scope); }
-          catch (e) { return send(res, 400, { error: (e as Error).message }, produces); }
-        }
-        const request: Record<string, unknown> = { method: req.method, path: url.pathname, headers, query, params, ...(body !== undefined ? { body } : {}), ...(principal ? { principal } : {}) };
-        const built = inputFor(t, request);
-        if ('error' in built) return send(res, 400, { error: built.error }, produces);
-        const report = await fire({ trigger: t, input: built.input, request, blobs: scope });
-        const { status, body: answer } = encode(t, report);
-        log(`${req.method} ${url.pathname} → ${status} (${Date.now() - started}ms, ${t.fire.run} ${report.status})`);
-        return await send(res, status, answer, produces, scope);
-      } catch (e) {
-        log(`error: ${(e as Error).message}`);
-        if (!res.headersSent) return send(res, 500, { error: (e as Error).message });
-        res.destroy();
-      } finally { await scope.release(); }
-    });
-    await new Promise<void>((ok, fail) => { server.once('error', fail); server.listen(port, () => { server.off('error', fail); ok(); }); });
-    log(`http: listening on :${port} -- ${routes.map(r => `${r.s.method} ${r.s.route} → ${r.t.fire.run}`).join(', ')}`);
-    return () => new Promise<void>(ok => server.close(() => ok()));
-  },
+  async start() { return async () => {}; },
 };
 
 /** Plugin-specific rules: content types are in the table, the table names real codecs, a throttle can let something through. */
@@ -231,7 +247,10 @@ function check({ scope, settings, refuse }: PluginCheckContext) {
 export const http: PluginModule = {
   root: ROOT,
   docs: DOCS,
-  handlers: { [`${P('http.port.json')}#request`]: request as unknown as PluginModule['handlers'][string] },
+  handlers: {
+    [`${P('http.port.json')}#request`]: request as unknown as PluginModule['handlers'][string],
+    [`${P('server.port.json')}#listen`]: listen,
+  },
   triggers: { [P('http.trigger-kind.json')]: runtime },
   codecs: CODECS,
   check,

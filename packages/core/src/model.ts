@@ -91,8 +91,12 @@ export interface PluginDoc extends Envelope {
   settings?: InlineObject;
   grants: { ports?: string[]; triggerKinds?: string[]; connectionKinds?: string[]; codecs?: string[] };
 }
-/** `refuses`: running it ends the graph on purpose; its static `reason` input names the outcome, and a trigger kind maps that word to how it answers. */
-export interface Operation { description: string; accepts?: Fields; returns?: TypeSpec; pure?: boolean; refuses?: boolean }
+/**
+ * `refuses`: running it ends the graph on purpose; its static `reason` input names the outcome, and a trigger
+ * kind maps that word to how it answers. `holds`: running it starts something that outlives the run -- a
+ * listener, a watcher -- which a project's startup list names and the runtime stops when the process ends.
+ */
+export interface Operation { description: string; accepts?: Fields; returns?: TypeSpec; pure?: boolean; refuses?: boolean; holds?: boolean }
 export interface PortDoc extends Envelope { operations: Record<string, Operation> }
 export interface BindingOp { graph?: string; run?: string; in?: Values; description?: string }
 /** How a domain port is met. `resolvers` names the resolvers document whose reads a delegation may use. */

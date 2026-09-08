@@ -7,9 +7,10 @@ import { SignJWT } from 'jose';
 import { fileURLToPath } from 'node:url';
 import { loadTree } from '@wilanis/core';
 import { checkTree } from '@wilanis/compiler';
-import { BUILTIN_PLUGINS, serve } from '@wilanis/runtime';
+import { BUILTIN_PLUGINS, start } from '@wilanis/runtime';
 import http, { encode } from '../src/index.js';
 import blobs from '@wilanis/plugin-blob';
+import reload from '@wilanis/plugin-reload';
 import { Throttle } from '../src/throttle.js';
 
 const EXAMPLE = fileURLToPath(new URL('../../../example', import.meta.url));
@@ -71,9 +72,9 @@ beforeAll(async () => {
   process.env.MONITOR_JWT_SECRET = SECRET;
   dir = localCopy();
   // a copy outside the workspace cannot resolve plugins[].from through node_modules, so the plugins are handed in
-  const load = loadTree(dir, { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs });
+  const load = loadTree(dir, { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs, '@reload': reload });
   expect(checkTree(load).items).toEqual([]);
-  stop = await serve(load, { log: s => logs.push(s) });
+  ({ stop } = await start(load, { log: s => logs.push(s) }));
   token = await new SignJWT({ role: 'recorder' }).setProtectedHeader({ alg: 'HS256' }).setSubject('u1').sign(new TextEncoder().encode(SECRET));
 });
 afterAll(async () => { await stop(); await new Promise<void>(r => upstream.close(() => r())); rmSync(dir, { recursive: true, force: true }); });

@@ -7,12 +7,13 @@ import { loadTree } from '@wilanis/core';
 import { checkTree } from '@wilanis/compiler';
 import http from '@wilanis/plugin-http';
 import blobs from '@wilanis/plugin-blob';
+import reload from '@wilanis/plugin-reload';
 import { Readable } from 'node:stream';
 import { BUILTIN_PLUGINS, fuzz, init, regress, runTrigger, scaffold } from '../src/index.js';
 import { isBlobHandle, schemaUrl } from '@wilanis/core';
 
 const EXAMPLE = fileURLToPath(new URL('../../../example', import.meta.url));
-const PLUGINS = { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs };
+const PLUGINS = { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs, '@reload': reload };
 const tmp = () => mkdtempSync(join(tmpdir(), 'wilanis-tools-'));
 const read = (p: string) => JSON.parse(readFileSync(p, 'utf8'));
 

@@ -6,7 +6,7 @@
 import { Compiler, buildEnv, runGraph, type CompileOptions, type Compiled } from '@wilanis/compiler';
 import type { Report } from '@wilanis/engine';
 import type { StartupStep, TriggerDoc } from '@wilanis/core';
-import type { PluginModule, Codecs } from '@wilanis/core';
+import type { PluginModule, Codecs, Hold, Serving } from '@wilanis/core';
 import type { Scope } from '@wilanis/core';
 import { conforms, type BlobStore, type Type } from '@wilanis/core';
 import { TEMPLATE, WHOLE_TEMPLATE, splitPath } from '@wilanis/core';
@@ -41,6 +41,8 @@ export class Embedder {
   readonly blobs: BlobStore;
   /** Declared secret key -> its value in the environment, for the one place a document reads one outside a connection: a startup step's in. */
   readonly secrets: Record<string, string>;
+  /** What `holds` operations have started, in the order they started it: the runtime stops them in reverse. */
+  readonly held: { label: string; stop: () => Promise<void> }[] = [];
 
   constructor(readonly scope: Scope, readonly plugins: PluginModule[], opts: CompileOptions & { env?: NodeJS.ProcessEnv; blobs?: BlobStore; root?: string } = {}) {
     this.compiler = new Compiler(scope, plugins, opts);
@@ -48,9 +50,13 @@ export class Embedder {
     const built = buildEnv(scope, processEnv);
     this.secrets = Object.fromEntries(Object.entries(scope.project?.secrets ?? {}).map(([k, v]) => [k, processEnv[v] ?? '']));
     this.blobs = opts.blobs ?? new FileBlobStore(opts.root ?? process.cwd(), scope.project?.blobs?.dir);
-    this.env = { ...built.env, blobs: this.blobs };
+    const hold: Hold = what => { this.held.push(what); };
+    this.env = { ...built.env, blobs: this.blobs, hold };
     this.missingSecrets = built.missing;
   }
+
+  /** Give `holds` operations the tree being served, as env.serving. Only `start` calls this: a stubbed run holds nothing. */
+  serve(served: { serving(): Serving }) { (this.env as Record<string, unknown>).serving = served.serving(); }
 
   graph(ref: string): Compiled {
     const path = this.scope.canon(ref);

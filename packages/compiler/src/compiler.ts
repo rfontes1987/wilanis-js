@@ -56,6 +56,14 @@ export class Compiler {
   operation(opRef: string): Compiled {
     const o = this.scope.op(opRef);
     if (typeof o === 'string') throw new Error(o);
+    // a `holds` operation starts something that outlives the run: it is a plugin's own, has no binding to
+    // choose between, and only a project's startup list names it. It compiles to the one call it is.
+    if (o.port.native && o.op.holds) {
+      const handler = this.nativeHandler(o.path, o.opName, o.op);
+      const in_: Record<string, KSource> = {};
+      for (const k of Object.keys(o.op.accepts ?? {})) in_[k] = { ref: 'in', path: [k] };
+      return { spec: { name: `${o.path}#${o.opName}`, nodes: { op: { kind: 'call', handler, in: in_ } }, output: o.op.returns ? ['op'] : undefined }, handlers: this.handlers };
+    }
     if (o.port.native) throw new Error(`'${opRef}' is a native operation; a trigger fires a domain port`);
     const b = this.scope.bindingFor(o.path, this.opts.profile);
     if (typeof b === 'string') throw new Error(b);
