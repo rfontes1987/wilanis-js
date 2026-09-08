@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
   "label": "POST /monitor",
-  "description": "POST /monitor \u2192 201 with the recorded entry. The body is the input.",
+  "description": "POST /monitor \u2192 201 with the recorded entry. The body is the input. 502 as upstream when the monitor API broke.",
   "kind": "@http/http.trigger-kind.json",
   "settings": {
     "route": "/monitor",
@@ -14,6 +14,9 @@
     "response": {
       "status": {
         "default": 201
+      },
+      "refusals": {
+        "upstream": 502
       }
     },
     "body": "@monitor/edge/RecordRequest.shape.json"

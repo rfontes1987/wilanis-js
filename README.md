@@ -229,7 +229,8 @@ runtime; `@http` is `@wilanis/plugin-http`. A project names its plugins in `proj
 | `@wilanis/core` | The document language: JSON Schemas, TypeScript model, type system, loader, Scope, plugin contract | engine, ajv |
 | `@wilanis/compiler` | `checkTree` judges a loaded tree; `Compiler` lowers graphs to engine specs | core, engine |
 | `@wilanis/runtime` | Embedder, gates (`rehearse`, `fuzz`, `regress`), discovery, serve, plugin packages, the `wilanis` CLI. Ships `@std` and `@cli` | core, engine, compiler |
-| `@wilanis/plugin-http` | The `@http` plugin: routes with JWT access, outbound requests, connections, body codecs | core, engine, jose |
+| `@wilanis/plugin-http` | The `@http` plugin: routes with JWT access, outbound requests, connections, body codecs (files as blobs) | core, engine, jose |
+| `@wilanis/plugin-blob` | The `@blob` plugin: stored files read as CSV rows or text, and written back, through the blob registry | core, engine |
 | `@wilanis/view` | The `wilanis-view` viewer: every graph drawn as a canvas of nodes, typed ports and edges, callers one click away. Read-only; it grants nothing and runs nothing | core, compiler, runtime |
 
 A project installs `@wilanis/runtime` and the plugin packages it uses. Nothing else. `@wilanis/view` is a
@@ -249,6 +250,7 @@ Skip this on a first read. It is the compact statement of the rules the checker 
 - **Types are declared, never inferred.** `object#make`, `object#merge`, `list#first`, `list#concat`, `http#request` take a `type` or `returns` field naming the result type; the checker verifies the values given fit it.
 - **The standard library is four ports.** `@std/object` (`make`, `merge`), `@std/text` (`fill`, `join`, `split`, `replace`), `@std/list` (`count`, `first`, `concat`, `slice`), `@std/outcome` (`refuse`). All pure, legal in any layer.
 - **No absence.** Required unless `required: false`; optional cannot feed required; a missing key stays missing.
+- **Files are blobs.** A `blob` is a type: the value is a handle (id, contentType, size, filename) and the bytes live once, on disk, in the runtime's blob registry (`project.json → blobs.dir`). An upload streams into the registry through a content type mapped to `@http/codecs/blob.codec.json` and the graph gets the handle; a download is a trigger whose `out` is `blob`, streamed back out. `@blob/csv.port.json` reads a blob as rows of a declared shape and writes rows as one; every such operation is an effect, in a data graph. Nothing of a file passes through the engine. A run's blobs are released once the trigger has answered.
 - **Triggers are generic.** A trigger names its kind (http route, cli command, ...), the settings that kind judges, edge `in`/`out` types, and `fire`: the domain port operation it runs, with its inputs read from the kind's context (`{{request.body.title}}`). A trigger never names a graph; the port's binding decides how the operation is met.
 - **Resolvers are reads.** A `resolvers` document in a feature's `edge/` names what the data layer takes from the request (`request.headers['user-agent']`); a data graph or a binding names the document and reads `{{agent}}`. `request.*` is legal in a trigger's `fire.in` and a resolver's `read`; nowhere else.
 - **Effects are explicit.** `http.request` answers status, headers, body. Whether 404 is a failure is a `switch`'s decision: the body is judged against `returns` only on a 2xx, so an error body reaches the switch. A node fails only on the unexpected.
@@ -276,6 +278,36 @@ A plugin package exports its `PluginModule` as the default export. Two hooks on 
   warm caches, register parsers here. It may hand back a teardown, run when the runtime stops. `serve`
   and a real `run` call it; the stubbed gates (`rehearse`, `fuzz`, `regress`, `run --seed`) do not.
 
+### Before the first request
+
+`postLoad` is a plugin's own wiring, written in TypeScript, and a reader of the tree cannot see it. What
+*this* project does before it serves is declared instead, in `project.json → startup`:
+
+```json
+"startup": [
+  { "label": "Open the pool", "run": "@board/domain/store.port.json#open" },
+  { "label": "Subscribe", "run": "@board/domain/events.port.json#subscribe", "required": false }
+]
+```
+
+`wilanis serve` runs every plugin's `postLoad`, then these steps in order, and only then starts the trigger
+kinds -- so the HTTP server opens once the database pool is up and the topic is subscribed, never before.
+
+Each step names a **domain port operation**, never a graph, so the active profile's binding decides how it is
+met: a fake in development, the real connection in production, without touching the step. Its `in` is written
+as literals and `{{secrets.*}}`; nothing has been received yet, so a step that reads `request.*` -- or whose
+bound graph does -- is refused before it ever runs (B007, B008).
+
+A step that refuses stops the server and exits nonzero: a tree whose database is unreachable never opens its
+port, rather than answering every route with a fault. Say `"required": false` for a step the tree can serve
+without, and its refusal is logged while the rest go on.
+
+```
+$ npx wilanis serve example
+startup 1/1 Reach the entry store: ok
+http: listening on :8080 -- GET /monitor → @monitor/domain/monitor.port.json#list, ...
+```
+
 ### Schemas
 
 The schemas live in `packages/core/schemas/` and are published from the `schemas-v1` branch of this
@@ -292,7 +324,7 @@ in `graph.schema.json`.
 ## Developing this repository
 
 It is an npm workspace. `npm run build` builds every package through TypeScript project references,
-`npm test` builds and runs the tests, `npm run release` publishes the six packages in dependency order.
+`npm test` builds and runs the tests, `npm run release` publishes the seven packages in dependency order.
 `CLAUDE.md` describes the layout and the rules for changing it.
 
 ## License

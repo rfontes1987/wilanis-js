@@ -1,13 +1,19 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
   "label": "DELETE /monitor/{id}",
-  "description": "DELETE /monitor/{id} \u2192 the entry that was removed.",
+  "description": "DELETE /monitor/{id} \u2192 the entry that was removed; 404 as missing when there is none, 502 as upstream when the monitor API broke.",
   "settings": {
     "route": "/monitor/{id}",
     "method": "DELETE",
     "produces": "application/json",
     "access": {
       "open": true
+    },
+    "response": {
+      "refusals": {
+        "missing": 404,
+        "upstream": 502
+      }
     }
   },
   "in": "@monitor/edge/IdRequest.shape.json",

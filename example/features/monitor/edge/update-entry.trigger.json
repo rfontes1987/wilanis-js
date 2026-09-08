@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
   "label": "PUT /monitor/{id}",
-  "description": "PUT /monitor/{id}: the id from the route, the new call from the body.",
+  "description": "PUT /monitor/{id}: the id from the route, the new call from the body \u2192 the entry; 404 as missing when there is none, 502 as upstream when the monitor API broke.",
   "settings": {
     "route": "/monitor/{id}",
     "method": "PUT",
@@ -10,6 +10,12 @@
     "body": "@monitor/edge/UpdateRequest.shape.json",
     "access": {
       "open": true
+    },
+    "response": {
+      "refusals": {
+        "missing": 404,
+        "upstream": 502
+      }
     }
   },
   "in": "@monitor/edge/UpdateRequest.shape.json",

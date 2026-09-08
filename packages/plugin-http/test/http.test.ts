@@ -6,8 +6,10 @@ import { join } from 'node:path';
 import { SignJWT } from 'jose';
 import { fileURLToPath } from 'node:url';
 import { loadTree } from '@wilanis/core';
+import { checkTree } from '@wilanis/compiler';
 import { BUILTIN_PLUGINS, serve } from '@wilanis/runtime';
-import http from '../src/index.js';
+import http, { encode } from '../src/index.js';
+import blobs from '@wilanis/plugin-blob';
 import { Throttle } from '../src/throttle.js';
 
 const EXAMPLE = fileURLToPath(new URL('../../../example', import.meta.url));
@@ -32,6 +34,11 @@ function localCopy(): string {
   edit('project.json', p => { p.plugins.find((x: any) => x.use === '@http').settings.jwt = { secret: '{{secrets.jwt}}', rolesClaim: 'role' }; p.secrets = { jwt: 'MONITOR_JWT_SECRET' }; });
   edit('features/monitor/edge/record-entry.trigger.json', t => { t.settings.access = { roles: ['recorder'] }; });
   edit('connections/monitor-api.connection.json', c => { c.settings.throttle = { concurrency: 2 }; });
+  // a multipart upload beside the raw one: the file is one part of a form, a note another
+  const S = 'https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/';
+  edit('project.json', p => { p.plugins.find((x: any) => x.use === '@http').settings.codecs['multipart/form-data'] = '@http/codecs/multipart.codec.json'; });
+  writeFileSync(join(d, 'features/monitor/edge/UploadForm.shape.json'), JSON.stringify({ $schema: S + 'shape.schema.json', description: 'a form with a file and a note', layer: 'edge', fields: { file: { type: 'blob' }, note: { type: 'string' } } }));
+  writeFileSync(join(d, 'features/monitor/edge/upload-form.trigger.json'), JSON.stringify({ $schema: S + 'trigger.schema.json', description: 'POST /monitor/upload as a form', kind: '@http/http.trigger-kind.json', settings: { route: '/monitor/upload', method: 'POST', consumes: 'multipart/form-data', produces: 'application/json', access: { open: true }, body: '@features/monitor/edge/UploadForm.shape.json', response: { status: { default: 201 }, refusals: { upstream: 502 } } }, in: '@features/monitor/edge/CsvUpload.shape.json', out: '@features/monitor/edge/EntryView.shape.json[]', fire: { run: '@features/monitor/domain/monitor.port.json#import', in: { file: '{{request.body.file}}' } } }));
   return d;
 }
 
@@ -64,7 +71,9 @@ beforeAll(async () => {
   process.env.MONITOR_JWT_SECRET = SECRET;
   dir = localCopy();
   // a copy outside the workspace cannot resolve plugins[].from through node_modules, so the plugins are handed in
-  stop = await serve(loadTree(dir, { ...BUILTIN_PLUGINS, '@http': http }), { log: s => logs.push(s) });
+  const load = loadTree(dir, { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs });
+  expect(checkTree(load).items).toEqual([]);
+  stop = await serve(load, { log: s => logs.push(s) });
   token = await new SignJWT({ role: 'recorder' }).setProtectedHeader({ alg: 'HS256' }).setSubject('u1').sign(new TextEncoder().encode(SECRET));
 });
 afterAll(async () => { await stop(); await new Promise<void>(r => upstream.close(() => r())); rmSync(dir, { recursive: true, force: true }); });
@@ -103,16 +112,79 @@ describe('http trigger kind against a mockapi-shaped upstream', () => {
     // five requests were issued, never more than two at once
     expect(inFlight.peak).toBe(2);
   });
-  it('fails the whole batch when one id does not exist, after every deletion settled', async () => {
+  it('refuses the whole batch as missing when one id does not exist, after every deletion settled', async () => {
     rows.push({ id: '8', url: 'https://8.example/', method: 'GET' });
     const r = await call('DELETE', '/monitor', { ids: ['8', 'nope'] });
-    expect(r.status).toBe(500);
-    expect(r.body.error).toContain('no entry nope');
+    // the element's refusal is the map's, and the map's is the route's: the reason travels up as it is
+    expect(r.status).toBe(404);
+    expect(r.body).toEqual({ reason: 'missing', message: 'no entry nope' });
     expect(rows.map(r => r.id)).toEqual(['1', '2']);
+  });
+  it('answers a declared refusal with the status the route maps its reason to, and the reason and message as the body', async () => {
+    const r = await call('GET', '/monitor/zzz');
+    expect(r.status).toBe(404);
+    expect(r.body).toEqual({ reason: 'missing', message: 'no entry zzz' });
+  });
+  it('a refusal whose reason the route does not map is a fault, not a silent status', () => {
+    const trigger = { kind: '@http/http.trigger-kind.json', settings: { route: '/x', method: 'GET', response: { refusals: { missing: 404 } } }, fire: { run: 'p#op' } } as any;
+    const refused = { graph: 'g', status: 'failed' as const, nodes: { n: { status: 'failed' as const, error: 'nope', reason: 'conflict' } }, startedAt: 0, endedAt: 0 };
+    expect(encode(trigger, refused)).toEqual({ status: 500, body: { error: "refused with reason 'conflict', which response.refusals does not map: nope" } });
+    expect(encode(trigger, { ...refused, nodes: { n: { ...refused.nodes.n, reason: 'missing' } } })).toEqual({ status: 404, body: { reason: 'missing', message: 'nope' } });
+    // a fault stays a 500 that says where it broke
+    expect(encode(trigger, { ...refused, nodes: { n: { status: 'failed' as const, error: 'boom' } } })).toEqual({ status: 500, body: { error: 'n: boom' } });
   });
   it('400 on a batch whose body is not the declared shape', async () => {
     expect((await call('DELETE', '/monitor', { ids: 'nope' })).status).toBe(400);
     expect((await call('DELETE', '/monitor')).status).toBe(400);
+  });
+});
+
+describe('files through the blob registry', () => {
+  it('uploads a CSV as a blob: the body streams into the registry, the graph gets a handle, every row is recorded', async () => {
+    const csv = 'url,method\nhttps://csv-1.example/,GET\n"https://csv-2.example/?a=1,2",POST\n';
+    const r = await fetch('http://localhost:8080/monitor.csv', { method: 'POST', headers: { 'content-type': 'text/csv' }, body: csv });
+    expect(r.status).toBe(201);
+    expect(await r.json()).toEqual([
+      { id: expect.any(String), url: 'https://csv-1.example/', method: 'GET', ua: 'wilanis-example/0.1.0' },
+      { id: expect.any(String), url: 'https://csv-2.example/?a=1,2', method: 'POST', ua: 'wilanis-example/0.1.0' },
+    ]);
+    expect(rows.filter(x => String(x.url).startsWith('https://csv-'))).toHaveLength(2);
+  });
+  it('downloads every entry as a CSV: streamed from the registry with its content type, length and filename', async () => {
+    const r = await fetch('http://localhost:8080/monitor.csv');
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toBe('text/csv; charset=utf-8');
+    expect(r.headers.get('content-disposition')).toBe('attachment; filename="monitor.csv"');
+    const body = await r.text();
+    expect(Number(r.headers.get('content-length'))).toBe(Buffer.byteLength(body));
+    const lines = body.split('\r\n').filter(Boolean);
+    expect(lines[0]).toBe('id,url,method,ua');
+    expect(lines).toHaveLength(rows.length + 1);
+    expect(lines.some(l => l.includes('"https://csv-2.example/?a=1,2"'))).toBe(true);
+  });
+  it('a multipart form: the file part streams into the registry as a blob, the text part arrives as a string', async () => {
+    const big = 'url,method\n' + Array.from({ length: 2000 }, (_, i) => `https://form-${i}.example/,GET`).join('\n') + '\n';
+    const form = new FormData();
+    form.append('note', 'from a form');
+    form.append('file', new Blob([big], { type: 'text/csv' }), 'bulk.csv');
+    const before = rows.length;
+    const r = await fetch('http://localhost:8080/monitor/upload', { method: 'POST', body: form });
+    expect(r.status).toBe(201);
+    expect(await r.json()).toHaveLength(2000);
+    expect(rows.length).toBe(before + 2000);
+  });
+  it('a CSV row that is not an entry is a fault of the import, and nothing is recorded', async () => {
+    const before = rows.length;
+    const r = await fetch('http://localhost:8080/monitor.csv', { method: 'POST', headers: { 'content-type': 'text/csv' }, body: 'url,method\nhttps://x.example/,TRACE\n' });
+    expect(r.status).toBe(500);
+    expect((await r.json()).error).toContain('row 2.method');
+    expect(rows.length).toBe(before);
+  });
+  it('a body of another content type than the route consumes is a 415, and an upload with no body is a 400', async () => {
+    const r = await fetch('http://localhost:8080/monitor.csv', { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: '%PDF' });
+    expect(r.status).toBe(415);
+    expect((await r.json()).error).toBe('this route consumes text/csv, not application/pdf');
+    expect((await fetch('http://localhost:8080/monitor.csv', { method: 'POST', headers: { 'content-type': 'text/csv' } })).status).toBe(400);
   });
 });
 
@@ -129,7 +201,8 @@ describe('the throttle', () => {
     const starts: number[] = [];
     await Promise.all(Array.from({ length: 7 }, () => t.run(async () => { starts.push(Date.now()); })));
     starts.sort((a, b) => a - b);
-    for (let i = 0; i + 3 < starts.length; i++) expect(starts[i + 3] - starts[i]).toBeGreaterThanOrEqual(1000);
+    // the job's clock reads a tick after the gate's, so a millisecond of skew is measurement, not a fourth start in the second
+    for (let i = 0; i + 3 < starts.length; i++) expect(starts[i + 3] - starts[i]).toBeGreaterThanOrEqual(999);
     expect(starts[6] - starts[0]).toBeLessThan(2500);
   });
   it('frees the slot when the request throws', async () => {

@@ -4,7 +4,7 @@
  */
 import { fileURLToPath } from 'node:url';
 import type { PluginModule } from '@wilanis/core';
-import { readPath } from '@wilanis/engine';
+import { Refusal, readPath } from '@wilanis/engine';
 import { conforms, type Type } from '@wilanis/core';
 
 const obj = (v: unknown, what: string): Record<string, unknown> => { if (v === undefined) return {}; if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new Error(`${what}: expected an object`); return v as Record<string, unknown>; };
@@ -23,7 +23,7 @@ export const std: PluginModule = {
   handlers: {
     '@std/object.port.json#make': async ({ in: i, ctx }) => declared(i.value, i.type, ctx.env),
     '@std/object.port.json#merge': async ({ in: i, ctx }) => declared({ ...obj(i.base, 'base'), ...obj(i.over, 'over') }, i.type, ctx.env),
-    '@std/outcome.port.json#refuse': async ({ in: i }) => { throw new Error(str(i.message, 'message')); },
+    '@std/outcome.port.json#refuse': async ({ in: i }) => { throw new Refusal(str(i.reason, 'reason'), str(i.message, 'message')); },
     '@std/text.port.json#fill': async ({ in: i }) => str(i.template, 'template').replace(/\{([A-Za-z0-9_.]+)\}/g, (_, p: string) => { const v = readPath(i.values, p.split('.')); return v === undefined ? '' : String(v); }),
     '@std/text.port.json#split': async ({ in: i }) => str(i.text, 'text').split(str(i.separator, 'separator')),
     '@std/text.port.json#join': async ({ in: i }) => arr(i.parts, 'parts').map(String).join(str(i.separator, 'separator')),

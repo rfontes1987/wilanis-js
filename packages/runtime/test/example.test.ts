@@ -6,10 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { loadTree, schemaRef, schemaUrl, type PluginModule } from '@wilanis/core';
 import { checkTree } from '@wilanis/compiler';
 import http from '@wilanis/plugin-http';
+import blobs from '@wilanis/plugin-blob';
 import { BUILTIN_PLUGINS, describe as describeDoc, loadProject, rehearse, serve } from '../src/index.js';
 
 const EXAMPLE = fileURLToPath(new URL('../../../example', import.meta.url));
-const PLUGINS = { ...BUILTIN_PLUGINS, '@http': http };
+const PLUGINS = { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs };
 const codes = (root: string) => checkTree(loadTree(root, PLUGINS)).items.map(r => r.code);
 
 /** A plugin's docs directory, written from name -> document. */
@@ -66,9 +67,9 @@ describe('the example tree', () => {
     const r = await rehearse(loadTree(EXAMPLE, PLUGINS), { seed: 1 });
     const text = r.lines.join('\n');
     // the six data graphs each answer on one branch and refuse on purpose on the others
-    expect(text.match(/refused on purpose at 'failed'/g)).toHaveLength(6);
-    // the three graphs behind an id declare what a missing id means
-    expect(text.match(/refused on purpose at 'missing': "no entry /g)).toHaveLength(3);
+    expect(text.match(/refused on purpose at 'failed' as upstream/g)).toHaveLength(6);
+    // the three graphs behind an id declare what a missing id means, and say so in one word the trigger maps
+    expect(text.match(/refused on purpose at 'missing' as missing: "no entry /g)).toHaveLength(3);
     // every branch that answers names the node it answered from, never a bare status word
     expect(text.match(/answered from '/g)).toHaveLength(8);
     // the rule is shown as a condition, not as a bare expression next to a node id
@@ -87,7 +88,7 @@ describe('the example tree', () => {
   it('loads its plugin packages through project.json → plugins[].from', async () => {
     const l = await loadProject(EXAMPLE);
     expect(l.refusals.items).toEqual([]);
-    expect(l.plugins.map(p => p.root).sort()).toEqual(['@cli', '@http', '@std']);
+    expect(l.plugins.map(p => p.root).sort()).toEqual(['@blob', '@cli', '@http', '@std']);
   });
 });
 
@@ -133,6 +134,84 @@ describe('plugin packages and hooks', () => {
     expect(calls).toEqual(['up:hi:string']);
     await stop();
     expect(calls).toEqual(['up:hi:string', 'down']);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe('the project\'s startup steps', () => {
+  /**
+   * A tree whose one domain port is met by a native operation the test watches: `calls` records the order of
+   * the plugin's postLoad, each startup step, and the moment the trigger kind starts listening.
+   */
+  const tree = (startup: unknown[], onBoot: () => unknown) => {
+    const calls: string[] = [];
+    const fake: PluginModule = {
+      root: '@fake',
+      docs: docsDir({
+        'plugin.json': { $schema: schemaRef('plugin'), description: 'a plugin behind the boot port', grants: { ports: ['@fake/boot.port.json'], triggerKinds: ['@fake/tick.trigger-kind.json'] } },
+        'boot.port.json': { $schema: schemaRef('port'), description: 'what the tree does before it serves', operations: { open: { description: 'open the connection', accepts: { name: { type: 'string' } }, returns: 'string' } } },
+        'tick.trigger-kind.json': { $schema: schemaRef('trigger-kind'), description: 'a kind that only records that it started', settings: { fields: {} }, context: { fields: {} } },
+      }),
+      handlers: { '@fake/boot.port.json#open': async ({ in: input }: any) => { calls.push(`open:${input.name}`); return onBoot(); } },
+      triggers: { '@fake/tick.trigger-kind.json': { start: async () => { calls.push('listening'); return async () => {}; } } },
+      postLoad: async () => { calls.push('postLoad'); },
+    };
+    const dir = mkdtempSync(join(tmpdir(), 'wilanis-startup-'));
+    mkdirSync(join(dir, 'features/boot/domain'), { recursive: true });
+    mkdirSync(join(dir, 'features/boot/data'), { recursive: true });
+    mkdirSync(join(dir, 'features/boot/edge'), { recursive: true });
+    const w = (p: string, doc: unknown) => writeFileSync(join(dir, p), JSON.stringify(doc));
+    w('project.json', { $schema: schemaUrl('project'), name: 'boot', description: 'a tree with startup steps', plugins: [{ use: '@std' }, { use: '@fake' }], startup });
+    w('features/boot/feature.json', { $schema: schemaRef('feature'), description: 'the boot feature', effects: ['@fake/boot.port.json#open'] });
+    w('features/boot/domain/ready.port.json', { $schema: schemaRef('port'), description: 'what the tree needs before it serves', operations: {
+      warm: { description: 'warm the connection', accepts: { name: { type: 'string' } }, returns: 'string' },
+      tick: { description: 'what the one trigger fires, so that a kind has something to start for' },
+    } });
+    w('features/boot/data/ready.binding.json', { $schema: schemaRef('binding'), description: 'met by the fake connection', port: '@features/boot/domain/ready.port.json', operations: {
+      warm: { run: '@fake/boot.port.json#open', in: { name: '{{in.name}}' } },
+      tick: { run: '@fake/boot.port.json#open', in: { name: 'tick' } },
+    } });
+    w('features/boot/edge/tick.trigger.json', { $schema: schemaRef('trigger'), description: 'the one trigger of this tree', kind: '@fake/tick.trigger-kind.json', settings: {}, fire: { run: '@features/boot/domain/ready.port.json#tick' } });
+    return { dir, calls, plugins: { ...BUILTIN_PLUGINS, '@fake': fake } };
+  };
+
+  const step = (extra: Record<string, unknown> = {}) => ({ run: '@features/boot/domain/ready.port.json#warm', in: { name: 'db' }, ...extra });
+
+  it('every startup step runs, in order, after postLoad and before any trigger kind starts', async () => {
+    const { dir, calls, plugins } = tree([step({ in: { name: 'db' } }), step({ in: { name: 'queue' } })], () => 'ok');
+    const l = loadTree(dir, plugins);
+    expect(checkTree(l).items).toEqual([]);
+    const stop = await serve(l, { log: () => {} });
+    expect(calls).toEqual(['postLoad', 'open:db', 'open:queue', 'listening']);
+    await stop();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('a required step that fails stops serving: nothing listens', async () => {
+    const { dir, calls, plugins } = tree([step()], () => { throw new Error('the database is unreachable'); });
+    const l = loadTree(dir, plugins);
+    await expect(serve(l, { log: () => {} })).rejects.toThrow(/the database is unreachable/);
+    expect(calls).not.toContain('listening');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('an optional step that fails is logged, and the tree serves anyway', async () => {
+    const { dir, calls, plugins } = tree([step({ required: false })], () => { throw new Error('the cache is cold'); });
+    const l = loadTree(dir, plugins);
+    const logs: string[] = [];
+    const stop = await serve(l, { log: s => logs.push(s) });
+    expect(calls).toContain('listening');
+    expect(logs.join('\n')).toMatch(/the cache is cold/);
+    await stop();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('a tree with no startup steps serves as it always did', async () => {
+    const { dir, calls, plugins } = tree([], () => 'ok');
+    const l = loadTree(dir, plugins);
+    const stop = await serve(l, { log: () => {} });
+    expect(calls).toEqual(['postLoad', 'listening']);
+    await stop();
     rmSync(dir, { recursive: true, force: true });
   });
 });
@@ -248,6 +327,22 @@ describe('sabotage', () => {
   it('D008 a resolvers document outside the edge layer', () => {
     expect(relocate('features/monitor/edge/request.resolvers.json', 'features/monitor/data/request.resolvers.json')).toContain('D008');
   });
+  it('T005 a refusal reason the trigger can reach but does not map', () => {
+    expect(sabotage('features/monitor/edge/get-entry.trigger.json', t => { delete t.settings.response.refusals.missing; })).toEqual(['T005']);
+  });
+  it('T005 a reason reached only through a map, from the batch delete', () => {
+    expect(sabotage('features/monitor/edge/delete-entries.trigger.json', t => { delete t.settings.response.refusals.missing; })).toEqual(['T005']);
+  });
+  it('T006 a mapped reason nothing the trigger fires refuses with', () => {
+    expect(sabotage('features/monitor/edge/get-entry.trigger.json', t => { t.settings.response.refusals.teapot = 418; })).toEqual(['T006']);
+  });
+  it('P001 a reason given as a read: the checker must see the word', () => {
+    // and with the word unreadable, the mapping that named it has nothing to point at
+    expect(sabotage('features/monitor/data/get-row.graph.json', g => { g.nodes.find((n: any) => n.id === 'missing').in.reason = '{{asked.status}}'; }).sort()).toEqual(['P001', 'T006']);
+  });
+  it('G005 a refusal without a reason', () => {
+    expect(sabotage('features/monitor/data/get-row.graph.json', g => { delete g.nodes.find((n: any) => n.id === 'missing').in.reason; }).sort()).toEqual(['G005', 'T006']);
+  });
   it('G006 an input the operation does not declare', () => {
     expect(sabotage('features/monitor/data/list-rows.graph.json', d => { d.nodes[0].in.query = { a: 'b' }; })).toContain('G006');
   });
@@ -276,6 +371,27 @@ describe('sabotage', () => {
   });
   it('B005 a graph that takes its input whole, fed a field of another type', () => {
     expect(sabotage('features/monitor/domain/monitor.port.json', d => { d.operations.removeMany.accepts.ids.type = 'number[]'; })).toContain('B005');
+  });
+  it('B006 a startup step naming an operation the port does not have', () => {
+    expect(sabotage('project.json', d => { d.startup[0].run = '@monitor/domain/monitor.port.json#nope'; })).toContain('B006');
+  });
+  it('B006 a startup step firing a native operation', () => {
+    expect(sabotage('project.json', d => { d.startup[0].run = '@http/http.port.json#request'; })).toContain('B006');
+  });
+  it('B007 a startup step giving input to an operation that takes none', () => {
+    expect(sabotage('project.json', d => { d.startup[0].in = { bogus: 'x' }; })).toContain('B007');
+  });
+  it('B007 a startup step reading the request, which nothing has sent yet', () => {
+    expect(sabotage('project.json', d => { d.startup[0].in = { x: '{{request.body}}' }; })).toContain('B007');
+  });
+  it('B007 a startup step reading an undeclared secret', () => {
+    expect(sabotage('project.json', d => { d.startup[0].in = { x: '{{secrets.nope}}' }; })).toContain('B007');
+  });
+  it('B008 a startup step whose bound graph reads the request', () => {
+    expect(sabotage('project.json', d => {
+      d.startup[0].run = '@monitor/domain/monitor.port.json#record';
+      d.startup[0].in = { url: 'http://x', method: 'GET', ua: 'startup' };
+    })).toContain('B008');
   });
   it('X002 a content type with no codec', () => {
     expect(sabotage('features/monitor/edge/record-entry.trigger.json', d => { d.settings.consumes = 'application/xml'; })).toContain('X002');

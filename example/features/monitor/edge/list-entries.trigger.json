@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
   "label": "GET /monitor",
-  "description": "GET /monitor[?method=]",
+  "description": "GET /monitor[?method=] \u2192 the entries; 502 as upstream when the monitor API broke.",
   "kind": "@http/http.trigger-kind.json",
   "settings": {
     "route": "/monitor",
@@ -9,6 +9,11 @@
     "produces": "application/json",
     "access": {
       "open": true
+    },
+    "response": {
+      "refusals": {
+        "upstream": 502
+      }
     }
   },
   "in": "@monitor/edge/ListRequest.shape.json",

@@ -130,6 +130,39 @@
     "digest": {
       "description": "Every entry counted and listed as one digest.",
       "returns": "@monitor/domain/Digest.shape.json"
+    },
+    "parseDrafts": {
+      "description": "The entry drafts a CSV file holds: one per row, columns url and method.",
+      "accepts": {
+        "file": {
+          "type": "blob",
+          "description": "the CSV file, as uploaded"
+        }
+      },
+      "returns": "@monitor/domain/EntryDraft.shape.json[]"
+    },
+    "toCsv": {
+      "description": "Entries written as a CSV file, one row each.",
+      "accepts": {
+        "entries": {
+          "type": "@monitor/domain/Entry.shape.json[]"
+        }
+      },
+      "returns": "blob"
+    },
+    "import": {
+      "description": "Record every entry a CSV file holds, each attributed like a submitted one, and answer them in file order. Fails on a row that is not an entry.",
+      "accepts": {
+        "file": {
+          "type": "blob",
+          "description": "the CSV file: a header row, then url,method per line"
+        }
+      },
+      "returns": "@monitor/domain/Entry.shape.json[]"
+    },
+    "export": {
+      "description": "Every entry as a CSV file.",
+      "returns": "blob"
     }
   }
 }

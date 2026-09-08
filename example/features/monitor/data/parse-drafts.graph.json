@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "label": "Parse drafts",
+  "description": "Data graph behind monitor.parseDrafts: the uploaded CSV, streamed out of the blob registry and read as entry drafts. The file never enters the graph; its handle does.",
+  "in": "blob",
+  "out": {
+    "type": "@monitor/domain/EntryDraft.shape.json[]",
+    "from": "rows"
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "rows",
+      "label": "Read the rows",
+      "run": "@blob/csv.port.json#parse",
+      "in": {
+        "file": "{{in}}",
+        "type": "@monitor/domain/EntryDraft.shape.json"
+      }
+    }
+  ]
+}

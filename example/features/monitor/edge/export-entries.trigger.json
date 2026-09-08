@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "label": "GET /monitor.csv",
+  "description": "GET /monitor.csv \u2192 every entry as a CSV download (monitor.csv), streamed from the blob registry. 502 as upstream when the monitor API broke.",
+  "kind": "@http/http.trigger-kind.json",
+  "settings": {
+    "route": "/monitor.csv",
+    "method": "GET",
+    "produces": "text/csv",
+    "access": {
+      "open": true
+    },
+    "response": {
+      "refusals": {
+        "upstream": 502
+      }
+    }
+  },
+  "out": "blob",
+  "fire": {
+    "run": "@monitor/domain/monitor.port.json#export"
+  }
+}

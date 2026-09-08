@@ -20,6 +20,11 @@ met, a shape as its fields, the project as its plugins and profiles. The JSON is
 "source". The side panel names what a document uses and, in the other direction, everything that reaches
 it, including the graph nodes that reach a data graph through its port operation.
 
+Refusals are followed both ways. A trigger whose kind maps refusal reasons shows, under "Refusals it
+answers", each reason it can reach, how it answers it and the node that refuses with it, one click away
+(`#<graph>?node=<id>` opens a graph with that node selected). A node that refuses on purpose shows, in the
+details panel, every trigger that can reach it and how each answers its reason.
+
 ```
 npm install --save-dev @wilanis/view
 npx wilanis-view .              # http://127.0.0.1:4400/

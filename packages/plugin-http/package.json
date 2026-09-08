@@ -47,6 +47,7 @@
     "node": ">=22"
   },
   "devDependencies": {
-    "@wilanis/runtime": "0.1.0"
+    "@wilanis/runtime": "0.1.0",
+    "@wilanis/plugin-blob": "0.1.0"
   }
 }

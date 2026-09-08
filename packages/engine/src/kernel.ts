@@ -8,6 +8,7 @@
  * One element of a map may be pre-supplied the same way (`initial['m.2']`): a failed map reports every element's
  * outcome in `items`, so the embedder can seed the ones that answered and run only the rest.
  */
+import { Refusal } from './spec.js';
 import type { Handlers, KernelSpec, KNode, KSource, NodeReport, Report, RunContext, RunOptions } from './spec.js';
 
 export const PSEUDO = new Set(['in', 'const', 'request']);
@@ -204,12 +205,17 @@ export class Kernel {
                 return { ok: true as const, value };
               } catch (e) {
                 el.error = (e as Error).message; el.status = 'failed';
-                return { ok: false as const, error: el.error };
+                if (e instanceof Refusal) el.reason = e.reason;
+                return { ok: false as const, error: el.error, reason: el.reason };
               } finally { el.endedAt = Date.now(); }
             }));
             if (n.onItemFailure !== 'collect') {
               const i = results.findIndex(r => !r.ok);
-              if (i >= 0) throw new Error(`map '${id}' element ${i}: ${(results[i] as { error: string }).error}`);
+              if (i >= 0) {
+                // an element that refused refuses the map, with its reason; an element that broke is a fault of the map
+                const r = results[i] as { error: string; reason?: string };
+                throw r.reason !== undefined ? new Refusal(r.reason, r.error) : new Error(`map '${id}' element ${i}: ${r.error}`);
+              }
             }
             const out = n.onItemFailure === 'collect' ? results : results.map(r => (r as { value: unknown }).value);
             rep.out = n.redact?.out?.length ? (out as unknown[]).map(x => redactValue(x, n.redact!.out)) : out; values.set(id, out); rep.status = 'done';
@@ -217,6 +223,7 @@ export class Kernel {
         } catch (e) {
           rep.status = 'failed';
           rep.error = (e as Error).message;
+          if (e instanceof Refusal) rep.reason = e.reason;
           failed = true;
           for (const x of Object.keys(spec.nodes)) if (status(x) === 'pending') nodes[x].status = 'cancelled';
         } finally {
@@ -259,4 +266,15 @@ export class Kernel {
     }
     return { graph: spec.name, status: 'done', output, nodes, startedAt, endedAt };
   }
+}
+
+/**
+ * The refusal a failed report carries: the reason and message of the node that refused on purpose. A nested
+ * run's refusal reaches the node that ran it, so the top level answers for the whole run. Absent when the
+ * run answered, blocked, or failed on a fault.
+ */
+export function refusalOf(report: Report): { reason: string; message: string } | undefined {
+  if (report.status !== 'failed') return undefined;
+  const n = Object.values(report.nodes).find(n => n.status === 'failed');
+  return n?.reason !== undefined ? { reason: n.reason, message: n.error ?? '' } : undefined;
 }

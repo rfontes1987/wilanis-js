@@ -49,6 +49,14 @@ export interface KernelSpec {
 
 export type NodeStatus = 'pending' | 'running' | 'done' | 'failed' | 'cancelled' | 'seeded';
 
+/**
+ * A handler ending the run on purpose. `reason` is one word the caller acts on (which outcome), `message` is
+ * what a reader is told. Any other throw is a fault: something the graph did not declare.
+ */
+export class Refusal extends Error {
+  constructor(readonly reason: string, message: string) { super(message); this.name = 'Refusal'; }
+}
+
 export interface NodeReport {
   status: NodeStatus;
   /** call/map: the handler that ran (path#operation, or a binding operation). */
@@ -56,6 +64,8 @@ export interface NodeReport {
   in?: Record<string, unknown>;
   out?: unknown;
   error?: string;
+  /** The handler refused on purpose: the reason it gave, a word a caller acts on. Absent on a fault. */
+  reason?: string;
   /** switch: the node it routed to. */
   selected?: string;
   /** call bound to a graph: the nested run. */

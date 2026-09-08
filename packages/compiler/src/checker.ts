@@ -6,11 +6,12 @@
 import type { LoadResult } from '@wilanis/core';
 import {
   isMap, isRun, isSwitch, RefusalList, type BindingDoc, type Fields, type GraphDoc, type Loaded, type Node,
-  type Operation, type PortDoc, type ResolversDoc, type ShapeDoc, type TriggerDoc, type TypeSpec, type ConnectionDoc,
+  type Operation, type PortDoc, type ProjectDoc, type ResolversDoc, type ShapeDoc, type TriggerDoc, type TypeSpec, type ConnectionDoc,
 } from '@wilanis/core';
 import { Scope, WHOLE_TEMPLATE, splitPath, type OpHit } from '@wilanis/core';
 import { assignable, conforms, EMPTY_OBJECT, hasVars, show, STRING, substitute, typeAt, TypeError_, type Read, type Type } from '@wilanis/core';
 import { expr } from '@wilanis/core';
+import { readPath } from '@wilanis/engine';
 
 const RESERVED = new Set(['in', 'const', 'request', 'secrets']);
 
@@ -53,6 +54,7 @@ class Checker {
     for (const b of this.s.registry.all('binding')) this.checkBinding(b);
     for (const t of this.s.registry.all('trigger')) this.checkTrigger(t);
     for (const sc of this.s.registry.all('scenario')) if (!this.s.get('trigger', sc.doc.trigger)) this.refuse('S001', sc.path, `scenario names unknown trigger '${sc.doc.trigger}'`, 'trigger', 'wilanis ls trigger');
+    this.checkStartup(); // last: it walks bindings and graphs, so every resolvers document must already be read
   }
 
   // ---- project ------------------------------------------------------------------------------------
@@ -83,6 +85,40 @@ class Checker {
       for (const prof of profiles) {
         const b = this.s.bindingFor(port.path, prof);
         if (typeof b === 'string') this.refuse('B002', prof ? p.path : port.path, prof ? `profile '${prof}': ${b}` : b, prof ? `profiles/${prof}/bindings` : undefined, 'wilanis new binding <feature>/<name> --port <path>');
+      }
+    }
+  }
+
+  /**
+   * The project's startup steps: each fires a domain port operation once, before any trigger kind starts.
+   * A step runs with nothing received, so it may neither fire a native operation nor reach a read of
+   * request.*; its inputs must meet the operation's contract, written as literals and secrets.
+   */
+  private checkStartup() {
+    const p = this.s.registry.project!;
+    const doc: ProjectDoc = p.doc, file = p.path;
+    const profiles = this.s.profiles().length ? this.s.profiles() : [undefined];
+    for (const [i, step] of (doc.startup ?? []).entries()) {
+      const at = `startup/${i}`;
+      const o = this.s.op(step.run);
+      if (typeof o === 'string') { this.refuse('B006', file, `startup step ${i}: ${o}`, `${at}/run`, 'wilanis ls port'); continue; }
+      if (o.port.native) { this.refuse('B006', file, `startup step ${i} fires native operation '${step.run}'`, `${at}/run`, "a startup step fires a domain port; the port's binding reaches the native operation"); continue; }
+      const accepts = o.op.accepts ?? {};
+      const takes = Object.keys(accepts).length ? this.quiet({ fields: accepts }) : undefined;
+      const read = this.s.valueRead(step.in ?? {}, (root, path) => {
+        if (root !== 'secrets') return `{{${[root, ...path].join('.')}}}: a startup step runs before anything is received; only {{secrets.<key>}} may appear`;
+        if (path.length !== 1) return `{{secrets.${path.join('.')}}}: a secret is one key`;
+        if (!(path[0] in (doc.secrets ?? {}))) return `secret '${path[0]}' is not declared in project.json secrets`;
+        return { type: STRING, optional: false };
+      });
+      if (typeof read === 'string') { this.refuse('B007', file, `startup step ${i}: ${read}`, `${at}/in`, 'write the value, or declare the key under project.json → secrets'); continue; }
+      if (takes && read) { const bad = assignable(read.type, takes); if (bad) this.refuse('B007', file, `startup step ${i} → ${step.run}: ${bad}`, `${at}/in`, `wilanis describe ${step.run.split('#')[0]}`); }
+      if (!takes && Object.keys(step.in ?? {}).length) this.refuse('B007', file, `startup step ${i}: '${step.run}' takes no input`, `${at}/in`, 'remove in');
+      // nothing has been received, so no read of request.* can be met
+      for (const prof of profiles) {
+        for (const need of this.opNeeds(step.run, prof)) {
+          this.refuse('B008', file, `startup step ${i}: ${need.file} reads request.${need.path.join('.')}, but a startup step runs before anything is received${prof ? ` (profile '${prof}')` : ''}`, `${at}/run`, 'fire this operation from a trigger, or bind the port to a graph that reads no request');
+        }
       }
     }
   }
@@ -560,7 +596,19 @@ class Checker {
         if (typeof rr === 'string') this.refuse('T004', file, `${need.file} reads request.${need.path.join('.')} but trigger kind '${doc.kind}' hands no such value${prof ? ` (profile '${prof}')` : ''}`, 'kind', 'fire this operation from a kind that hands it, or bind the port differently under a profile');
       }
     }
+    // refusals: the graph says why it refused, in one word; the kind says how that word is answered. Each
+    // reason this trigger can reach must be mapped, and nothing may be mapped that it cannot reach.
+    if (kind.doc.refusals) {
+      const at = kind.doc.refusals, atPath = `settings/${at.replace(/\./g, '/')}`;
+      const table = readPath(doc.settings, at.split('.'));
+      const mapped = table && typeof table === 'object' && !Array.isArray(table) ? (table as Record<string, unknown>) : {};
+      const reachable = new Map<string, string>();
+      for (const prof of profiles) for (const r of refusalsReachable(this.s, doc.fire.run, prof)) if (!reachable.has(r.reason)) reachable.set(r.reason, r.file);
+      for (const [reason, from] of reachable) if (mapped[reason] === undefined) this.refuse('T005', file, `${from} may refuse with reason '${reason}', which settings.${at} does not map`, atPath, `add "${reason}" under settings.${at}: how this trigger answers that outcome`);
+      for (const reason of Object.keys(mapped)) if (!reachable.has(reason)) this.refuse('T006', file, `settings.${at} maps reason '${reason}', but nothing '${doc.fire.run}' reaches refuses with it`, `${atPath}/${reason}`, 'remove it, or spell the reason the way the graph does');
+    }
   }
+
 
   /**
    * A domain graph earns its place by doing something the port call alone cannot: composing more than one
@@ -614,6 +662,42 @@ class Checker {
     }
     return out;
   }
+}
+
+/** One refusal a port operation can end in: the literal reason, the graph (or binding) that calls refuse, and the node (or binding operation) that does. */
+export interface ReachableRefusal { reason: string; file: string; node: string }
+
+/**
+ * Every reason a run of `opRef` can refuse with under a profile: the walk goes through the binding that meets
+ * the operation, into the graph it runs or the operation it delegates to, and on through every domain call.
+ * A refusing operation's `reason` is static, so what the walk finds is what a run can say. The checker holds
+ * the trigger to it (T005, T006); the viewer shows it.
+ */
+export function refusalsReachable(scope: Scope, opRef: string, profile?: string, seen = new Set<string>()): ReachableRefusal[] {
+  const o = scope.op(opRef);
+  if (typeof o === 'string' || o.port.native) return [];
+  const b = scope.bindingFor(o.path, profile);
+  if (typeof b === 'string') return [];
+  const bop = b.doc.operations[o.opName];
+  if (!bop) return [];
+  if (bop.graph) return graphRefusals(scope, scope.canon(bop.graph), profile, seen);
+  return bop.run ? callRefusals(scope, bop.run, bop.in, b.path, o.opName, profile, seen) : [];
+}
+
+/** One call site: the literal reason when the operation refuses, else whatever the operation reaches. */
+function callRefusals(scope: Scope, run: string, given: Record<string, unknown> | undefined, file: string, node: string, profile: string | undefined, seen: Set<string>): ReachableRefusal[] {
+  const o = scope.op(run);
+  if (typeof o === 'string') return [];
+  if (o.op.refuses) { const r = given?.reason; return typeof r === 'string' && scope.literal(r) ? [{ reason: r, file, node }] : []; }
+  return o.port.native ? [] : refusalsReachable(scope, run, profile, seen);
+}
+
+function graphRefusals(scope: Scope, graphPath: string, profile: string | undefined, seen: Set<string>): ReachableRefusal[] {
+  if (seen.has(graphPath)) return []; seen.add(graphPath);
+  const g = scope.registry.get('graph', graphPath); if (!g) return [];
+  const out: ReachableRefusal[] = [];
+  for (const n of g.doc.nodes) { if (isSwitch(n)) continue; out.push(...callRefusals(scope, n.run, n.in, g.path, n.id, profile, seen)); }
+  return out;
 }
 
 /** Assignability at the edge: wire text (query, route placeholders, headers, form fields) may feed any scalar; the codec/trigger coerces and judges it at run time. */

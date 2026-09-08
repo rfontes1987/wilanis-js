@@ -1,13 +1,15 @@
 /**
  * The gates and the discovery commands. All of them work from a loaded, checked tree.
  */
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { LoadResult } from '@wilanis/core';
 import { Scope } from '@wilanis/core';
 import { Embedder } from './embed.js';
 import { runGraph, type EffectInfo } from '@wilanis/compiler';
 import type { Handler, Report } from '@wilanis/engine';
+import { refusalOf } from '@wilanis/engine';
 import { generate, rng, substitute, hasVars, show, type Type } from '@wilanis/core';
 import { schemaUrl, splitOp, type Kind, type Loaded, type ScenarioDoc, type TriggerDoc, type TriggerKindDoc, type PortDoc, type GraphDoc, type BindingDoc, type AnyDoc } from '@wilanis/core';
 import { casesFor, nonEmpty, setPath, switchesOf, type FoundSwitch } from './branches.js';
@@ -37,7 +39,7 @@ export function stubEffects(seed: number, record?: Record<string, unknown>, type
 export function embedderFor(load: LoadResult, opts: { seed?: number; record?: Record<string, unknown>; types?: Record<string, Type>; profile?: string; env?: NodeJS.ProcessEnv } = {}): Embedder {
   const scope = new Scope(load.registry, load.resolve);
   const env = opts.env ?? (opts.seed !== undefined ? fakeEnv(scope) : process.env);
-  return new Embedder(scope, load.plugins, { profile: opts.profile, stubEffects: opts.seed !== undefined ? stubEffects(opts.seed, opts.record, opts.types) : undefined, env });
+  return new Embedder(scope, load.plugins, { profile: opts.profile, stubEffects: opts.seed !== undefined ? stubEffects(opts.seed, opts.record, opts.types) : undefined, env, root: load.root });
 }
 
 /** An environment where every declared secret is present, for runs that never leave the process. */
@@ -107,12 +109,12 @@ export interface Rehearsal { ok: boolean; lines: string[] }
 interface Settled {
   /** done, failed, or BLOCKED. */
   status: string;
-  /** The declared failure, when the graph failed on purpose at a #refuse node. */
-  declared?: string;
+  /** The declared failure, when the graph refused on purpose: its reason and message. */
+  declared?: { reason: string; message: string };
   /** A failure the graph did not declare: a bug, not a designed outcome. */
   error?: string;
   /** A declared failure that came from a graph this one calls, and the node it came through. */
-  propagated?: { node: string; error: string };
+  propagated?: { node: string; reason: string; error: string };
   blocked: boolean;
   /** The node the switch actually routed to, when it is not the one the branch aimed at. */
   misrouted?: string;
@@ -148,11 +150,11 @@ function settle(report: Report, sw: FoundSwitch, aim: string): Settled {
   };
   if (local.status !== 'failed' || !failed) return out;
   const [id, n] = failed;
-  // a fail node in THIS graph is a declared outcome; a failure that arrived from a graph this one calls
-  // is that graph's declared outcome surfacing here, and naming it as ours would credit the wrong document
-  if (n.handler?.endsWith('#refuse')) { out.declared = n.error ?? ''; return out; }
+  // a refusal in THIS graph is a declared outcome; a refusal that arrived from a graph this one calls is that
+  // graph's declared outcome surfacing here, and naming it as ours would credit the wrong document
   const deeper = failedBelow(id, n);
-  if (deeper?.handler?.endsWith('#refuse')) { out.propagated = { node: id, error: deeper.error ?? '' }; return out; }
+  if (!deeper && n.reason !== undefined) { out.declared = { reason: n.reason, message: n.error ?? '' }; return out; }
+  if (deeper?.reason !== undefined) { out.propagated = { node: id, reason: deeper.reason, error: deeper.error ?? '' }; return out; }
   out.error = `${id}: ${n.error}`;
   return out;
 }
@@ -181,14 +183,13 @@ export async function rehearse(load: LoadResult, opts: { seed?: number; profile?
       const emb = embedderFor(load, { seed, profile: opts.profile });
       const { input, request } = generatedFire(emb, t, seed);
       const report = await emb.fire(t.doc, input, request);
-      const leaf = failedLeaf(report);
-      const onPurpose = leaf?.handler?.endsWith('#refuse');
+      const refused = refusalOf(report);
       const failed = Object.entries(report.nodes).find(([, n]) => n.status === 'failed');
       settledGraphs.push({
         trigger: t.name, graph: t.doc.fire.run,
         status: report.status === 'blocked' ? 'BLOCKED' : report.status,
-        declared: report.status === 'failed' && onPurpose ? leaf?.error : undefined,
-        error: report.status === 'failed' && !onPurpose ? (failed ? `${failed[0]}: ${failed[1].error}` : 'failed') : undefined,
+        declared: refused ? `${refused.reason}: "${refused.message}"` : undefined,
+        error: report.status === 'failed' && !refused ? (failed ? `${failed[0]}: ${failed[1].error}` : 'failed') : undefined,
       });
     }
   }
@@ -277,8 +278,8 @@ function format(
         problems.push(`${short(d.graph)} '${d.node}': the branch to ${b.to} fails where the graph declares no failure -- ${st.error}`);
         continue;
       }
-      if (st.declared !== undefined) { lines.push(`  ok  ${when}  refused on purpose at '${b.to}': "${st.declared}"`); continue; }
-      if (st.propagated) { lines.push(`  ok  ${when}  went to '${b.to}', which refused it: "${st.propagated.error}"`); continue; }
+      if (st.declared) { lines.push(`  ok  ${when}  refused on purpose at '${b.to}' as ${st.declared.reason}: "${st.declared.message}"`); continue; }
+      if (st.propagated) { lines.push(`  ok  ${when}  went to '${b.to}', which refused it as ${st.propagated.reason}: "${st.propagated.error}"`); continue; }
       lines.push(`  ok  ${when}  answered from '${b.to}'`);
     }
   }
@@ -286,7 +287,7 @@ function format(
   lines.push('');
   if (!problems.length) {
     lines.push(`every branch settled -- ${branches} branch(es), ${decisions.length} decision(s), ${new Set(decisions.map(d => d.graph)).size} graph(s).`);
-    lines.push('"refused on purpose" is a fail node the graph declares: a designed outcome, not a fault. Effects are stubbed, so no request left this process.');
+    lines.push('"refused on purpose" is a refuse node the graph declares: a designed outcome with a reason the trigger maps, not a fault. Effects are stubbed, so no request left this process.');
     return true;
   }
   lines.push(`${problems.length} problem(s):`);
@@ -514,7 +515,7 @@ export function describe(load: LoadResult, ref: string): string {
   const showType = (t: unknown) => { try { return show(scope.types.spec(t as string)); } catch { return JSON.stringify(t); } };
   if (doc.kind === 'port') {
     for (const [name, op] of Object.entries((doc.doc as PortDoc).operations)) {
-      lines.push(`#${name}${op.pure ? '  (pure)' : ''}: ${op.description}`);
+      lines.push(`#${name}${op.pure ? '  (pure)' : ''}${op.refuses ? '  (refuses on purpose)' : ''}: ${op.description}`);
       for (const [k, f] of Object.entries(op.accepts ?? {})) lines.push(`    in  ${k}${f.required === false ? '?' : ''}: ${f.type === 'type' ? 'type' : showType(f.type)}${f.static || f.type === 'type' ? '  (static)' : ''}${f.binds ? ` binds ${f.binds}` : ''}${f.enum ? ` ∈ ${f.enum.join('|')}` : ''}${f.description ? '  -- ' + f.description : ''}`);
       if (op.returns) lines.push(`    returns ${showType(op.returns)}`);
     }
@@ -522,6 +523,7 @@ export function describe(load: LoadResult, ref: string): string {
     const d = doc.doc as TriggerKindDoc;
     if (d.settings) { lines.push('settings:'); for (const [k, f] of Object.entries(d.settings.fields)) lines.push(`    ${k}${f.required === false ? '?' : ''}: ${typeof f.type === 'string' ? f.type : showType(f.type)}${f.enum ? ` ∈ ${f.enum.join('|')}` : ''}${f.binds ? ` binds ${f.binds}` : ''}${f.description ? '  -- ' + f.description : ''}`); }
     if ('context' in d) { lines.push('context (request.*):'); for (const [k, f] of Object.entries(d.context.fields)) lines.push(`    ${k}${f.required === false ? '?' : ''}: ${typeof f.type === 'string' ? f.type : showType(f.type)}${f.description ? '  -- ' + f.description : ''}`); }
+    if (d.refusals) lines.push(`refusals: settings.${d.refusals} maps each reason a trigger can reach to how it is answered (T005, T006)`);
     if ('grants' in (d as unknown as { grants?: unknown })) lines.push(`grants: ${JSON.stringify((d as unknown as { grants: unknown }).grants)}`);
   } else {
     lines.push(JSON.stringify(doc.doc, null, 2));
@@ -598,9 +600,11 @@ export function scaffold(root: string, kind: string, target: string, opts: Recor
       files.push([`features/${target}/feature.json`, { $schema: S('feature'), description: 'TODO', exports: [], effects: [] }]);
       break;
     case 'shape': {
-      // a shape is the world's (edge) or ours (domain); `layer: core` is the domain's word for it
-      const layer = opts.layer === 'edge' ? 'edge' : 'core';
-      files.push([into(target, layer === 'edge' ? 'edge' : 'domain', 'shape'), { $schema: S('shape'), layer, description: 'TODO', fields: {} }]);
+      // a shape is the world's (edge) or ours (domain); `layer: core` is the domain's word for it. The directory
+      // is where a shape's layer is read from, so a path that names the layer decides it, and --layer the rest.
+      const placed = into(target, opts.layer === 'edge' ? 'edge' : 'domain', 'shape');
+      const layer = placed.split('/')[2] === 'edge' ? 'edge' : 'core';
+      files.push([placed, { $schema: S('shape'), layer, description: 'TODO', fields: {} }]);
       break;
     }
     case 'port':
@@ -610,7 +614,8 @@ export function scaffold(root: string, kind: string, target: string, opts: Recor
       files.push([into(target, opts.layer === 'data' ? 'data' : 'domain', 'graph'), { $schema: S('graph'), description: 'TODO', nodes: [{ type: '@wilanis/node/run.schema.json', id: 'first', run: '@std/text.port.json#fill', in: { values: {}, template: 'hello' } }], out: { type: 'string', from: 'first' } }]);
       break;
     case 'binding':
-      files.push([into(target, 'data', 'binding'), { $schema: S('binding'), description: 'TODO', port: opts.port ?? '@features/TODO/domain/TODO.port.json', operations: {} }]);
+      // meets the `example` operation a scaffolded port declares, by delegation; a real port's operations are B001s that name themselves
+      files.push([into(target, 'data', 'binding'), { $schema: S('binding'), description: 'TODO', port: opts.port ?? '@features/TODO/domain/TODO.port.json', operations: { example: { description: 'TODO', run: '@std/text.port.json#fill', in: { values: {}, template: 'TODO' } } } }]);
       break;
     case 'resolvers':
       files.push([into(target, 'edge', 'resolvers'), { $schema: S('resolvers'), description: 'TODO', resolvers: { caller: { read: "request.headers['user-agent']", description: 'TODO' } } }]);
@@ -629,4 +634,24 @@ export function scaffold(root: string, kind: string, target: string, opts: Recor
     written.push(rel);
   }
   return written;
+}
+
+/**
+ * wilanis init: write the agent's CLAUDE.md and hooks into a tree from the runtime's templates. A file that
+ * exists is kept, never overwritten. Answers one line per file: `wrote <path>` or `kept <path>`.
+ */
+export function init(root: string, templates = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates')): string[] {
+  const out: string[] = [];
+  const put = (from: string, to: string) => {
+    if (existsSync(to)) { out.push(`kept ${to}`); return; }
+    mkdirSync(dirname(to), { recursive: true });
+    writeFileSync(to, readFileSync(from));
+    out.push(`wrote ${to}`);
+  };
+  for (const f of readdirSync(templates)) {
+    const from = join(templates, f), to = join(root, f.replace(/^dot-/, '.'));
+    if (f === 'dot-claude') { for (const g of readdirSync(from)) put(join(from, g), join(to, g)); continue; }
+    put(from, to);
+  }
+  return out;
 }

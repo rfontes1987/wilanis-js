@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "label": "Text files",
+  "description": "Any text file: read whole as one string, or written from one. For anything larger than a value should be, prefer an operation that reads the blob as rows.",
+  "operations": {
+    "read": {
+      "description": "The whole file as UTF-8 text.",
+      "accepts": {
+        "file": {
+          "type": "blob"
+        }
+      },
+      "returns": "string"
+    },
+    "write": {
+      "description": "Store text as a file and answer its handle.",
+      "accepts": {
+        "text": {
+          "type": "string"
+        },
+        "contentType": {
+          "type": "string",
+          "required": false,
+          "description": "default text/plain; charset=utf-8"
+        },
+        "filename": {
+          "type": "string",
+          "required": false,
+          "description": "the name the file is offered under when downloaded"
+        }
+      },
+      "returns": "blob"
+    }
+  }
+}

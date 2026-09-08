@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/project.schema.json",
   "label": "Monitor",
   "name": "monitor",
-  "description": "A monitor of observed HTTP calls: the routes talk to a REST API (mockapi.io). Plugins come from npm packages named by \"from\". No secrets: the API is public.",
+  "description": "A monitor of observed HTTP calls: the routes talk to a REST API (mockapi.io); entries are imported from and exported to CSV files through the blob registry. Plugins come from npm packages named by \"from\". No secrets: the API is public.",
   "aliases": {
     "@monitor": "@features/monitor"
   },
@@ -19,9 +19,22 @@
       "settings": {
         "port": 8080,
         "codecs": {
-          "application/json": "@http/codecs/json.codec.json"
+          "application/json": "@http/codecs/json.codec.json",
+          "text/csv": "@http/codecs/blob.codec.json"
         }
       }
+    },
+    {
+      "use": "@blob",
+      "from": "@wilanis/plugin-blob"
+    }
+  ],
+  "startup": [
+    {
+      "label": "Reach the entry store",
+      "description": "Read the entries once before the HTTP server opens, so a tree whose upstream is unreachable refuses to serve instead of answering every route with a fault. The port is bound per profile, so this checks whatever storage the profile chose.",
+      "run": "@monitor/domain/monitor.port.json#listAll",
+      "required": true
     }
   ],
   "profiles": {

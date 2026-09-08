@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "label": "Import entries",
+  "description": "Domain graph behind POST /monitor.csv: the file's drafts, each submitted the way a single POST is (so each is attributed by the domain), all at once; the answer is every recorded entry in file order.",
+  "in": "blob",
+  "out": {
+    "type": "@monitor/domain/Entry.shape.json[]",
+    "from": "recorded"
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "drafts",
+      "label": "Read the file",
+      "run": "@monitor/domain/monitor.port.json#parseDrafts",
+      "in": {
+        "file": "{{in}}"
+      }
+    },
+    {
+      "type": "@wilanis/node/map.schema.json",
+      "id": "recorded",
+      "label": "Submit each draft",
+      "description": "monitor.submit once per row; the row's url and method are the submission",
+      "run": "@monitor/domain/monitor.port.json#submit",
+      "over": "{{drafts}}",
+      "bind": {
+        "url": "url",
+        "method": "method"
+      }
+    }
+  ]
+}

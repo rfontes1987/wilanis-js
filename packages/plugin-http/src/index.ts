@@ -2,16 +2,19 @@
  * @wilanis/plugin-http, the @http plugin: outbound requests (http.port.json#request), http connections, http triggers, body codecs.
  * Which codec handles which content type is the project's explicit table in this plugin's settings.
  */
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer, type ServerResponse } from 'node:http';
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { fileURLToPath } from 'node:url';
 import type { TriggerDoc } from '@wilanis/core';
 import type { PluginModule, TriggerRuntime, Codecs } from '@wilanis/core';
 import type { Report } from '@wilanis/engine';
 import type { Type } from '@wilanis/core';
-import { readPath } from '@wilanis/engine';
+import { readPath, refusalOf } from '@wilanis/engine';
 import type { PluginCheckContext } from '@wilanis/core';
-import { form, json, multipart, text } from './codecs.js';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import type { BlobStore } from '@wilanis/core';
+import { blob, form, json, mediaType, multipart, text } from './codecs.js';
 import { throttleFor, type ThrottleSettings } from './throttle.js';
 
 const ROOT = '@http';
@@ -25,10 +28,9 @@ type Conn = { kind: string; settings: { baseUrl: string; headers?: Record<string
 
 function codecTable(env: Record<string, unknown>): Codecs {
   const table = ((env.plugins as Record<string, Record<string, unknown>>)?.[ROOT]?.codecs ?? {}) as Record<string, string>;
-  const impl: Record<string, typeof json> = { [P('codecs/json.codec.json')]: json, [P('codecs/text.codec.json')]: text, [P('codecs/form.codec.json')]: form, [P('codecs/multipart.codec.json')]: multipart };
-  return Object.fromEntries(Object.entries(table).map(([ct, path]) => [ct.toLowerCase(), impl[path]]).filter(([, c]) => c));
+  return Object.fromEntries(Object.entries(table).map(([ct, path]) => [ct.toLowerCase(), CODECS[path]]).filter(([, c]) => c));
 }
-const mediaType = (ct: string) => ct.split(';')[0].trim().toLowerCase();
+const CODECS: Codecs = { [P('codecs/json.codec.json')]: json, [P('codecs/text.codec.json')]: text, [P('codecs/form.codec.json')]: form, [P('codecs/multipart.codec.json')]: multipart, [P('codecs/blob.codec.json')]: blob };
 
 async function request({ in: i, ctx }: { in: Record<string, unknown>; ctx: { env: Record<string, unknown> } }) {
   const canon = (ctx.env.canon as ((r: string) => string) | undefined) ?? ((r: string) => r);
@@ -37,6 +39,7 @@ async function request({ in: i, ctx }: { in: Record<string, unknown>; ctx: { env
   if (!conn) throw new Error(`unknown connection '${i.connection}'`);
   if (conn.kind !== P('http.connection-kind.json')) throw new Error(`connection '${i.connection}' is ${conn.kind}, not ${P('http.connection-kind.json')}`);
   const codecs = codecTable(ctx.env);
+  const blobs = ctx.env.blobs as BlobStore;
   const path = String(i.path);
   const url = new URL(conn.settings.baseUrl.replace(/\/$/, '') + (path.startsWith('/') ? path : `/${path}`));
   const headers: Record<string, string> = { ...(conn.settings.headers ?? {}), ...((i.headers ?? {}) as Record<string, string>) };
@@ -44,8 +47,12 @@ async function request({ in: i, ctx }: { in: Record<string, unknown>; ctx: { env
   if (i.body !== undefined) {
     const consumes = String(i.consumes ?? 'application/json').toLowerCase();
     const codec = codecs[consumes]; if (!codec) throw new Error(`no codec for '${consumes}' in ${ROOT} settings.codecs`);
-    const enc = codec.encode(i.body, undefined);
-    init.body = new Uint8Array(enc.bytes); headers['content-type'] ??= enc.contentType;
+    const enc = await codec.encode(i.body, undefined, blobs);
+    // a blob body streams from the registry; a value's bytes go as they are
+    if (enc.body instanceof Readable) { init.body = Readable.toWeb(enc.body) as unknown as BodyInit; (init as RequestInit & { duplex: 'half' }).duplex = 'half'; }
+    else init.body = new Uint8Array(enc.body);
+    headers['content-type'] ??= enc.contentType;
+    if (enc.length !== undefined) headers['content-length'] ??= String(enc.length);
   }
   if (i.produces) headers.accept ??= String(i.produces);
   // the connection's throttle paces every request made against it; the timeout counts from the moment the request is let through
@@ -55,17 +62,18 @@ async function request({ in: i, ctx }: { in: Record<string, unknown>; ctx: { env
     init.signal = ac.signal;
     try { return await fetch(url, init); } finally { clearTimeout(timer); }
   });
-  const bytes = Buffer.from(await res.arrayBuffer());
   const outHeaders: Record<string, string> = {};
   res.headers.forEach((v, k) => { outHeaders[k] = v; });
   const out: Record<string, unknown> = { status: res.status, headers: outHeaders };
-  if (bytes.length) {
+  // the answer is a stream: a blob codec sends it into the registry as it arrives, the others read it whole
+  if (res.body && res.headers.get('content-length') !== '0') {
     const ct = String(i.produces ?? res.headers.get('content-type') ?? 'text/plain');
     const codec = codecs[mediaType(ct)] ?? codecs['text/plain'] ?? text;
     const resolve = ctx.env.resolveType as ((ref: string) => Type) | undefined;
     // returns describes a successful answer; an error status carries whatever body the API chose, and judging it would fail the node before a switch on status could decide
     const declared = res.ok && typeof i.returns === 'string' && resolve ? resolve(i.returns) : undefined;
-    out.body = codec.decode(bytes, ct, declared);
+    const decoded = await codec.decode(Readable.fromWeb(res.body as import('node:stream/web').ReadableStream), ct, declared, blobs);
+    if (decoded !== undefined) out.body = decoded;
   }
   return out;
 }
@@ -75,19 +83,13 @@ async function request({ in: i, ctx }: { in: Record<string, unknown>; ctx: { env
 interface HttpSettings {
   route: string; method: string; consumes?: string; produces?: string; body?: string;
   access?: { open?: boolean; roles?: string[] };
-  response?: { status?: { from?: string; map?: Record<string, number>; default?: number } };
+  response?: { status?: { from?: string; map?: Record<string, number>; default?: number }; refusals?: Record<string, number> };
 }
 
 function compileRoute(route: string): { re: RegExp; keys: string[] } {
   const keys: string[] = [];
   const re = new RegExp('^' + route.replace(/\{([A-Za-z0-9_]+)\}/g, (_, k: string) => { keys.push(k); return '([^/]+)'; }).replace(/\//g, '\\/') + '\\/?$');
   return { re, keys };
-}
-
-async function readBody(req: IncomingMessage): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const c of req) chunks.push(c as Buffer);
-  return Buffer.concat(chunks);
 }
 
 function statusFor(settings: HttpSettings, report: Report): number {
@@ -98,8 +100,21 @@ function statusFor(settings: HttpSettings, report: Report): number {
   return st.default ?? 200;
 }
 
+/**
+ * How a report is answered on the wire. An answer takes the status the response block chooses from it. A
+ * refusal -- the graph ending on purpose -- is answered as `{ reason, message }` with the status the trigger
+ * maps that reason to under response.refusals; T005 has already made sure every reachable reason is mapped,
+ * so a reason without one can only mean the tree changed under a running server, and is answered as a fault.
+ * A fault (a node that broke) and a blocked run are 500 with what went wrong.
+ */
 export function encode(trigger: TriggerDoc, report: Report): { status: number; body: unknown } {
   const settings = trigger.settings as unknown as HttpSettings;
+  const refused = refusalOf(report);
+  if (refused) {
+    const status = settings.response?.refusals?.[refused.reason];
+    if (status !== undefined) return { status, body: refused };
+    return { status: 500, body: { error: `refused with reason '${refused.reason}', which response.refusals does not map: ${refused.message}` } };
+  }
   if (report.status === 'failed') {
     const failed = Object.entries(report.nodes).find(([, n]) => n.status === 'failed');
     return { status: 500, body: { error: failed ? `${failed[0]}: ${failed[1].error}` : 'failed' } };
@@ -110,7 +125,7 @@ export function encode(trigger: TriggerDoc, report: Report): { status: number; b
 
 const runtime: TriggerRuntime = {
   encode: (t, r) => encode(t, r),
-  async start(triggers, fire, { settings, log, types, inputFor, codecs }) {
+  async start(triggers, fire, { settings, log, types, inputFor, codecs, blobs }) {
     const port = Number(settings.port ?? 8080);
     const jwt = (settings.jwt ?? {}) as { jwksUrl?: string; secret?: string; issuer?: string; audience?: string; rolesClaim?: string };
     const jwks = jwt.jwksUrl ? createRemoteJWKSet(new URL(jwt.jwksUrl)) : undefined;
@@ -122,15 +137,19 @@ const runtime: TriggerRuntime = {
       if (key) return (await jwtVerify(token, key, opts)).payload;
       throw new Error(`no jwt settings: set ${ROOT} settings.jwt.secret or jwksUrl`);
     };
-    const send = (res: ServerResponse, status: number, body: unknown, produces = 'application/json') => {
+    // a blob answer is piped from the registry to the socket; a value is encoded and sent whole
+    const send = async (res: ServerResponse, status: number, body: unknown, produces = 'application/json', scope: BlobStore = blobs) => {
       const codec = codecs[produces.toLowerCase()] ?? json;
-      const enc = body === undefined ? { bytes: Buffer.alloc(0), contentType: produces } : codec.encode(body, undefined);
-      res.writeHead(status, { 'content-type': enc.contentType, 'content-length': enc.bytes.length });
-      res.end(enc.bytes);
+      const enc = body === undefined ? { body: Buffer.alloc(0), contentType: produces, length: 0 } : await codec.encode(body, undefined, scope);
+      const length = enc.length ?? (enc.body instanceof Readable ? undefined : enc.body.length);
+      res.writeHead(status, { 'content-type': enc.contentType, ...(length !== undefined ? { 'content-length': length } : {}), ...(enc.headers ?? {}) });
+      if (enc.body instanceof Readable) await pipeline(enc.body, res); else res.end(enc.body);
     };
 
     const server = createServer(async (req, res) => {
       const started = Date.now();
+      // one blob scope per request: what the body's codec and the graph store through it is released once answered
+      const scope = blobs.scope();
       try {
         const url = new URL(req.url ?? '/', 'http://local');
         const match = routes.find(r => r.s.method === req.method && r.re.test(url.pathname));
@@ -154,30 +173,35 @@ const runtime: TriggerRuntime = {
           if (s.access?.roles?.length && !roles.some(r => s.access!.roles!.includes(r))) return send(res, 403, { error: `requires one of ${s.access.roles.join(', ')}` }, produces);
         }
 
-        const bytes = await readBody(req);
         let body: unknown;
-        if (s.body && !bytes.length) return send(res, 400, { error: 'a body is required' }, produces);
-        if (bytes.length) {
+        const hasBody = Number(headers['content-length'] ?? 0) > 0 || (headers['transfer-encoding'] ?? '').includes('chunked');
+        if (s.body && !hasBody) return send(res, 400, { error: 'a body is required' }, produces);
+        if (hasBody) {
+          // a route that declares what it consumes takes nothing else; without a declaration the sender's content type decides
+          const sent = headers['content-type'] ? mediaType(headers['content-type']) : undefined;
+          if (s.consumes && sent && sent !== mediaType(s.consumes)) return send(res, 415, { error: `this route consumes ${s.consumes}, not ${sent}` }, produces);
           const ct = s.consumes ?? headers['content-type'] ?? 'application/json';
           const codec = codecs[mediaType(ct)];
           if (!codec) return send(res, 415, { error: `no codec for '${mediaType(ct)}'` }, produces);
           // settings.body names the body's edge shape; without it the body IS the input. Either way the
           // declared shape judges what arrives, so a closed shape still refuses an undeclared field.
           const declared = s.body === t.in || !s.body ? types(t).in : undefined;
-          try { body = codec.decode(bytes, headers['content-type'] ?? ct, declared); }
+          // the request stream itself goes to the codec: a blob body is written to the registry as it arrives
+          try { body = await codec.decode(req, headers['content-type'] ?? ct, declared, scope); }
           catch (e) { return send(res, 400, { error: (e as Error).message }, produces); }
         }
         const request: Record<string, unknown> = { method: req.method, path: url.pathname, headers, query, params, ...(body !== undefined ? { body } : {}), ...(principal ? { principal } : {}) };
         const built = inputFor(t, request);
         if ('error' in built) return send(res, 400, { error: built.error }, produces);
-        const report = await fire({ trigger: t, input: built.input, request });
+        const report = await fire({ trigger: t, input: built.input, request, blobs: scope });
         const { status, body: answer } = encode(t, report);
         log(`${req.method} ${url.pathname} → ${status} (${Date.now() - started}ms, ${t.fire.run} ${report.status})`);
-        return send(res, status, answer, produces);
+        return await send(res, status, answer, produces, scope);
       } catch (e) {
         log(`error: ${(e as Error).message}`);
-        return send(res, 500, { error: (e as Error).message });
-      }
+        if (!res.headersSent) return send(res, 500, { error: (e as Error).message });
+        res.destroy();
+      } finally { await scope.release(); }
     });
     await new Promise<void>((ok, fail) => { server.once('error', fail); server.listen(port, () => { server.off('error', fail); ok(); }); });
     log(`http: listening on :${port} -- ${routes.map(r => `${r.s.method} ${r.s.route} → ${r.t.fire.run}`).join(', ')}`);
@@ -209,7 +233,7 @@ export const http: PluginModule = {
   docs: DOCS,
   handlers: { [`${P('http.port.json')}#request`]: request as unknown as PluginModule['handlers'][string] },
   triggers: { [P('http.trigger-kind.json')]: runtime },
-  codecs: { [P('codecs/json.codec.json')]: json, [P('codecs/text.codec.json')]: text, [P('codecs/form.codec.json')]: form, [P('codecs/multipart.codec.json')]: multipart },
+  codecs: CODECS,
   check,
 };
 

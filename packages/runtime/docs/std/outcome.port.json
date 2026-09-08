@@ -1,11 +1,16 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
   "label": "Outcomes",
-  "description": "Outcomes dataflow alone cannot state. `refuse` ends the graph on purpose: the branch a decision routed here is a declared refusal, not a bug.",
+  "description": "Outcomes dataflow alone cannot state. `refuse` ends the graph on purpose: the branch a decision routed here is a declared refusal, not a bug. It names its outcome with a `reason`, one word the trigger kind maps to an answer; the graph never says how the trigger answers.",
   "operations": {
     "refuse": {
-      "description": "Refuse: the graph fails on purpose with message, {{templates}} in it reading what any value may. Answers nothing, but declares a type so it can stand as an out.from candidate opposite the node that answers. A rehearsal reports it as refused on purpose.",
+      "description": "Refuse: the graph fails on purpose. `reason` is one word for the outcome (missing, conflict, upstream), written as a literal so the checker can see every reason a trigger may reach and require the kind to map each (T005); `message`, {{templates}} in it reading what any value may, is what the caller is told. Answers nothing, but declares a type so it can stand as an out.from candidate opposite the node that answers. A rehearsal reports it as refused on purpose.",
       "accepts": {
+        "reason": {
+          "type": "string",
+          "static": true,
+          "description": "one word for the outcome; the trigger kind maps it to how it answers (an http route: to a status)"
+        },
         "message": {
           "type": "string",
           "description": "what is said to the caller"
@@ -17,7 +22,8 @@
         }
       },
       "returns": "$T",
-      "pure": true
+      "pure": true,
+      "refuses": true
     }
   }
 }

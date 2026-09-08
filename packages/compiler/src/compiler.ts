@@ -6,7 +6,7 @@
  *
  * Only run this on a tree `checkTree` accepted; the compiler assumes every rule held.
  */
-import { Kernel, readPath } from '@wilanis/engine';
+import { Kernel, Refusal, readPath, refusalOf } from '@wilanis/engine';
 import type { Handler, Handlers, KernelSpec, KNode, KSource, Redact, Report, RunOptions } from '@wilanis/engine';
 import { isMap, isRun, isSwitch, type BindingDoc, type GraphDoc, type Loaded, type Operation, type Values } from '@wilanis/core';
 import type { PluginModule } from '@wilanis/core';
@@ -100,6 +100,10 @@ export class Compiler {
       });
       ctx.attach(report);
       if (report.status === 'failed') {
+        // a refusal is the nested graph's declared outcome: it passes up as it is, reason and message, so the
+        // trigger can answer it; a fault is named by the graph and node it broke in
+        const refused = refusalOf(report);
+        if (refused) throw new Refusal(refused.reason, refused.message);
         const failed = Object.entries(report.nodes).find(([, n]) => n.status === 'failed');
         throw new Error(`${spec.name}: ${failed ? `${failed[0]}: ${failed[1].error}` : 'failed'}`);
       }

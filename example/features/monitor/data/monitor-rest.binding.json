@@ -37,6 +37,20 @@
     "digest": {
       "description": "The business graph that composes the digest.",
       "graph": "@monitor/domain/digest.graph.json"
+    },
+    "parseDrafts": {
+      "graph": "@monitor/data/parse-drafts.graph.json"
+    },
+    "toCsv": {
+      "graph": "@monitor/data/write-csv.graph.json"
+    },
+    "import": {
+      "description": "The business graph that reads the file and submits each row.",
+      "graph": "@monitor/domain/import-entries.graph.json"
+    },
+    "export": {
+      "description": "The business graph that lists and writes the file.",
+      "graph": "@monitor/domain/export-entries.graph.json"
     }
   }
 }

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "label": "Export entries",
+  "description": "Domain graph behind GET /monitor.csv: every entry, written as one CSV file.",
+  "out": {
+    "type": "blob",
+    "from": "file"
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "all",
+      "label": "Every entry",
+      "run": "@monitor/domain/monitor.port.json#listAll"
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "file",
+      "label": "As a file",
+      "run": "@monitor/domain/monitor.port.json#toCsv",
+      "in": {
+        "entries": "{{all}}"
+      }
+    }
+  ]
+}

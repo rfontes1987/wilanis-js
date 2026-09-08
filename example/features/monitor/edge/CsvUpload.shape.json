@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "label": "CSV upload",
+  "layer": "edge",
+  "description": "What POST /monitor.csv hands the domain: the uploaded file, as its handle in the blob registry.",
+  "fields": {
+    "file": {
+      "type": "blob",
+      "description": "the CSV file"
+    }
+  }
+}

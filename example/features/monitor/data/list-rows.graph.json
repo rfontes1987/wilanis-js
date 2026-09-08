@@ -55,6 +55,7 @@
       "label": "Unexpected answer",
       "run": "@std/outcome.port.json#refuse",
       "in": {
+        "reason": "upstream",
         "message": "the monitor API answered {{asked.status}}",
         "type": "@monitor/domain/Entry.shape.json[]"
       }

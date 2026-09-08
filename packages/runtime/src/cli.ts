@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 /** The wilanis command line. */
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { createWriteStream, existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import type { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import type { BlobHandle } from '@wilanis/core';
 import { KINDS, type Kind, type LoadResult } from '@wilanis/core';
 import { checkTree } from '@wilanis/compiler';
 import { loadProject } from './project.js';
 import { runTrigger, serve } from './serve.js';
-import { describe, fuzz, ls, map, regress, rehearse, scaffold, summarize } from './tools.js';
+import { describe, fuzz, init, ls, map, regress, rehearse, scaffold, summarize } from './tools.js';
 
 const USAGE = `wilanis -- declarative dataflow, judged by a compiler, run by a stateless engine
 
@@ -15,8 +17,10 @@ const USAGE = `wilanis -- declarative dataflow, judged by a compiler, run by a s
   wilanis rehearse [root] [--seed n] [-v]          run every trigger, and every branch of every switch
   wilanis fuzz     [root] [--runs n]               write one scenario per trigger per seed to scenarios/
   wilanis regress  [root]                          replay every scenario and diff node by node
-  wilanis serve    [root] [--profile p]            run every plugin's postLoad, start every trigger kind
-  wilanis run      <trigger> [root] [--in json] [--flag=v ...]   fire one cli trigger
+  wilanis serve    [root] [--profile p]            run postLoad and the project's startup steps, then
+                   every trigger kind
+  wilanis run      <trigger> [root] [--in json] [--file path] [--out path] [--flag=v ...]
+                   fire one cli trigger; --file hands a file as request.file, --out receives a blob answer
   wilanis ls       [root] [kind]                   every document, or those of one kind
   wilanis describe <path> [root]                   a document, with its contract laid out
   wilanis map      [root]                          trigger → graph → port → binding → graph
@@ -81,9 +85,15 @@ async function main() {
     case 'run': {
       const l = await check(rootArg(1));
       const { flags: f2 } = parse(rest.slice(1));
-      const { report, answer } = await runTrigger(l, positional[0], f2, positional.slice(2), { profile: flags.profile, seed: flags.seed ? Number(flags.seed) : undefined });
+      let delivered = false;
+      const deliver = async (body: Readable, h: BlobHandle) => {
+        delivered = true;
+        if (f2.out) { await pipeline(body, createWriteStream(f2.out)); console.error(`wrote ${f2.out} (${h.contentType}, ${h.size} bytes)`); }
+        else await pipeline(body, process.stdout, { end: false });
+      };
+      const { report, answer } = await runTrigger(l, positional[0], f2, positional.slice(2), { profile: flags.profile, seed: flags.seed ? Number(flags.seed) : undefined, deliver });
       if (flags.verbose) console.error(summarize(report));
-      console.log(typeof answer === 'string' ? answer : JSON.stringify(answer ?? report, null, 2));
+      if (!delivered) console.log(typeof answer === 'string' ? answer : JSON.stringify(answer ?? report, null, 2));
       if (report.status !== 'done') process.exit(1);
       break;
     }
@@ -101,18 +111,7 @@ async function main() {
       console.log(scaffold(resolve(rootArg(2)), kind, target, flags).map(f => `wrote ${f}`).join('\n'));
       break;
     }
-    case 'init': {
-      const root = resolve(rootArg(0));
-      const tpl = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates');
-      for (const f of readdirSync(tpl)) {
-        const from = join(tpl, f), to = join(root, f.replace(/^dot-/, '.'));
-        mkdirSync(dirname(to), { recursive: true });
-        if (existsSync(to)) { console.log(`kept ${to}`); continue; }
-        if (f === 'dot-claude') { mkdirSync(to, { recursive: true }); for (const g of readdirSync(from)) { writeFileSync(join(to, g), readFileSync(join(from, g))); console.log(`wrote ${join(to, g)}`); } continue; }
-        writeFileSync(to, readFileSync(from)); console.log(`wrote ${to}`);
-      }
-      break;
-    }
+    case 'init': console.log(init(resolve(rootArg(0))).join('\n')); break;
     default: console.log(USAGE); process.exit(cmd ? 2 : 0);
   }
 }

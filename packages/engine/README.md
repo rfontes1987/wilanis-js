@@ -3,7 +3,9 @@
 The wilanis kernel. Stateless and clockless: it takes a `KernelSpec` (nodes, sources, handlers by name),
 pre-supplied values, and runs every node the instant its sources have settled, concurrently. It routes
 through switches, cancels the branches not taken, and answers a `Report` at quiescence: `done` with an
-output, `failed` with the node that threw, or `blocked` with the root paths it still needs.
+output, `failed` with the node that threw, or `blocked` with the root paths it still needs. A handler that
+throws a `Refusal` ends the run on purpose: the node's report carries its `reason`, and `refusalOf(report)`
+answers it, so an embedder can tell a declared outcome from a fault.
 
 It knows nothing about files, references, shapes, ports or triggers. `@wilanis/compiler` lowers a graph
 document to a spec; `@wilanis/runtime` embeds it. Depends on nothing.

@@ -168,6 +168,31 @@ describe('the view model of the example', () => {
     expect(g.callers).toContainEqual({ path: '@features/monitor/edge/get-entry.trigger.json', label: 'GET /monitor/{id}', kind: 'trigger', at: '/fire/run', via: '@features/monitor/domain/monitor.port.json#get' });
   });
 
+  it('says how a trigger answers each refusal it can reach, and which node refuses with it', async () => {
+    const v = await view('@features/monitor/edge/get-entry.trigger.json');
+    expect(v.answers).toEqual([
+      { reason: 'missing', answer: 404, from: [{ graph: GET_ROW, graphLabel: 'Get a row', node: 'missing', nodeLabel: 'No such entry' }] },
+      { reason: 'upstream', answer: 502, from: [{ graph: GET_ROW, graphLabel: 'Get a row', node: 'failed', nodeLabel: 'Unexpected answer' }] },
+    ]);
+    // reached through a domain graph and a map: the batch delete refuses where delete-row does
+    const batch = await view('@features/monitor/edge/delete-entries.trigger.json');
+    expect(batch.answers?.find(a => a.reason === 'missing')).toMatchObject({ answer: 404, from: [{ graph: '@features/monitor/data/delete-row.graph.json', node: 'missing' }] });
+    // a kind that maps no refusals has nothing to say here
+    expect((await view('@features/monitor/edge/digest.trigger.json')).answers).toBeUndefined();
+  });
+  it('tells a refusing node which triggers reach it and how each answers its reason', async () => {
+    const missing = (await view(GET_ROW)).graph!.nodes.find(n => n.id === 'missing')!;
+    expect(missing.target?.refuses).toBe(true);
+    expect(missing.answeredBy).toEqual([{ trigger: '@features/monitor/edge/get-entry.trigger.json', triggerLabel: 'GET /monitor/{id}', maps: true, answer: 404 }]);
+    // list-rows is reached by the http listing, which maps the reason, and by the cli digest, whose kind answers every refusal alike
+    const failed = (await view('@features/monitor/data/list-rows.graph.json')).graph!.nodes.find(n => n.id === 'failed')!;
+    expect(failed.answeredBy).toEqual(expect.arrayContaining([
+      { trigger: '@features/monitor/edge/list-entries.trigger.json', triggerLabel: 'GET /monitor', maps: true, answer: 502 },
+      { trigger: '@features/monitor/edge/digest.trigger.json', triggerLabel: 'digest', maps: false },
+    ]));
+    // a node that answers has no such list
+    expect((await view(GET_ROW)).graph!.nodes.find(n => n.id === 'row')!.answeredBy).toBeUndefined();
+  });
   it('composes two nodes into one output: the digest', async () => {
     const v = await view('@features/monitor/domain/digest.graph.json');
     expect(edge(v, 'count', '', 'digest', 'value')).toMatchObject({ kind: 'data' });
@@ -185,6 +210,24 @@ describe('the view model of the example', () => {
     expect(lines.inputs[0].name).toBe('over');
     expect(lines.outputs).toEqual([{ name: '', type: 'string[]' }]);
     expect(edge(v, 'all', '', 'lines', 'over')).toMatchObject({ kind: 'data' });
+  });
+
+  it('a map with bind shows each bound input as read from the element, never as missing; an input typed by a bound variable shows the bound type', async () => {
+    const recorded = (await view('@features/monitor/domain/import-entries.graph.json')).graph!.nodes.find(n => n.id === 'recorded')!;
+    expect(recorded.inputs.map(p => [p.name, p.bound, p.missing])).toEqual([['over', undefined, undefined], ['url', 'url', undefined], ['method', 'method', undefined]]);
+    const remove = (await view('@features/monitor/domain/remove-entries.graph.json')).graph!.nodes.find(n => n.id === 'removed')!;
+    expect(remove.inputs.find(p => p.name === 'id')).toMatchObject({ bound: '' });
+    const file = (await view('@features/monitor/data/write-csv.graph.json')).graph!.nodes.find(n => n.id === 'file')!;
+    expect(file.inputs.find(p => p.name === 'rows')?.type).toBe('@features/monitor/domain/Entry.shape.json[]');
+  });
+
+  it('draws a graph that takes and answers a file: the blob type on the in and out nodes', async () => {
+    const v = await view('@features/monitor/data/parse-drafts.graph.json');
+    expect(v.graph!.nodes.find(n => n.id === 'in')).toMatchObject({ type: 'blob', outputs: [{ name: '', type: 'blob' }] });
+    expect(edge(v, 'in', '', 'rows', 'file')).toMatchObject({ kind: 'data' });
+    const x = await view('@features/monitor/data/write-csv.graph.json');
+    expect(x.graph!.nodes.find(n => n.id === 'out')).toMatchObject({ type: 'blob' });
+    expect((await view('@features/monitor/edge/export-entries.trigger.json')).fires).toMatchObject({ opName: 'export', implementation: '@features/monitor/domain/export-entries.graph.json' });
   });
 
   it('answers references both ways for a document that is not a graph', async () => {

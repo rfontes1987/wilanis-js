@@ -5,11 +5,12 @@
  */
 import { Compiler, buildEnv, runGraph, type CompileOptions, type Compiled } from '@wilanis/compiler';
 import type { Report } from '@wilanis/engine';
-import type { TriggerDoc } from '@wilanis/core';
+import type { StartupStep, TriggerDoc } from '@wilanis/core';
 import type { PluginModule, Codecs } from '@wilanis/core';
 import type { Scope } from '@wilanis/core';
-import { conforms, type Type } from '@wilanis/core';
+import { conforms, type BlobStore, type Type } from '@wilanis/core';
 import { TEMPLATE, WHOLE_TEMPLATE, splitPath } from '@wilanis/core';
+import { FileBlobStore } from './blobs.js';
 import { readPath } from '@wilanis/engine';
 
 /** Fill a templated literal from roots (request, ...). Whole templates take the value; embedded ones interpolate. */
@@ -29,18 +30,25 @@ export function fillTemplates(value: unknown, roots: Record<string, unknown>): u
   return value;
 }
 
-export interface FireOptions { stubs?: Record<string, unknown>; signal?: AbortSignal }
+export interface FireOptions { stubs?: Record<string, unknown>; signal?: AbortSignal; /** The blob scope of this run; handlers see it as env.blobs. Absent: the tree's store itself. */ blobs?: BlobStore }
 
 export class Embedder {
   private compiler: Compiler;
   private compiled = new Map<string, Compiled>();
   readonly env: Record<string, unknown>;
   readonly missingSecrets: string[];
+  /** The tree's blob registry: where every blob's bytes live. Handlers reach it as env.blobs. */
+  readonly blobs: BlobStore;
+  /** Declared secret key -> its value in the environment, for the one place a document reads one outside a connection: a startup step's in. */
+  readonly secrets: Record<string, string>;
 
-  constructor(readonly scope: Scope, readonly plugins: PluginModule[], opts: CompileOptions & { env?: NodeJS.ProcessEnv } = {}) {
+  constructor(readonly scope: Scope, readonly plugins: PluginModule[], opts: CompileOptions & { env?: NodeJS.ProcessEnv; blobs?: BlobStore; root?: string } = {}) {
     this.compiler = new Compiler(scope, plugins, opts);
-    const built = buildEnv(scope, opts.env ?? process.env);
-    this.env = built.env;
+    const processEnv = opts.env ?? process.env;
+    const built = buildEnv(scope, processEnv);
+    this.secrets = Object.fromEntries(Object.entries(scope.project?.secrets ?? {}).map(([k, v]) => [k, processEnv[v] ?? '']));
+    this.blobs = opts.blobs ?? new FileBlobStore(opts.root ?? process.cwd(), scope.project?.blobs?.dir);
+    this.env = { ...built.env, blobs: this.blobs };
     this.missingSecrets = built.missing;
   }
 
@@ -57,6 +65,17 @@ export class Embedder {
     let c = this.compiled.get(key);
     if (!c) { c = this.compiler.operation(opRef); this.compiled.set(key, c); }
     return c;
+  }
+
+  /**
+   * Run one of the project's startup steps: the domain port operation it names, with its `in` written as
+   * literals and {{secrets.*}}. Nothing has been received, so the run is given no request -- the checker
+   * has already refused any step that reaches a read of one.
+   */
+  async startup(step: StartupStep, opts: FireOptions = {}): Promise<Report> {
+    const compiled = this.operation(step.run);
+    const input = fillTemplates(step.in ?? {}, { secrets: this.secrets }) as Record<string, unknown>;
+    return runGraph(compiled, { initial: { in: input }, signal: opts.signal, env: opts.blobs ? { ...this.env, blobs: opts.blobs } : this.env });
   }
 
   types(trigger: TriggerDoc): { in?: Type; out?: Type } {
@@ -93,7 +112,7 @@ export class Embedder {
     const compiled = this.operation(trigger.fire.run);
     const initial: Record<string, unknown> = { request };
     if (input !== undefined) initial.in = input;
-    const report = await runGraph(compiled, { initial, stubs: opts.stubs, signal: opts.signal, env: this.env });
+    const report = await runGraph(compiled, { initial, stubs: opts.stubs, signal: opts.signal, env: opts.blobs ? { ...this.env, blobs: opts.blobs } : this.env });
     if (report.status === 'done' && trigger.out) {
       const t = this.types(trigger).out!;
       const output = prune(report.output, t); // a closed out shape keeps only what it declares

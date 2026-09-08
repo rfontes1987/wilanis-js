@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger-kind.schema.json",
   "label": "HTTP route",
-  "description": "A route. The body is decoded by the consumes codec into request.body (typed by settings.body); query, route placeholders (request.params, each one required), headers and the principal are in the context too. The trigger's input mapping picks what the graph gets; access is checked before the graph runs; the answer is encoded by the produces codec with the status the response block chooses.",
+  "description": "A route. The body is decoded by the consumes codec into request.body (typed by settings.body); query, route placeholders (request.params, each one required), headers and the principal are in the context too. The trigger's input mapping picks what the graph gets; access is checked before the graph runs; the answer is encoded by the produces codec with the status the response block chooses. A refusal (a graph ending on purpose with a reason) is answered as { reason, message } with the status response.refusals maps that reason to; every reason the route can reach must be mapped (T005). A fault is a 500.",
   "settings": {
     "fields": {
       "route": {
@@ -79,11 +79,21 @@
                   }
                 }
               },
-              "required": false
+              "required": false,
+              "description": "the status of an answer: from a path into it through map, else default (200)"
+            },
+            "refusals": {
+              "type": {
+                "fields": {},
+                "open": "number"
+              },
+              "required": false,
+              "description": "reason -> status: how each refusal the route can reach is answered, e.g. { \"missing\": 404, \"upstream\": 502 }. The body is { reason, message }."
             }
           }
         },
-        "required": false
+        "required": false,
+        "description": "how the route answers: the status of an answer, and one status per refusal reason"
       }
     }
   },
@@ -140,5 +150,6 @@
         "required": false
       }
     }
-  }
+  },
+  "refusals": "response.refusals"
 }

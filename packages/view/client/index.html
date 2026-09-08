@@ -150,7 +150,9 @@
 
   // ---- routing --------------------------------------------------------------------------------------
   const go = (path) => { location.hash = '#' + path; };
-  const currentPath = () => decodeURIComponent(location.hash.slice(1));
+  // #<path> opens a document; #<path>?node=<id> opens a graph with that node selected
+  const currentPath = () => decodeURIComponent(location.hash.slice(1).split('?')[0]);
+  const currentNode = () => { const q = location.hash.split('?')[1]; return q ? new URLSearchParams(q).get('node') : null; };
   window.addEventListener('hashchange', () => { void route(); });
   $('back').onclick = () => history.back();
   $('fwd').onclick = () => history.forward();
@@ -158,7 +160,7 @@
 
   async function route() {
     const path = currentPath();
-    state.selected = null;
+    state.selected = currentNode();
     if (!path) {
       const first = state.index && (state.index.docs.find(d => d.kind === 'trigger') || state.index.docs[0]);
       if (first) { location.replace('#' + first.path); return; }
@@ -186,6 +188,8 @@
   // ---- dom helpers ---------------------------------------------------------------------------------
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function link(path, text, cls) { const a = el('a', cls || null, text == null ? labelFor(path) : text); a.href = '#' + canon(path); a.title = canon(path); return a; }
+  /** A link that opens a graph with one node selected. */
+  function nodeLink(graph, node, text, cls) { const a = link(graph, text, cls); a.href += '?node=' + encodeURIComponent(node); a.title = canon(graph) + ' › ' + node; return a; }
   const badge = (kind, text) => el('span', 'badge kind-' + kind, text == null ? (KIND_ONE[kind] || kind) : text);
   /** A badge that opens the schema judging what it names: a document kind's, or a node type's. */
   const schemaBadge = (kind, text, rel) => { const a = el('a', 'badge kind-' + kind, text == null ? (KIND_ONE[kind] || kind) : text); a.href = '#@wilanis/' + rel; a.title = 'the schema: @wilanis/' + rel; return a; };
@@ -363,6 +367,7 @@
         page.appendChild(cards);
         if (d.aliases && Object.keys(d.aliases).length) { page.appendChild(el('h2', null, 'Aliases')); page.appendChild(valuesTable(d.aliases, ['alias', 'stands for'])); }
         if (d.secrets && Object.keys(d.secrets).length) { page.appendChild(el('h2', null, 'Secrets')); page.appendChild(valuesTable(d.secrets, ['secret', 'environment variable'])); }
+        if (d.startup && d.startup.length) { page.appendChild(el('h2', null, 'Startup')); page.appendChild(el('p', null, 'What runs once when the tree is served, in this order, before any trigger listens. Each step fires a domain port operation, so the profile decides how it is met.')); for (const [i, s] of d.startup.entries()) { const c = el('div', 'card'); c.appendChild(el('div', 'k', (i + 1) + '. ' + (s.required === false ? 'optional' : 'required'))); const vv = el('div', 'v'); vv.appendChild(link(s.run.split('#')[0], showOp(s.run))); if (s.label) vv.appendChild(el('small', null, s.label)); c.appendChild(vv); if (s.description) c.appendChild(el('p', null, s.description)); if (s.in && Object.keys(s.in).length) c.appendChild(valuesTable(s.in)); page.appendChild(c); } }
         if (d.profiles) { page.appendChild(el('h2', null, 'Profiles')); for (const [name, p] of Object.entries(d.profiles)) { const h = el('h3', null, name); page.appendChild(h); if (p.description) page.appendChild(el('p', null, p.description)); const t = el('table'); const hd = el('tr'); hd.appendChild(el('th', null, 'port')); hd.appendChild(el('th', null, 'bound to')); t.appendChild(hd); for (const [port, b] of Object.entries(p.bindings)) { const tr = el('tr'); tr.appendChild(el('td')).appendChild(link(port)); tr.appendChild(el('td')).appendChild(link(b)); t.appendChild(tr); } page.appendChild(t); } }
         break;
       }
@@ -388,6 +393,22 @@
         const withArrows = el('div', 'chain'); [...chain.children].forEach((c, i) => { if (i) withArrows.appendChild(arrow()); withArrows.appendChild(c); });
         page.appendChild(withArrows);
         page.appendChild(el('h2', null, 'Settings the kind judges')); page.appendChild(valuesTable(d.settings));
+        if (v.answers) {
+          page.appendChild(el('h2', null, 'Refusals it answers'));
+          if (!v.answers.length) page.appendChild(el('p', null, 'Nothing this trigger fires refuses on purpose.'));
+          else {
+            page.appendChild(el('p', null, 'A graph ends on purpose with a reason; this trigger says how each reason is answered. Every reason it can reach must be mapped, and nothing mapped may be out of reach.'));
+            const t = el('table'); const hd = el('tr'); for (const h of ['reason', 'answered as', 'refused by']) hd.appendChild(el('th', null, h)); t.appendChild(hd);
+            for (const a of v.answers) {
+              const tr = el('tr'); tr.appendChild(el('td', 'name', a.reason));
+              tr.appendChild(el('td', a.answer === undefined ? 'miss' : 'val', a.answer === undefined ? 'not mapped' : JSON.stringify(a.answer)));
+              const from = el('td'); if (!a.from.length) from.appendChild(el('span', 'miss', 'nothing this trigger reaches'));
+              a.from.forEach((f, i) => { if (i) from.appendChild(frag(', ')); from.appendChild(nodeLink(f.graph, f.node, f.graphLabel + SEP + f.nodeLabel)); });
+              tr.appendChild(from); t.appendChild(tr);
+            }
+            page.appendChild(t);
+          }
+        }
         page.appendChild(el('h2', null, 'What the operation is given'));
         if (d.fire && d.fire.in) { page.appendChild(el('p', null, 'Each input, read from what the kind hands as request.*:')); page.appendChild(valuesTable(d.fire.in, ['input', 'read from'])); }
         else page.appendChild(el('p', null, d.in ? 'The decoded body, judged as the input type, field for field.' : 'Nothing: the operation takes no input.'));
@@ -410,7 +431,7 @@
         if (impls.length) page.appendChild(chips(impls.map(i => i.path)));
         page.appendChild(el('h2', null, 'Operations'));
         for (const [name, op] of Object.entries(d.operations)) {
-          const h = el('h3', null, readable(name)); h.appendChild(el('code', null, '#' + name)); if (op.pure) h.appendChild(el('span', 'badge ok', 'pure')); else if (v.native) h.appendChild(el('span', 'badge warn', 'effect')); page.appendChild(h);
+          const h = el('h3', null, readable(name)); h.appendChild(el('code', null, '#' + name)); if (op.pure) h.appendChild(el('span', 'badge ok', 'pure')); else if (v.native) h.appendChild(el('span', 'badge warn', 'effect')); if (op.refuses) h.appendChild(el('span', 'badge warn', 'refuses on purpose')); page.appendChild(h);
           page.appendChild(el('p', null, op.description));
           if (op.accepts && Object.keys(op.accepts).length) page.appendChild(fieldsTable(op.accepts)); else page.appendChild(el('p', null, 'Takes nothing.'));
           const r = el('p'); r.appendChild(frag('Answers ')); r.appendChild(op.returns ? typeEl(op.returns) : frag('nothing')); page.appendChild(r);
@@ -460,6 +481,7 @@
       case 'trigger-kind': {
         page.appendChild(el('h2', null, 'Settings a trigger of this kind writes')); page.appendChild(fieldsTable(d.settings.fields, { open: d.settings.open }));
         page.appendChild(el('h2', null, 'Context it hands: what request.* holds')); page.appendChild(fieldsTable(d.context.fields, { open: d.context.open }));
+        if (d.refusals) { page.appendChild(el('h2', null, 'Refusals')); const p = el('p'); p.appendChild(frag('A trigger of this kind maps every refusal reason it can reach under ')); p.appendChild(el('code', null, 'settings.' + d.refusals)); p.appendChild(frag(' to how it answers; the checker requires each reason mapped (T005) and each mapping reachable (T006).')); page.appendChild(p); }
         break;
       }
       case 'connection-kind': {
@@ -544,7 +566,16 @@
     if (n.target) {
       const t = n.target;
       box.appendChild(el('h4', null, 'runs'));
-      const p = el('p'); p.appendChild(link(t.port, t.portLabel + SEP + t.opName)); p.appendChild(document.createTextNode(t.native ? (t.effect ? ' (a native effect)' : ' (pure, native)') : ' (a domain port)')); box.appendChild(p);
+      const p = el('p'); p.appendChild(link(t.port, t.portLabel + SEP + t.opName)); p.appendChild(document.createTextNode(t.refuses ? ' (ends the graph on purpose; the reason is what the trigger maps)' : t.native ? (t.effect ? ' (a native effect)' : ' (pure, native)') : ' (a domain port)')); box.appendChild(p);
+      if (n.answeredBy) {
+        box.appendChild(el('h4', null, `answered by (${n.answeredBy.length})`));
+        if (!n.answeredBy.length) box.appendChild(el('p', null, 'no trigger reaches this node'));
+        for (const a of n.answeredBy) {
+          const d = el('div', 'ref'); d.appendChild(link(a.trigger, a.triggerLabel, 'primary'));
+          d.appendChild(el('span', 'sub', !a.maps ? 'answers every refusal the same way' : a.answer === undefined ? 'does not map this reason' : 'as ' + JSON.stringify(a.answer)));
+          box.appendChild(d);
+        }
+      }
       if (!t.native) {
         box.appendChild(el('h4', null, 'implemented by'));
         if (!t.bindings || !t.bindings.length) box.appendChild(el('p', null, 'no binding meets this port'));
@@ -564,6 +595,7 @@
         const cell = el('span');
         if (p.literal != null) { if (p.ref) cell.appendChild(link(p.ref, showLit(p), 'val')); else cell.appendChild(el('span', 'val', showLit(p))); }
         else if (p.text != null) cell.appendChild(el('span', 'val', p.text));
+        else if (p.bound != null) cell.appendChild(el('span', 'from', FROM + 'each item' + (p.bound ? '.' + p.bound : '')));
         else if (p.missing) cell.appendChild(el('span', 'miss', 'not given'));
         else { const from = incoming(v.graph, n.id, p.name); if (from.length) { const f = el('span', 'from'); f.appendChild(frag(FROM)); from.forEach((x, i) => { if (i) f.appendChild(frag(', ')); const b = el('b', null, x.text); b.style.color = nodeColors(v.graph).get(x.node); f.appendChild(b); }); cell.appendChild(f); } }
         if (p.type) { const ty = typeLink(p.type); ty.style.marginLeft = '8px'; cell.appendChild(ty); }
@@ -776,7 +808,7 @@
         if (used) { pin.setAttribute('stroke', color); if (req) pin.setAttribute('fill', color); }
         pin.dataset.in = p.name;
         gn.appendChild(pin);
-        const val = p.literal != null ? ' = ' + showLit(p) : p.text != null ? ' = ' + p.text : '';
+        const val = p.literal != null ? ' = ' + showLit(p) : p.text != null ? ' = ' + p.text : p.bound != null ? ' ' + FROM + 'item' + (p.bound ? '.' + p.bound : '') : '';
         const nameLen = Math.min(14, p.name.length);
         const room = n.outputs.length ? 22 : 36; // characters the left column may use when the right one is in use
         const hint = p.name + (req ? '' : ' (optional)') + (p.type ? ': ' + showType(p.type) : '') + (p.description ? '\n' + p.description : '');

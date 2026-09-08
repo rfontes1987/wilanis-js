@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/codec.schema.json",
   "label": "Multipart form",
-  "description": "multipart/form-data: text fields as strings, file fields as @http/Part.shape.json (name, contentType, size, content as base64).",
+  "description": "multipart/form-data, walked once as it arrives: text fields as strings, file fields as blobs -- each file part streams into the blob registry as it passes and the value is its handle (filename, contentType, size), never its bytes.",
   "yields": "declared"
 }

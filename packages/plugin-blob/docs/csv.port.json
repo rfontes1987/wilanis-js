@@ -1,0 +1,42 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "label": "CSV",
+  "description": "CSV files (RFC 4180: a header row, comma-separated fields, quotes around fields that need them) read as rows of a declared shape, and rows written as a file. The file is streamed both ways; only the rows are values.",
+  "operations": {
+    "parse": {
+      "description": "Read a CSV blob as a list of rows. The header row names the columns; each following row becomes one value of `type`, its number and boolean fields coerced from text, judged against the shape. An empty cell of an optional field is absent. A row that does not fit the shape fails the node with its line number.",
+      "accepts": {
+        "file": {
+          "type": "blob",
+          "description": "the CSV file"
+        },
+        "type": {
+          "type": "type",
+          "binds": "$T",
+          "description": "the shape of one row; its fields are the columns read"
+        }
+      },
+      "returns": "$T[]"
+    },
+    "write": {
+      "description": "Write rows as a CSV blob: a header row of the shape's fields in declared order, then one line per row, quoting what needs it. Answers the new file's handle.",
+      "accepts": {
+        "rows": {
+          "type": "$T[]",
+          "description": "the rows to write"
+        },
+        "type": {
+          "type": "type",
+          "binds": "$T",
+          "description": "the shape of one row; its fields are the columns written"
+        },
+        "filename": {
+          "type": "string",
+          "required": false,
+          "description": "the name the file is offered under when downloaded"
+        }
+      },
+      "returns": "blob"
+    }
+  }
+}

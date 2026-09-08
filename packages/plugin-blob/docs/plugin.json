@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/plugin.schema.json",
+  "label": "Blobs",
+  "description": "Operations over stored files. A blob is a handle to bytes the tree's registry holds; these operations stream those bytes to read them as rows or text, and stream new bytes in to answer a new blob. Every one is an effect: it touches the registry, so it lives in a data graph and is listed in the feature's effects.",
+  "grants": {
+    "ports": [
+      "@blob/csv.port.json",
+      "@blob/text.port.json"
+    ]
+  }
+}

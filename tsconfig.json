@@ -1,11 +1,26 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/engine" },
-    { "path": "packages/core" },
-    { "path": "packages/compiler" },
-    { "path": "packages/runtime" },
-    { "path": "packages/plugin-http" },
-    { "path": "packages/view" }
+    {
+      "path": "packages/engine"
+    },
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/compiler"
+    },
+    {
+      "path": "packages/runtime"
+    },
+    {
+      "path": "packages/plugin-http"
+    },
+    {
+      "path": "packages/plugin-blob"
+    },
+    {
+      "path": "packages/view"
+    }
   ]
 }

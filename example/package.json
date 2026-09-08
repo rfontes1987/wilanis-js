@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "A wilanis project: pure JSON documents, run by @wilanis/runtime with the @http plugin package, against a public REST API.",
+  "description": "A wilanis project: pure JSON documents, run by @wilanis/runtime with the @http and @blob plugin packages, against a public REST API.",
   "scripts": {
     "check": "wilanis check .",
     "rehearse": "wilanis rehearse .",
@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@wilanis/plugin-http": "0.1.0",
-    "@wilanis/runtime": "0.1.0"
+    "@wilanis/runtime": "0.1.0",
+    "@wilanis/plugin-blob": "0.1.0"
   }
 }

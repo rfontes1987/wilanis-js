@@ -10,9 +10,9 @@
  * reader can walk the tree in both directions. Nothing here draws; it answers JSON a page lays out.
  */
 import { Scope, expr, show, splitPath, substitute, hasVars, isRun, isSwitch, isMap, typeAt, TEMPLATE, WHOLE_TEMPLATE } from '@wilanis/core';
-import type { Kind, Layer, Loaded, LoadResult, GraphDoc, Operation, Refusal, Type, Values } from '@wilanis/core';
+import type { Kind, Layer, Loaded, LoadResult, GraphDoc, Operation, Refusal, TriggerDoc, Type, Values } from '@wilanis/core';
 import { SCHEMA_BASE, WILANIS } from '@wilanis/core';
-import { bindings, checkTree } from '@wilanis/compiler';
+import { bindings, checkTree, refusalsReachable } from '@wilanis/compiler';
 
 export interface VPort {
   /** The port's name; an attribute port is its path below the parent, joined with dots (body.id). */
@@ -34,6 +34,8 @@ export interface VPort {
   text?: string;
   /** The input was not given and the operation does not require it. */
   missing?: boolean;
+  /** On a map node: the input is read from each element -- the path below it, or '' for the element whole. */
+  bound?: string;
   description?: string;
 }
 
@@ -48,6 +50,8 @@ export interface VTarget {
   native: boolean;
   pure?: boolean;
   effect?: boolean;
+  /** The operation ends the graph on purpose; the node's `reason` is what the trigger maps. */
+  refuses?: boolean;
   /** For a domain port: every binding that meets it, and what each does for this operation. */
   bindings?: { path: string; label: string; graph?: string; graphLabel?: string; run?: string }[];
   /** Where a click lands: the graph behind the first binding, the binding when it delegates, the port when native. */
@@ -79,6 +83,8 @@ export interface VNode {
   says?: VSaid[];
   onItemFailure?: string;
   bind?: Record<string, string>;
+  /** On a node that refuses on purpose: every trigger that can reach it, and how each answers its reason. */
+  answeredBy?: VAnsweredBy[];
 }
 
 /**
@@ -154,7 +160,14 @@ export interface DocView {
   implementations?: { path: string; label: string; operations: Record<string, { graph?: string; graphLabel?: string; run?: string }> }[];
   /** On a trigger: the port operation it fires, and where that leads. */
   fires?: VTarget;
+  /** On a trigger whose kind maps refusals: every reason it can reach or maps, how it is answered, and the nodes that refuse with it. */
+  answers?: VAnswer[];
 }
+
+/** One refusal reason at a trigger: how the trigger answers it (absent: not mapped), and where it comes from (empty: nothing reaches it). */
+export interface VAnswer { reason: string; answer?: unknown; from: { graph: string; graphLabel: string; node: string; nodeLabel: string }[] }
+/** A trigger that reaches a refusing node: how it answers that node's reason. `maps` is false when the kind answers every refusal alike. */
+export interface VAnsweredBy { trigger: string; triggerLabel: string; maps: boolean; answer?: unknown }
 
 export interface IndexEntry { path: string; kind: Kind; name: string; label: string; feature?: string; layer?: Layer; native?: string; file?: string; description: string }
 
@@ -247,8 +260,53 @@ export function viewOf(load: LoadResult, ref: string): DocView | undefined {
     path: b.path, label: labelOf(b),
     operations: Object.fromEntries(Object.entries(b.doc.operations).map(([op, bop]) => { const g = bop.graph ? scope.get('graph', bop.graph) : undefined; return [op, { graph: g?.path, graphLabel: g ? labelOf(g) : undefined, run: bop.run }]; })),
   }));
-  if (doc.kind === 'trigger') view.fires = targetOf(scope, (doc.doc as { fire: { run: string } }).fire.run).target;
+  if (doc.kind === 'trigger') { view.fires = targetOf(scope, (doc.doc as { fire: { run: string } }).fire.run).target; view.answers = answersOf(scope, doc as Loaded<TriggerDoc>); }
   return view;
+}
+
+// ---- refusals -------------------------------------------------------------------------------------
+
+/** The profiles a walk from a trigger is made under: each declared one, or the one unnamed default. */
+const profilesOf = (scope: Scope): (string | undefined)[] => (scope.profiles().length ? scope.profiles() : [undefined]);
+
+/** The map a trigger's kind declares for refusal reasons, read from its settings; undefined when the kind maps none. */
+function refusalMapOf(scope: Scope, t: Loaded<TriggerDoc>): { at: string; map: Record<string, unknown> } | undefined {
+  const kind = scope.get('trigger-kind', t.doc.kind);
+  const at = kind?.doc.refusals;
+  if (!at) return undefined;
+  const table = at.split('.').reduce<unknown>((v, k) => (v && typeof v === 'object' ? (v as Record<string, unknown>)[k] : undefined), t.doc.settings);
+  return { at, map: table && typeof table === 'object' && !Array.isArray(table) ? (table as Record<string, unknown>) : {} };
+}
+
+/** Every reason a trigger can reach under any profile, with the nodes that refuse with it; plus each reason it maps, reached or not. */
+function answersOf(scope: Scope, t: Loaded<TriggerDoc>): VAnswer[] | undefined {
+  const declared = refusalMapOf(scope, t);
+  if (!declared) return undefined;
+  const byReason = new Map<string, VAnswer>();
+  const answer = (reason: string) => { let a = byReason.get(reason); if (!a) { a = { reason, answer: declared.map[reason], from: [] }; byReason.set(reason, a); } return a; };
+  for (const prof of profilesOf(scope)) {
+    for (const r of refusalsReachable(scope, t.doc.fire.run, prof)) {
+      const a = answer(r.reason);
+      if (a.from.some(f => f.graph === r.file && f.node === r.node)) continue;
+      const g = scope.registry.get('graph', r.file);
+      const n = g?.doc.nodes.find(x => x.id === r.node);
+      a.from.push({ graph: r.file, graphLabel: labelOf(scope.registry.any(r.file)), node: r.node, nodeLabel: n?.label ?? readable(r.node) });
+    }
+  }
+  for (const reason of Object.keys(declared.map)) answer(reason);
+  return [...byReason.values()];
+}
+
+/** Every trigger whose run can reach the refusing node `node` of graph `graphPath`, and how each answers its reason. */
+function answeredBy(scope: Scope, graphPath: string, node: string): VAnsweredBy[] {
+  const out: VAnsweredBy[] = [];
+  for (const t of scope.registry.all('trigger')) {
+    const hit = profilesOf(scope).flatMap(p => refusalsReachable(scope, t.doc.fire.run, p)).find(r => r.file === graphPath && r.node === node);
+    if (!hit) continue;
+    const declared = refusalMapOf(scope, t);
+    out.push({ trigger: t.path, triggerLabel: labelOf(t), maps: Boolean(declared), ...(declared ? { answer: declared.map[hit.reason] } : {}) });
+  }
+  return out;
 }
 
 // ---- references -----------------------------------------------------------------------------------
@@ -347,12 +405,12 @@ function graphView(scope: Scope, g: Loaded<GraphDoc>): NonNullable<DocView['grap
     const result = resultType(scope, op, n.in);
     if (isRun(n)) {
       types.set(n.id, result);
-      nodes.push({ id: n.id, kind: 'run', label: n.label ?? readable(n.id), op: n.run, description: n.description, inputs: inputPorts(scope, op, n.in), outputs: outputPorts(result, op), target: t.target });
+      nodes.push({ id: n.id, kind: 'run', label: n.label ?? readable(n.id), op: n.run, description: n.description, inputs: inputPorts(scope, op, n.in), outputs: outputPorts(result, op), target: t.target, ...(t.target.refuses ? { answeredBy: answeredBy(scope, g.path, n.id) } : {}) });
       wire(edges, n.id, n.in, resolvers);
     } else if (isMap(n)) {
       const list: Type | undefined = result ? { kind: 'list', of: result } : undefined;
       types.set(n.id, list);
-      const inputs: VPort[] = [{ name: 'over', ...written(scope, n.over), description: 'the list mapped over' }, ...inputPorts(scope, op, n.in)];
+      const inputs: VPort[] = [{ name: 'over', ...written(scope, n.over), description: 'the list mapped over' }, ...inputPorts(scope, op, n.in, n.bind)];
       nodes.push({ id: n.id, kind: 'map', label: n.label ?? readable(n.id), op: n.run, description: n.description, inputs, outputs: list ? [{ name: WHOLE, type: show(list) }] : [], target: t.target, bind: n.bind, onItemFailure: n.onItemFailure });
       wire(edges, n.id, { over: n.over, ...(n.in ?? {}) }, resolvers);
     }
@@ -449,7 +507,7 @@ function targetOf(scope: Scope, opRef: string): { op?: Operation; target: VTarge
   const portPath = scope.canon(path);
   if (typeof hit === 'string') return { target: { op: opRef, opName, port: portPath, portLabel: labelOf(scope.registry.any(portPath)) || readable(stemOf(portPath)), native: false, implementation: portPath } };
   const target: VTarget = { op: `${hit.path}#${hit.opName}`, opName: hit.opName, port: hit.path, portLabel: labelOf(hit.port), native: Boolean(hit.port.native), implementation: hit.path };
-  if (hit.port.native) { target.pure = hit.op.pure === true; target.effect = hit.op.pure !== true; }
+  if (hit.port.native) { target.pure = hit.op.pure === true; target.effect = hit.op.pure !== true; if (hit.op.refuses) target.refuses = true; }
   else {
     target.bindings = scope.bindingsFor(hit.path).map(b => {
       const bop = b.doc.operations[hit.opName];
@@ -478,16 +536,19 @@ function written(scope: Scope, v: unknown): Pick<VPort, 'literal' | 'text' | 're
 }
 
 /** The input ports of an operation call: every declared field, marked when not given, plus any given field the contract does not declare. */
-function inputPorts(scope: Scope, op: Operation | undefined, given: Values | undefined): VPort[] {
+/** The input ports of a call: each field the operation accepts, typed with the variables this call binds, and how it is given -- written, bound from each element of a map, or not at all. */
+function inputPorts(scope: Scope, op: Operation | undefined, given: Values | undefined, bind?: Record<string, string>): VPort[] {
   const ports: VPort[] = [];
+  const subst = op ? bindings(scope, op, given) : {};
   const typeOf = (f: { type: unknown; enum?: string[] }): string | undefined => {
     if (f.type === 'type') return 'type';
     if (f.enum) return f.enum.map(e => JSON.stringify(e)).join(' | ');
-    try { return show(scope.types.spec(f.type as string)); } catch { return typeof f.type === 'string' ? f.type : undefined; }
+    try { let t = scope.types.spec(f.type as never); if (hasVars(t)) t = substitute(t, subst); return show(t); } catch { return typeof f.type === 'string' ? f.type : undefined; }
   };
   for (const [k, f] of Object.entries(op?.accepts ?? {})) {
     const v = given?.[k];
-    ports.push({ name: k, type: typeOf(f), required: f.required !== false, static: f.static || f.type === 'type' || undefined, description: f.description, ...(v === undefined ? { missing: true } : written(scope, v)) });
+    const how = v !== undefined ? written(scope, v) : bind && k in bind ? { bound: bind[k] } : { missing: true };
+    ports.push({ name: k, type: typeOf(f), required: f.required !== false, static: f.static || f.type === 'type' || undefined, description: f.description, ...how });
   }
   for (const [k, v] of Object.entries(given ?? {})) if (!op?.accepts?.[k]) ports.push({ name: k, ...written(scope, v) });
   return ports;

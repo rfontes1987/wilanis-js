@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { Kernel } from '../src/index.js';
+import { Kernel, Refusal, refusalOf } from '../src/index.js';
 import type { KernelSpec } from '../src/index.js';
 
 const handlers = {
   double: async ({ in: i }: { in: Record<string, unknown> }) => Number(i.x) * 2,
   boom: async () => { throw new Error('boom'); },
+  refuse: async ({ in: i }: { in: Record<string, unknown> }) => { throw new Refusal(String(i.reason), `no ${i.what}`); },
   echo: async ({ in: i }: { in: Record<string, unknown> }) => i,
   sleepOrBoom: async ({ in: i }: { in: Record<string, unknown> }) => {
     await new Promise(res => setTimeout(res, Number(i.ms)));
@@ -182,5 +183,25 @@ describe('kernel', () => {
     expect(r.status).toBe('done');
     expect(r.output).toEqual([{ ok: false, error: 'boom' }, { ok: true, value: 'kept' }]);
     expect(r.nodes.m.items!.map(e => e.status)).toEqual(['failed', 'seeded']);
+  });
+  it('a handler that refuses records its reason on the node, and refusalOf answers it; a fault has none', async () => {
+    const spec: KernelSpec = { name: 't', output: ['a'], nodes: { a: { kind: 'call', handler: 'refuse', in: { reason: { value: 'missing' }, what: { value: 'entry 7' } } } } };
+    const r = await new Kernel(handlers).run(spec, {});
+    expect(r.status).toBe('failed');
+    expect(r.nodes.a).toMatchObject({ status: 'failed', reason: 'missing', error: 'no entry 7' });
+    expect(refusalOf(r)).toEqual({ reason: 'missing', message: 'no entry 7' });
+    const fault = await new Kernel(handlers).run({ name: 't', output: ['a'], nodes: { a: { kind: 'call', handler: 'boom', in: {} } } }, {});
+    expect(fault.nodes.a.reason).toBeUndefined();
+    expect(refusalOf(fault)).toBeUndefined();
+  });
+  it('a map element that refuses refuses the map with its reason; an element that breaks is the map\'s fault', async () => {
+    const over = { value: [{ reason: 'missing', what: 'a' }, { reason: 'conflict', what: 'b' }] };
+    const spec: KernelSpec = { name: 't', output: ['m'], nodes: { m: { kind: 'map', handler: 'refuse', over, in: {}, bind: { reason: ['reason'], what: ['what'] }, onItemFailure: 'fail' } } };
+    const r = await new Kernel(handlers).run(spec, {});
+    expect(r.nodes.m.items?.map(e => e.reason)).toEqual(['missing', 'conflict']);
+    expect(refusalOf(r)).toEqual({ reason: 'missing', message: 'no a' });
+    const broke = await new Kernel(handlers).run({ name: 't', output: ['m'], nodes: { m: { kind: 'map', handler: 'boom', over: { value: [1] }, in: {}, onItemFailure: 'fail' } } }, {});
+    expect(refusalOf(broke)).toBeUndefined();
+    expect(broke.nodes.m.error).toBe("map 'm' element 0: boom");
   });
 });
