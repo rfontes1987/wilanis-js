@@ -1,0 +1,44 @@
+{
+  "name": "@wilanis/engine",
+  "version": "0.1.0",
+  "description": "The wilanis engine: a stateless, clockless kernel that runs a dataflow spec and answers a report.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Rafael Fontes <rfontes1987@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rfontes1987/wilanis.git",
+    "directory": "packages/engine"
+  },
+  "homepage": "https://github.com/rfontes1987/wilanis/tree/main/packages/engine#readme",
+  "bugs": "https://github.com/rfontes1987/wilanis/issues",
+  "keywords": [
+    "wilanis",
+    "dataflow",
+    "json-schema",
+    "declarative",
+    "kernel",
+    "engine"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {},
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

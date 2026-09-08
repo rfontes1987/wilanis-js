@@ -1,1 +1,1 @@
-{ "$schema": "@wilanis/shape.schema.json", "layer": "core", "description": "One status to filter by.", "fields": { "status": { "type": "string" } } }
+{ "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/shape.schema.json", "layer": "core", "description": "One status to filter by.", "fields": { "status": { "type": "string" } } }

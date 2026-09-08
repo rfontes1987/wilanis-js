@@ -1,5 +1,5 @@
 {
-  "$schema": "@wilanis/graph.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/graph.schema.json",
   "description": "Data graph behind tasks.listByStatus: one GET with a PostgREST filter, the caller's token forwarded so row-level security applies to the user; the rows when it answered 200, a failure otherwise.",
   "in": "@shapes/StatusFilter.shape.json",
   "out": {

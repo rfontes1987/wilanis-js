@@ -1,5 +1,5 @@
 {
-  "$schema": "@wilanis/port.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/port.schema.json",
   "description": "What the domain needs from task storage. Bound by tasks-rest.binding.json; a test double binds the same contract.",
   "operations": {
     "listAll": {

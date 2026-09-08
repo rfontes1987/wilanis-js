@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "title": "trigger",
+  "description": "A way in. Names its kind (a document a plugin grants: an http route, a cli command, a topic...), the settings that kind's contract judges, how its input is built from the kind's context, the edge types it takes and answers, and the domain graph it fires. Nothing here knows what a URL is; the kind does.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "The kind of this document: its published schema URL, or the alias @wilanis/trigger.schema.json.",
+      "enum": [
+        "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/trigger.schema.json",
+        "@wilanis/trigger.schema.json"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "$ref": "common.schema.json#/$defs/path"
+    },
+    "settings": {
+      "type": "object"
+    },
+    "in": {
+      "$ref": "common.schema.json#/$defs/typeRef"
+    },
+    "input": {
+      "description": "How in is built from the kind's context: a templated literal reading {{request.*}} (e.g. request.body.title, request.query.page, request.principal). Absent: in is the decoded body.",
+      "$ref": "common.schema.json#/$defs/paramValue"
+    },
+    "out": {
+      "$ref": "common.schema.json#/$defs/typeRef"
+    },
+    "graph": {
+      "$ref": "common.schema.json#/$defs/path"
+    }
+  },
+  "required": [
+    "$schema",
+    "description",
+    "kind",
+    "settings",
+    "graph"
+  ],
+  "additionalProperties": false
+}

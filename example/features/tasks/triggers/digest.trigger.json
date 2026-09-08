@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "description": "wilanis run @tasks/triggers/digest.trigger.json prints one line per task.",
+  "kind": "@cli/cli.trigger-kind.json",
+  "settings": {
+    "command": "digest"
+  },
+  "out": "string",
+  "graph": "@tasks/graphs/digest.graph.json"
+}

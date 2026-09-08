@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/connection-kind.schema.json",
+  "title": "connection-kind",
+  "description": "A plugin-shipped connection contract: the settings a connection of this kind carries.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "The kind of this document: its published schema URL, or the alias @wilanis/connection-kind.schema.json.",
+      "enum": [
+        "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/connection-kind.schema.json",
+        "@wilanis/connection-kind.schema.json"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "settings": {
+      "$ref": "common.schema.json#/$defs/inlineObject"
+    }
+  },
+  "required": [
+    "$schema",
+    "description",
+    "settings"
+  ],
+  "additionalProperties": false
+}

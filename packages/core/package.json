@@ -1,0 +1,49 @@
+{
+  "name": "@wilanis/core",
+  "version": "0.1.0",
+  "description": "The wilanis document language: JSON Schemas, the TypeScript model, the type system, loader, scope and plugin contract.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Rafael Fontes <rfontes1987@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rfontes1987/wilanis.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/rfontes1987/wilanis/tree/main/packages/core#readme",
+  "bugs": "https://github.com/rfontes1987/wilanis/issues",
+  "keywords": [
+    "wilanis",
+    "dataflow",
+    "json-schema",
+    "declarative",
+    "schemas",
+    "model"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./schemas/*": "./schemas/*"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "schemas",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@wilanis/engine": "0.1.0",
+    "ajv": "^8.17.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

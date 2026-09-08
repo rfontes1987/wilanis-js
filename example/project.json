@@ -1,11 +1,22 @@
 {
-  "$schema": "@wilanis/project.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/project.schema.json",
   "name": "board",
-  "description": "A task board: the React front end talks to these routes; the routes talk to a PostgREST-shaped database API.",
-  "aliases": { "@tasks": "@features/tasks", "@shapes": "@features/tasks/shapes" },
+  "description": "A task board: the routes talk to a PostgREST-shaped database API. Plugins come from npm packages named by \"from\".",
+  "aliases": {
+    "@tasks": "@features/tasks",
+    "@shapes": "@features/tasks/shapes"
+  },
   "plugins": [
-    { "use": "@std" },
-    { "use": "@http", "settings": {
+    {
+      "use": "@std"
+    },
+    {
+      "use": "@cli"
+    },
+    {
+      "use": "@http",
+      "from": "@wilanis/plugin-http",
+      "settings": {
         "port": 8080,
         "codecs": {
           "application/json": "@http/codecs/json.codec.json",
@@ -13,11 +24,23 @@
           "multipart/form-data": "@http/codecs/multipart.codec.json",
           "text/plain": "@http/codecs/text.codec.json"
         },
-        "jwt": { "secret": "{{secrets.jwt}}", "rolesClaim": "role" }
-    } },
-    { "use": "@schedule" },
-    { "use": "@cli" }
+        "jwt": {
+          "secret": "{{secrets.jwt}}",
+          "rolesClaim": "role"
+        }
+      }
+    }
   ],
-  "secrets": { "dbKey": "BOARD_DB_KEY", "jwt": "BOARD_JWT_SECRET" },
-  "profiles": { "live": { "description": "The real database API.", "bindings": { "@tasks/tasks.port.json": "@tasks/tasks-rest.binding.json" } } }
+  "secrets": {
+    "dbKey": "BOARD_DB_KEY",
+    "jwt": "BOARD_JWT_SECRET"
+  },
+  "profiles": {
+    "live": {
+      "description": "The real database API.",
+      "bindings": {
+        "@tasks/tasks.port.json": "@tasks/tasks-rest.binding.json"
+      }
+    }
+  }
 }

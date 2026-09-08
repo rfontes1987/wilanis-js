@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/node/switch.schema.json",
+  "title": "node/switch",
+  "description": "Route to exactly one node. Rules are tried in order over this node's inputs; the first that holds names the node that runs, else the fallback. Every other candidate, and everything reachable only through it, is cancelled. Expressions: has(path), comparisons, && || !, len(x).",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "@wilanis/node/switch.schema.json"
+    },
+    "id": {
+      "$ref": "../common.schema.json#/$defs/ident"
+    },
+    "description": {
+      "type": "string"
+    },
+    "in": {
+      "$ref": "../common.schema.json#/$defs/sources"
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "when": {
+            "type": "string",
+            "minLength": 1
+          },
+          "to": {
+            "$ref": "../common.schema.json#/$defs/ident"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "when",
+          "to"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "else": {
+      "$ref": "../common.schema.json#/$defs/ident"
+    }
+  },
+  "required": [
+    "type",
+    "id",
+    "in",
+    "rules",
+    "else"
+  ],
+  "additionalProperties": false
+}

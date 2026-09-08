@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/plugin.schema.json",
+  "title": "plugin",
+  "description": "Native code, described: the settings a project may pass it, and what it grants -- ports (native), trigger kinds, connection kinds, codecs. Everything effectful enters through a grant. A plugin is an alias root: @http/http.port.json.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "The kind of this document: its published schema URL, or the alias @wilanis/plugin.schema.json.",
+      "enum": [
+        "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/plugin.schema.json",
+        "@wilanis/plugin.schema.json"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "settings": {
+      "$ref": "common.schema.json#/$defs/inlineObject"
+    },
+    "grants": {
+      "type": "object",
+      "properties": {
+        "ports": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/path"
+          },
+          "uniqueItems": true
+        },
+        "triggerKinds": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/path"
+          },
+          "uniqueItems": true
+        },
+        "connectionKinds": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/path"
+          },
+          "uniqueItems": true
+        },
+        "codecs": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/path"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "$schema",
+    "description",
+    "grants"
+  ],
+  "additionalProperties": false
+}

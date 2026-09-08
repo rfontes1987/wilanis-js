@@ -1,0 +1,51 @@
+{
+  "name": "@wilanis/plugin-http",
+  "version": "0.1.0",
+  "description": "The @http plugin for wilanis: HTTP triggers with JWT access, outbound requests, connections and body codecs.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Rafael Fontes <rfontes1987@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rfontes1987/wilanis.git",
+    "directory": "packages/plugin-http"
+  },
+  "homepage": "https://github.com/rfontes1987/wilanis/tree/main/packages/plugin-http#readme",
+  "bugs": "https://github.com/rfontes1987/wilanis/issues",
+  "keywords": [
+    "wilanis",
+    "dataflow",
+    "json-schema",
+    "declarative",
+    "http",
+    "plugin"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@wilanis/core": "0.1.0",
+    "@wilanis/engine": "0.1.0",
+    "jose": "^6.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@wilanis/runtime": "0.1.0"
+  }
+}

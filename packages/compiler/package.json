@@ -1,0 +1,47 @@
+{
+  "name": "@wilanis/compiler",
+  "version": "0.1.0",
+  "description": "The wilanis compiler: judges a document tree against every rule and lowers graphs to engine specs.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Rafael Fontes <rfontes1987@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rfontes1987/wilanis.git",
+    "directory": "packages/compiler"
+  },
+  "homepage": "https://github.com/rfontes1987/wilanis/tree/main/packages/compiler#readme",
+  "bugs": "https://github.com/rfontes1987/wilanis/issues",
+  "keywords": [
+    "wilanis",
+    "dataflow",
+    "json-schema",
+    "declarative",
+    "compiler",
+    "checker"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@wilanis/core": "0.1.0",
+    "@wilanis/engine": "0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

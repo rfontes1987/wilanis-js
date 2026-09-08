@@ -1,0 +1,56 @@
+{
+  "name": "@wilanis/runtime",
+  "version": "0.1.0",
+  "description": "The wilanis runtime and `wilanis` command line: embedder, gates (rehearse, fuzz, regress), discovery, serve, plugin packages, with the @std and @cli plugins built in.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Rafael Fontes <rfontes1987@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rfontes1987/wilanis.git",
+    "directory": "packages/runtime"
+  },
+  "homepage": "https://github.com/rfontes1987/wilanis/tree/main/packages/runtime#readme",
+  "bugs": "https://github.com/rfontes1987/wilanis/issues",
+  "keywords": [
+    "wilanis",
+    "dataflow",
+    "json-schema",
+    "declarative",
+    "runtime",
+    "cli"
+  ],
+  "bin": {
+    "wilanis": "./bin/wilanis.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "bin",
+    "templates",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@wilanis/compiler": "0.1.0",
+    "@wilanis/core": "0.1.0",
+    "@wilanis/engine": "0.1.0"
+  },
+  "devDependencies": {
+    "@wilanis/plugin-http": "0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

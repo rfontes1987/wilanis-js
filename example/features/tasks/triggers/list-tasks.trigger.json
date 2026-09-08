@@ -1,5 +1,5 @@
 {
-  "$schema": "@wilanis/trigger.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/trigger.schema.json",
   "description": "GET /tasks[?status=]",
   "kind": "@http/http.trigger-kind.json",
   "settings": { "route": "/tasks", "method": "GET", "produces": "application/json" },

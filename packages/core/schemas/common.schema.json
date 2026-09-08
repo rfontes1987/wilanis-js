@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/common.schema.json",
+  "title": "common",
+  "description": "The grammar every wilanis document shares. A document is one JSON file whose $schema names its kind: https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/<kind>.schema.json, or the alias @wilanis/<kind>.schema.json. Every reference is a path from the source root: @features/tasks/tasks.port.json, or through a project alias such as @tasks/tasks.port.json. Plugins are alias roots: @std, @http. An operation is path#operation.",
+  "$defs": {
+    "ident": {
+      "description": "A field, input, param, operation or node identifier.",
+      "type": "string",
+      "pattern": "^[a-z][A-Za-z0-9_]*$"
+    },
+    "alias": {
+      "description": "An alias root: @ followed by a kebab-case name.",
+      "type": "string",
+      "pattern": "^@[a-z][a-z0-9-]*$"
+    },
+    "path": {
+      "description": "A document path from the root (@...) or an alias (@name/...), ending in .json.",
+      "type": "string",
+      "pattern": "^@[A-Za-z0-9_.-]*(/[A-Za-z0-9_.-]+)*\\.json$"
+    },
+    "opRef": {
+      "description": "path#operation: one operation of a port.",
+      "type": "string",
+      "pattern": "^@[A-Za-z0-9_.-]*(/[A-Za-z0-9_.-]+)*\\.json#[a-z][A-Za-z0-9_]*$"
+    },
+    "typeRef": {
+      "description": "A type: string, number, boolean, unknown, or the path of a shape; any of them followed by [] for a list of it. Native contracts may also write type (a param whose value is a type reference) and $T variables bound by such params. No bare object, no bare array.",
+      "type": "string",
+      "pattern": "^(string|number|boolean|unknown|type|\\$[A-Z][A-Za-z0-9]*|@[A-Za-z0-9_.-]*(/[A-Za-z0-9_.-]+)*\\.json)(\\[\\])*$"
+    },
+    "inlineObject": {
+      "description": "An object type written in place. Legal in contracts and inside shapes; a graph's in/out and a trigger's in/out name a shape.",
+      "type": "object",
+      "properties": {
+        "fields": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/ident"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "open": {
+          "description": "Keys beyond fields: false (default), true (values unknown), or the type every extra value has.",
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/typeRef"
+            }
+          ]
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "fields"
+      ],
+      "additionalProperties": false
+    },
+    "type": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/typeRef"
+        },
+        {
+          "$ref": "#/$defs/inlineObject"
+        }
+      ]
+    },
+    "field": {
+      "description": "One field, input or param: its type, whether it is required (default true), what it means.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/type"
+        },
+        "required": {
+          "type": "boolean",
+          "default": true
+        },
+        "description": {
+          "type": "string"
+        },
+        "secret": {
+          "description": "Redacted in every report and log.",
+          "type": "boolean"
+        },
+        "enum": {
+          "description": "For strings: the closed set of legal values.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "binds": {
+          "description": "Native contracts only, on a param of type : the variable its value binds, so returns can name it.",
+          "type": "string",
+          "pattern": "^\\$[A-Z][A-Za-z0-9]*$"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "fields": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/ident"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/field"
+      }
+    },
+    "sourcePath": {
+      "description": "A dotted read: in.field, nodeId, nodeId.field.deeper, const.name.",
+      "type": "string",
+      "pattern": "^[a-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*$"
+    },
+    "source": {
+      "description": "Where a value comes from: a dotted read, a list of sources (builds a list), or an object of sources (builds an object; {} is the empty object). Strings are always references; literals live in constants.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sourcePath"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/ident"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/source"
+          }
+        }
+      ]
+    },
+    "sources": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/ident"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "paramValue": {
+      "description": "A literal of any JSON type. A string may carry {{root.path}} templates: alone it takes the value and its type, embedded in text it is interpolated. Roots: in (the graph's or operation's input) and a resolver name; a resolver's own in may also read request."
+    },
+    "params": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/ident"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/paramValue"
+      }
+    },
+    "resolvers": {
+      "description": "name -> an operation whose result params read as {{name.path}}. The one place request.* (the trigger kind's context) may be read.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/ident"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "$ref": "#/$defs/opRef"
+          },
+          "in": {
+            "$ref": "#/$defs/params"
+          },
+          "params": {
+            "$ref": "#/$defs/params"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "run"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

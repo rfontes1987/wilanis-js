@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis/schemas-v1/packages/core/schemas/node/map.schema.json",
+  "title": "node/map",
+  "description": "Run one operation per element of over, all at once. The element arrives as the input named item, or by bind (input -> path within the element, \"\" for the whole element); every other input is broadcast. The output is the index-ordered list of results.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "const": "@wilanis/node/map.schema.json"
+    },
+    "id": {
+      "$ref": "../common.schema.json#/$defs/ident"
+    },
+    "description": {
+      "type": "string"
+    },
+    "run": {
+      "$ref": "../common.schema.json#/$defs/opRef"
+    },
+    "over": {
+      "$ref": "../common.schema.json#/$defs/source"
+    },
+    "in": {
+      "$ref": "../common.schema.json#/$defs/sources"
+    },
+    "bind": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "../common.schema.json#/$defs/ident"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^([A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)*)?$"
+      }
+    },
+    "params": {
+      "$ref": "../common.schema.json#/$defs/params"
+    },
+    "onItemFailure": {
+      "enum": [
+        "fail",
+        "collect"
+      ],
+      "default": "fail"
+    }
+  },
+  "required": [
+    "type",
+    "id",
+    "run",
+    "over"
+  ],
+  "additionalProperties": false
+}
