@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wilanis.dev/schemas/1/connection.schema.json",
+  "title": "connection",
+  "description": "A named channel to an external system: its kind and the settings that kind judges. Values may read {{secrets.key}} and nothing else.",
+  "type": "object",
+  "properties": {
+    "$schema": { "const": "@wilanis/connection.schema.json" },
+    "description": { "type": "string", "minLength": 1 },
+    "kind": { "$ref": "common.schema.json#/$defs/path" },
+    "settings": { "type": "object" }
+  },
+  "required": ["$schema", "description", "kind", "settings"],
+  "additionalProperties": false
+}

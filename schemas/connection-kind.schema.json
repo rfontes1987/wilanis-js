@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wilanis.dev/schemas/1/connection-kind.schema.json",
+  "title": "connection-kind",
+  "description": "A plugin-shipped connection contract: the settings a connection of this kind carries.",
+  "type": "object",
+  "properties": {
+    "$schema": { "const": "@wilanis/connection-kind.schema.json" },
+    "description": { "type": "string", "minLength": 1 },
+    "settings": { "$ref": "common.schema.json#/$defs/inlineObject" }
+  },
+  "required": ["$schema", "description", "settings"],
+  "additionalProperties": false
+}

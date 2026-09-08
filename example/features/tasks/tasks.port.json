@@ -1,0 +1,40 @@
+{
+  "$schema": "@wilanis/port.schema.json",
+  "description": "What the domain needs from task storage. Bound by tasks-rest.binding.json; a test double binds the same contract.",
+  "operations": {
+    "listAll": {
+      "description": "Every task.",
+      "returns": "@shapes/Task.shape.json[]"
+    },
+    "listByStatus": {
+      "description": "Tasks in one status.",
+      "accepts": {
+        "status": {
+          "type": "string"
+        }
+      },
+      "returns": "@shapes/Task.shape.json[]"
+    },
+    "create": {
+      "description": "Store a new task and answer it with its id.",
+      "accepts": {
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "todo",
+            "doing",
+            "done"
+          ]
+        },
+        "assignee": {
+          "type": "string",
+          "required": false
+        }
+      },
+      "returns": "@shapes/Task.shape.json"
+    }
+  }
+}

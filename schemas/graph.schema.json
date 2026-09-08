@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wilanis.dev/schemas/1/graph.schema.json",
+  "title": "graph",
+  "description": "Behaviour as dataflow. Nodes run when their sources have settled; list order carries no meaning. Node types are documents of their own: @wilanis/node/run, switch, map. Reconvergence happens at out.from: one node, or an ordered list of candidates each behind a switch.",
+  "type": "object",
+  "properties": {
+    "$schema": { "const": "@wilanis/graph.schema.json" },
+    "description": { "type": "string", "minLength": 1 },
+    "resolvers": { "$ref": "common.schema.json#/$defs/resolvers" },
+    "constants": {
+      "description": "Typed literals, read as const.name.",
+      "type": "object", "propertyNames": { "$ref": "common.schema.json#/$defs/ident" },
+      "additionalProperties": {
+        "type": "object",
+        "properties": { "type": { "$ref": "common.schema.json#/$defs/type" }, "value": {}, "description": { "type": "string" } },
+        "required": ["type", "value"],
+        "additionalProperties": false
+      }
+    },
+    "in": { "description": "What the graph takes, read as in.field. Absent: takes nothing.", "$ref": "common.schema.json#/$defs/typeRef" },
+    "out": {
+      "type": "object",
+      "properties": {
+        "type": { "$ref": "common.schema.json#/$defs/typeRef" },
+        "from": { "oneOf": [ { "$ref": "common.schema.json#/$defs/ident" }, { "type": "array", "items": { "$ref": "common.schema.json#/$defs/ident" }, "minItems": 1, "uniqueItems": true } ] },
+        "description": { "type": "string" }
+      },
+      "required": ["type", "from"],
+      "additionalProperties": false
+    },
+    "nodes": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": { "type": { "enum": ["@wilanis/node/run.schema.json", "@wilanis/node/switch.schema.json", "@wilanis/node/map.schema.json"] } },
+        "required": ["type"],
+        "oneOf": [
+          { "properties": { "type": { "const": "@wilanis/node/run.schema.json" } }, "$ref": "node/run.schema.json" },
+          { "properties": { "type": { "const": "@wilanis/node/switch.schema.json" } }, "$ref": "node/switch.schema.json" },
+          { "properties": { "type": { "const": "@wilanis/node/map.schema.json" } }, "$ref": "node/map.schema.json" }
+        ]
+      }
+    }
+  },
+  "required": ["$schema", "description", "nodes"],
+  "additionalProperties": false
+}

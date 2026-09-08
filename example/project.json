@@ -1,0 +1,23 @@
+{
+  "$schema": "@wilanis/project.schema.json",
+  "name": "board",
+  "description": "A task board: the React front end talks to these routes; the routes talk to a PostgREST-shaped database API.",
+  "aliases": { "@tasks": "@features/tasks", "@shapes": "@features/tasks/shapes" },
+  "plugins": [
+    { "use": "@std" },
+    { "use": "@http", "settings": {
+        "port": 8080,
+        "codecs": {
+          "application/json": "@http/codecs/json.codec.json",
+          "application/x-www-form-urlencoded": "@http/codecs/form.codec.json",
+          "multipart/form-data": "@http/codecs/multipart.codec.json",
+          "text/plain": "@http/codecs/text.codec.json"
+        },
+        "jwt": { "secret": "{{secrets.jwt}}", "rolesClaim": "role" }
+    } },
+    { "use": "@schedule" },
+    { "use": "@cli" }
+  ],
+  "secrets": { "dbKey": "BOARD_DB_KEY", "jwt": "BOARD_JWT_SECRET" },
+  "profiles": { "live": { "description": "The real database API.", "bindings": { "@tasks/tasks.port.json": "@tasks/tasks-rest.binding.json" } } }
+}

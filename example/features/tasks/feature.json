@@ -1,0 +1,6 @@
+{
+  "$schema": "@wilanis/feature.schema.json",
+  "description": "Tasks on the board: list them, create them, and a nightly digest.",
+  "exports": ["@features/tasks/tasks.port.json", "@features/tasks/shapes/Task.shape.json"],
+  "effects": ["@http/http.port.json#request"]
+}

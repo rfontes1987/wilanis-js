@@ -1,0 +1,2 @@
+{ "$schema": "@wilanis/shape.schema.json", "layer": "core", "description": "A creation request as the domain receives it: no status yet, the domain decides.",
+  "fields": { "title": { "type": "string" }, "assignee": { "type": "string", "required": false } } }

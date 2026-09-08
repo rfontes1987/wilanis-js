@@ -1,0 +1,65 @@
+{
+  "$schema": "@wilanis/graph.schema.json",
+  "description": "Data graph behind tasks.listAll: one GET with the service key, the rows when it answered 200, a failure otherwise. It is also reached from the nightly digest, where there is no caller -- so it forwards none.",
+  "out": {
+    "type": "@shapes/Task.shape.json[]",
+    "from": [
+      "rows",
+      "failed"
+    ]
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "asked",
+      "run": "@http/http.port.json#request",
+      "params": {
+        "connection": "@connections/postgres-rest.connection.json",
+        "method": "GET",
+        "path": "/tasks?select=id,title,status,assignee&order=created_at.desc",
+        "produces": "application/json",
+        "returns": "@shapes/TaskRow.shape.json[]"
+      }
+    },
+    {
+      "type": "@wilanis/node/switch.schema.json",
+      "id": "route",
+      "in": {
+        "status": "asked.status",
+        "body": "asked.body"
+      },
+      "rules": [
+        {
+          "when": "status == 200 && has(body)",
+          "to": "rows"
+        }
+      ],
+      "else": "failed"
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "rows",
+      "run": "@std/data.port.json#object",
+      "in": {
+        "value": "asked.body"
+      },
+      "params": {
+        "type": "@shapes/TaskRow.shape.json[]"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "failed",
+      "run": "@std/flow.port.json#fail",
+      "in": {
+        "values": {
+          "status": "asked.status"
+        }
+      },
+      "params": {
+        "type": "@shapes/Task.shape.json[]",
+        "message": "the database API answered {status}"
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [ { "type": "command", "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -q '\\.json'; then npx wilanis check . 2>&1 | tail -40; fi" } ]
+      }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "npx wilanis check . 2>&1 | tail -40 && npx wilanis rehearse . 2>&1 | tail -20" } ] }
+    ]
+  }
+}

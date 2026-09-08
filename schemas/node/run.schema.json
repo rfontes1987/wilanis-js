@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wilanis.dev/schemas/1/node/run.schema.json",
+  "title": "node/run",
+  "description": "Run one operation. Runs the moment every source it reads has settled.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "@wilanis/node/run.schema.json" },
+    "id": { "$ref": "../common.schema.json#/$defs/ident" },
+    "description": { "type": "string" },
+    "run": { "$ref": "../common.schema.json#/$defs/opRef" },
+    "in": { "$ref": "../common.schema.json#/$defs/sources" },
+    "params": { "$ref": "../common.schema.json#/$defs/params" }
+  },
+  "required": ["type", "id", "run"],
+  "additionalProperties": false
+}

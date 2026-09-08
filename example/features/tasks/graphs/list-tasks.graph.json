@@ -1,0 +1,11 @@
+{
+  "$schema": "@wilanis/graph.schema.json",
+  "description": "Domain graph behind GET /tasks: filtered when a status is given, everything otherwise. The two branches reconverge at out.from.",
+  "in": "@shapes/TaskFilter.shape.json",
+  "out": { "type": "@shapes/Task.shape.json[]", "from": ["byStatus", "all"] },
+  "nodes": [
+    { "type": "@wilanis/node/switch.schema.json", "id": "route", "in": { "status": "in.status" }, "rules": [ { "when": "has(status)", "to": "byStatus" } ], "else": "all" },
+    { "type": "@wilanis/node/run.schema.json", "id": "byStatus", "run": "@tasks/tasks.port.json#listByStatus", "in": { "status": "in.status" } },
+    { "type": "@wilanis/node/run.schema.json", "id": "all", "run": "@tasks/tasks.port.json#listAll" }
+  ]
+}

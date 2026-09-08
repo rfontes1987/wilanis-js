@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wilanis.dev/schemas/1/binding.schema.json",
+  "title": "binding",
+  "description": "How a domain port is met. Each operation is bound to a data graph, or delegated to one native operation with its params fixed here -- the declared statement. Params may read {{in.*}} (the operation's accepts) and {{resolver.*}}.",
+  "type": "object",
+  "properties": {
+    "$schema": { "const": "@wilanis/binding.schema.json" },
+    "description": { "type": "string", "minLength": 1 },
+    "port": { "$ref": "common.schema.json#/$defs/path" },
+    "resolvers": { "$ref": "common.schema.json#/$defs/resolvers" },
+    "operations": {
+      "type": "object", "minProperties": 1,
+      "propertyNames": { "$ref": "common.schema.json#/$defs/ident" },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "graph": { "$ref": "common.schema.json#/$defs/path" },
+          "run": { "$ref": "common.schema.json#/$defs/opRef" },
+          "params": { "$ref": "common.schema.json#/$defs/params" },
+          "description": { "type": "string" }
+        },
+        "oneOf": [
+          { "required": ["graph"], "properties": { "run": false, "params": false } },
+          { "required": ["run"], "properties": { "graph": false } }
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["$schema", "description", "port", "operations"],
+  "additionalProperties": false
+}

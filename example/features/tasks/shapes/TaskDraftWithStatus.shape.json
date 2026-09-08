@@ -1,0 +1,2 @@
+{ "$schema": "@wilanis/shape.schema.json", "layer": "core", "description": "What tasks.create takes: a draft plus the status the domain chose.",
+  "fields": { "title": { "type": "string" }, "status": { "type": "string", "enum": ["todo", "doing", "done"] }, "assignee": { "type": "string", "required": false } } }

@@ -1,0 +1,13 @@
+{
+  "$schema": "@wilanis/graph.schema.json",
+  "description": "Data graph behind tasks.create: POST the row, take the one row the API answers with 201.",
+  "in": "@shapes/TaskDraftWithStatus.shape.json",
+  "out": { "type": "@shapes/Task.shape.json", "from": ["row", "failed"] },
+  "nodes": [
+    { "type": "@wilanis/node/run.schema.json", "id": "asked", "run": "@http/http.port.json#request", "in": { "body": "in" },
+      "params": { "connection": "@connections/postgres-rest.connection.json", "method": "POST", "path": "/tasks", "consumes": "application/json", "produces": "application/json", "returns": "@shapes/TaskRow.shape.json[]" } },
+    { "type": "@wilanis/node/switch.schema.json", "id": "route", "in": { "status": "asked.status", "body": "asked.body" }, "rules": [ { "when": "status == 201 && has(body)", "to": "row" } ], "else": "failed" },
+    { "type": "@wilanis/node/run.schema.json", "id": "row", "run": "@std/list.port.json#first", "in": { "list": "asked.body" }, "params": { "type": "@shapes/TaskRow.shape.json" } },
+    { "type": "@wilanis/node/run.schema.json", "id": "failed", "run": "@std/flow.port.json#fail", "in": { "values": { "status": "asked.status" } }, "params": { "type": "@shapes/Task.shape.json", "message": "the database API answered {status}" } }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wilanis.dev/schemas/1/trigger-kind.schema.json",
+  "title": "trigger-kind",
+  "description": "A plugin-shipped trigger contract: the settings a trigger of this kind carries (its own vocabulary), and the context it hands a run -- what a trigger's input mapping and resolvers read as request.*. A settings param of type `type` may bind a variable the context names (body: $Body).",
+  "type": "object",
+  "properties": {
+    "$schema": { "const": "@wilanis/trigger-kind.schema.json" },
+    "description": { "type": "string", "minLength": 1 },
+    "settings": { "$ref": "common.schema.json#/$defs/inlineObject" },
+    "context": { "$ref": "common.schema.json#/$defs/inlineObject" }
+  },
+  "required": ["$schema", "description", "settings", "context"],
+  "additionalProperties": false
+}

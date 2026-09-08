@@ -1,0 +1,2 @@
+{ "$schema": "@wilanis/shape.schema.json", "layer": "core", "description": "A task as the domain knows it.",
+  "fields": { "id": { "type": "string" }, "title": { "type": "string" }, "status": { "type": "string", "enum": ["todo", "doing", "done"] }, "assignee": { "type": "string", "required": false, "description": "user id" } } }

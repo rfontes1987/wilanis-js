@@ -1,0 +1,30 @@
+{
+  "name": "wilanis-js",
+  "version": "0.1.0",
+  "description": "wilanis: declarative dataflow graphs judged by a compiler and run by a stateless kernel.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "bin": { "wilanis": "./bin/wilanis.js" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "schemas", "templates", "bin"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "check:example": "tsx src/cli.ts check example",
+    "wilanis": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "croner": "^10.0.0",
+    "jose": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^7.0.0",
+    "vitest": "^5.0.0"
+  },
+  "engines": { "node": ">=22" }
+}

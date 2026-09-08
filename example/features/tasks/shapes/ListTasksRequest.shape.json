@@ -1,0 +1,2 @@
+{ "$schema": "@wilanis/shape.schema.json", "layer": "edge", "description": "GET /tasks?status=... as the front end sends it.",
+  "fields": { "status": { "type": "string", "enum": ["todo", "doing", "done"], "required": false } } }

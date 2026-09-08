@@ -1,0 +1,3 @@
+{ "$schema": "@wilanis/shape.schema.json", "layer": "edge", "description": "A row of the tasks table as the database API returns it. Extra columns are tolerated; trigger-facing shapes never see them.",
+  "fields": { "id": { "type": "string" }, "title": { "type": "string" }, "status": { "type": "string", "enum": ["todo", "doing", "done"] }, "assignee": { "type": "string", "required": false }, "created_at": { "type": "string", "required": false } },
+  "open": true }

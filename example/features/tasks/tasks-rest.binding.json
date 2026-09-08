@@ -1,0 +1,16 @@
+{
+  "$schema": "@wilanis/binding.schema.json",
+  "description": "tasks.port.json over the database's REST face: one data graph per operation, each a declared request plus the decision of what its status means.",
+  "port": "@tasks/tasks.port.json",
+  "operations": {
+    "listAll": {
+      "graph": "@tasks/graphs/list-rows.graph.json"
+    },
+    "listByStatus": {
+      "graph": "@tasks/graphs/list-rows-by-status.graph.json"
+    },
+    "create": {
+      "graph": "@tasks/graphs/create-task-row.graph.json"
+    }
+  }
+}

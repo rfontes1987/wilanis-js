@@ -1,0 +1,10 @@
+{
+  "$schema": "@wilanis/trigger.schema.json",
+  "description": "GET /tasks[?status=]",
+  "kind": "@http/http.trigger-kind.json",
+  "settings": { "route": "/tasks", "method": "GET", "produces": "application/json" },
+  "in": "@shapes/ListTasksRequest.shape.json",
+  "input": { "status": "{{request.query.status}}" },
+  "out": "@shapes/TaskView.shape.json[]",
+  "graph": "@tasks/graphs/list-tasks.graph.json"
+}

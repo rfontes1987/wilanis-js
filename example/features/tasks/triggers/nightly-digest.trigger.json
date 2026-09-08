@@ -1,0 +1,8 @@
+{
+  "$schema": "@wilanis/trigger.schema.json",
+  "description": "Every night at 02:00, log the digest.",
+  "kind": "@schedule/schedule.trigger-kind.json",
+  "settings": { "cron": "0 2 * * *" },
+  "out": "string",
+  "graph": "@tasks/graphs/digest.graph.json"
+}
