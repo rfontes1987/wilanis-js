@@ -1,6 +1,6 @@
 # Working on wilanis
 
-This is the `@wilanis/*` workspace: five npm packages, one example project, one set of tests. Read this
+This is the `@wilanis/*` workspace: six npm packages, one example project, and a test directory beside each package that has one. Read this
 before changing anything; it says where things live and which direction dependencies may point.
 
 ## Layout
@@ -9,8 +9,8 @@ before changing anything; it says where things live and which direction dependen
 packages/engine/       @wilanis/engine     spec.ts kernel.ts                       depends on nothing
 packages/core/         @wilanis/core       model types expr scope load validate plugin, schemas/   → engine
 packages/compiler/     @wilanis/compiler   checker.ts compiler.ts                  → core, engine
-packages/runtime/      @wilanis/runtime    embed tools serve project cli, plugins/{std,cli-trigger}, docs/{std,cli}, bin/, templates/   → core, engine, compiler
-packages/plugin-http/  @wilanis/plugin-http  index.ts codecs.ts, docs/             → core, engine
+packages/runtime/      @wilanis/runtime    embed tools branches serve project cli, plugins/{std,cli-trigger}, docs/{std,cli}, bin/, templates/   → core, engine, compiler
+packages/plugin-http/  @wilanis/plugin-http  index.ts codecs.ts throttle.ts, docs/  → core, engine
 packages/view/         @wilanis/view       model.ts serve.ts cli.ts, client/index.html, bin/   → core, compiler, runtime
 example/               a consumer project: JSON documents + package.json
 ```
@@ -21,9 +21,13 @@ executes nothing; `viewOf` is pure and the page under `client/` is one static fi
 internals; it sees the `PluginModule` contract in `packages/core/src/plugin.ts`. If a change needs an
 import against this direction, the design is wrong, not the import rule.
 
-Tests live next to what they test: `packages/engine/test` (kernel), `packages/runtime/test` (the example
-tree, sabotaged variants, plugin loading, postLoad), `packages/plugin-http/test` (end to end against a
-fake upstream), `packages/view/test` (the view model of the example, and the server). The runtime and the http plugin depend on each other only as devDependencies, for tests.
+Tests live next to what they test: `packages/engine/test` (kernel), `packages/core/test` (schema validation,
+scope), `packages/runtime/test` (the example tree, sabotaged variants, plugin loading, postLoad; and the
+branch solver behind `rehearse`), `packages/plugin-http/test` (end to end against a fake upstream),
+`packages/view/test` (the view model of the example, and the server). The compiler has no test directory of
+its own: every checker rule is exercised through the example and its sabotaged variants in
+`packages/runtime/test/example.test.ts`. The runtime and the view depend on the http plugin, and the http
+plugin on the runtime, only as devDependencies, for tests.
 
 ## Commands
 

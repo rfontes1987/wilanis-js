@@ -23,7 +23,7 @@ and return; bindings and graphs are judged against it, never re-declare it. Whic
 content type is one table in `project.json`. Nothing is inferred and restated: result types are declared,
 and the checker verifies the wiring fits.
 
-**Orthogonality.** The toolchain is five packages with one-way dependencies (below). Inside a tree, the
+**Orthogonality.** The toolchain is six packages with one-way dependencies (below). Inside a tree, the
 layers do not leak: triggers speak edge shapes, domain graphs speak core shapes and domain ports, bindings
 and data graphs translate between them and are the only place effects happen. Every effectful operation a
 feature reaches is allow-listed in its `feature.json`. Plugins sit behind one contract; the compiler never
@@ -43,14 +43,17 @@ the location and the direction of the fix.
 | `@wilanis/compiler` | `checkTree` judges a loaded tree; `Compiler` lowers graphs to engine specs | core, engine |
 | `@wilanis/runtime` | Embedder, gates (`rehearse`, `fuzz`, `regress`), discovery, serve, plugin packages, the `wilanis` CLI. Ships `@std` and `@cli` | core, engine, compiler |
 | `@wilanis/plugin-http` | The `@http` plugin: routes with JWT access, outbound requests, connections, body codecs | core, engine, jose |
+| `@wilanis/view` | The `wilanis-view` viewer: every graph drawn as a canvas of nodes, typed ports and edges, callers one click away. A read-only tool over a loaded tree; it grants nothing and runs nothing | core, compiler, runtime |
 
-A project installs `@wilanis/runtime` and the plugin packages it uses. Nothing else.
+A project installs `@wilanis/runtime` and the plugin packages it uses. Nothing else. `@wilanis/view` is a
+development tool, installed by a reader who wants to see the tree drawn.
 
 ## The model in one page
 
 - **Documents.** One JSON file each. The `$schema` names the kind: `https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json`, or the alias `@wilanis/graph.schema.json`.
 - **References are paths.** `@features/tasks/tasks.port.json`; `project.json` declares aliases (`@tasks` → `@features/tasks`); plugins are alias roots (`@std`, `@http`); an operation is `path#operation`.
-- **Shapes** have a layer: `edge` (what the world imposes) or `core` (ours). `unknown` exists only in edge shapes and native contracts.
+- **A feature is three directories.** `features/<name>/edge/` holds the triggers, the shapes the world speaks and the resolvers; `domain/` the port, the core shapes and the graphs that hold business rules; `data/` the binding and the graphs that translate and reach effects. The directory *is* the layer: the checker reads it off the path (D008) and never infers it from who references a document.
+- **Shapes** have a layer: `edge` (what the world imposes) or `core` (ours). An edge shape lives in `edge/`, a core shape in `domain/`. `unknown` exists only in edge shapes and native contracts.
 - **Ports** are contracts: operations with `accepts` and `returns`. Granted by a plugin → native (the plugin implements it). In a feature → domain (a **binding** implements it, per operation: a data graph, or a delegation `run` + `in`).
 - **One way in.** A node's `in` gives every value an operation takes, in one grammar: a literal as written, or `{{asked.status}}` to read another node, the graph's `in`, a constant (`{{const.initial}}`) or a resolver; embedded in text, a template interpolates (`"/tasks/{{in.id}}"`). A key that is not an identifier is quoted in brackets: `{{request.headers['user-agent']}}`. A contract marks the fields that must be literals `static` (a connection, a content type); a `type` field always is.
 - **Graphs** are dataflow. Nodes are explicit types: `@wilanis/node/run.schema.json`, `switch`, `map`. A node runs when its sources settled. `switch` routes to exactly one node and cancels the rest; `has(x)` in a rule proves `x` present for the routed node. Reconvergence only at `out.from`.
@@ -104,12 +107,13 @@ in `graph.schema.json`.
 
 `example/` is a monitor of observed HTTP calls and a complete consumer project: it installs
 `@wilanis/runtime` and `@wilanis/plugin-http` from `package.json` and contains nothing but JSON. Its
-routes are http triggers into domain graphs that speak `@monitor/monitor.port.json`;
-`monitor-rest.binding.json` meets that port with one data graph per operation, each a declared request to a
-public REST API (mockapi.io) and a `switch` on `status` that decides what the answer means: the rows, the
-declared refusal `no entry {id}` when the API answers 404 for an id that does not exist, or a failure for
-anything else. A cli trigger prints a digest through the same port. The API needs no key, so the example
-reads no secret and `serve` runs with no environment.
+routes are http triggers, each firing one operation of `@monitor/domain/monitor.port.json`; a trigger never
+names a graph. `monitor-rest.binding.json` meets the port: six operations with a data graph each, a declared
+request to a public REST API (mockapi.io) and a `switch` on `status` that decides what the answer means (the
+rows, the declared refusal `no entry {id}` when the API answers 404, or a failure for anything else); four
+with a domain graph that composes those (`list` routes on whether a method filter is present, `removeMany`
+maps `remove` over a list of ids). A cli trigger prints a digest through the same port. The API needs no
+key, so the example reads no secret and `serve` runs with no environment.
 
 ```
 npm install && npm run build
@@ -117,13 +121,14 @@ npx wilanis check example
 npx wilanis rehearse example
 npx wilanis map example
 npx wilanis describe @http/http.port.json example
+npx wilanis-view example              # the viewer, on http://127.0.0.1:4400/
 npm test
 ```
 
 ## Developing this repository
 
 It is an npm workspace. `npm run build` builds every package through TypeScript project references,
-`npm test` builds and runs the tests, `npm run release` publishes the five packages in dependency order.
+`npm test` builds and runs the tests, `npm run release` publishes the six packages in dependency order.
 `CLAUDE.md` describes the layout and the rules for changing it.
 
 ## License

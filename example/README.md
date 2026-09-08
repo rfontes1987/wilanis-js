@@ -14,9 +14,12 @@ npm run serve            # GET /monitor[?method=], POST /monitor, GET|PUT|DELETE
 ```
 
 `monitor.port.json` is what the domain needs: `listAll`, `listByMethod`, `get`, `record`, `update`,
-`remove`, `removeMany`. `monitor-rest.binding.json` meets each with a data graph that issues one declared request and
-decides with a `switch` on `status` what the answer means: the rows, the declared refusal `no entry {id}`
-when the API answers 404, or a failure for anything else. The API's misspelled `reponseStatus` lives in
+`remove`, `removeMany`, `submit`, `list`, `digest`. `monitor-rest.binding.json` meets the first six with a data
+graph each, which issues one declared request and decides with a `switch` on `status` what the answer means:
+the rows, the declared refusal `no entry {id}` when the API answers 404, or a failure for anything else. The
+last four are met by domain graphs that compose those operations: `list` routes on whether a method filter
+is present, `submit` attributes the entry to its recorder and records it, `removeMany` maps `remove` over the ids,
+`digest` counts the entries and lays them out as text. The API's misspelled `reponseStatus` lives in
 the edge shape `EntryRow` and never reaches the domain.
 
 `DELETE /monitor` takes a body of ids (`{"ids": ["1", "2"]}`) and fires `removeMany`; the domain graph
