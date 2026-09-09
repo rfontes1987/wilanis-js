@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
   "label": "Challenges",
   "description": "One-time challenges a policy opens when its outcome says `challenge`. The guard opens one and tells the caller its id and how to obtain a code; a trigger of the tree issues the code through `issue` -- printed by the example, delivered by mail or SMS in a real tree, which is the binding's business -- and the guard verifies the code the caller presents next time, hashed, within its attempts and its time.",
   "operations": {

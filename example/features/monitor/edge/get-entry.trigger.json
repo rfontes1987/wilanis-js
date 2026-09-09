@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
   "label": "GET /monitor/{id}",
   "description": "GET /monitor/{id} \u2192 the entry; 404 { reason: missing, message: `no entry {id}` } when there is none, 502 as upstream when the monitor API broke.",
   "settings": {

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
   "label": "Entry storage",
   "description": "What the domain needs from entry storage. Bound by monitor-rest.binding.json; a test double binds the same contract.",
   "operations": {

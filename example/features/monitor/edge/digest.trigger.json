@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
   "label": "digest",
   "description": "wilanis run @monitor/edge/digest.trigger.json prints the digest: the count and one line per entry.",
   "kind": "@cli/cli.trigger-kind.json",

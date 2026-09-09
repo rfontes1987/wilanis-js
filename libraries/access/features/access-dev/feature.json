@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/feature.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/feature.schema.json",
   "label": "Access, for development",
   "description": "What lets the access tree run on its own: identity.port.json bound to the directories written in connections/. A host does not include this feature; it binds the port to its own directories.",
   "dependsOn": [

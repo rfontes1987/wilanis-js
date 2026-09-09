@@ -64,4 +64,4 @@ is dropped. The `check` hook refuses (X003) a throttle that could let nothing th
 
 Depends on `@wilanis/core` and `@wilanis/engine`.
 
-Part of [wilanis](https://github.com/rfontes1987/wilanis-js). Apache-2.0.
+Part of [wilanis](https://github.com/wilanis/wilanis-js). Apache-2.0.

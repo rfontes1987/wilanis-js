@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
   "label": "Cookie to set",
   "description": "How an answer sets one cookie: the field of the answer it takes (`from`), or `clear` to drop the cookie whatever the answer; `omit` keeps the field out of the body once the cookie has it. HttpOnly unless said otherwise, SameSite=Lax by default, Path=/ by default.",
   "layer": "edge",

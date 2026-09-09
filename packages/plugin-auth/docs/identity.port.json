@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
   "label": "Identity",
   "description": "Verifying a credential against a directory: the one place a password is judged. Answers what happened and, when the credential is good, who it belongs to; the graph decides what a rejection or an unreachable directory means (bad_credentials, directory_unavailable), the way it decides what an HTTP 404 means.",
   "operations": {

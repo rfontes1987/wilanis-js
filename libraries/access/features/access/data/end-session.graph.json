@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
   "label": "End the session",
   "description": "Data graph behind signOut: end the session the guard identified.",
   "resolvers": "@access/edge/session.resolvers.json",

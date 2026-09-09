@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
   "label": "Require a one-time code",
   "description": "A challenge answered on this call, verified by the guard, is allowed; anything else refuses otp, which the policy turns into a challenge.",
   "in": "@access/domain/ChallengeGate.shape.json",

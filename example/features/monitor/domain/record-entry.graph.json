@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
   "label": "Record an entry",
   "description": "Domain graph behind POST /monitor: every entry recorded through this API is attributed to this recorder; the domain decides that, not the client.",
   "constants": {

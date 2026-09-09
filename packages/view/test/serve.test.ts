@@ -11,7 +11,7 @@ describe('schemas as pages', () => {
     expect(schemaRelOf('@wilanis/graph.schema.json')).toBe('graph.schema.json');
     expect(
       schemaRelOf(
-        'https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json',
+        'https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json',
       ),
     ).toBe('trigger.schema.json');
     expect(schemaRelOf('@features/monitor/domain/Entry.shape.json')).toBeUndefined();

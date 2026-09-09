@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
   "label": "POST /api/v1/auth-customers",
   "description": "Customers sign in: the credential is verified against the customer directory and our own token is issued, realm customer. 401 as bad_credentials, 503 as directory_unavailable. The access token is also set as the session cookie, so a browser needs no header.",
   "kind": "@http/http.trigger-kind.json",

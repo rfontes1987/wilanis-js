@@ -89,4 +89,4 @@ This directory is a complete tree: `features/access-dev` binds `identity.port.js
 `wilanis check .`, `wilanis rehearse .` and `wilanis start .` work here with `MONITOR_JWT_SECRET` set. A host
 that includes `["access"]` gets none of that: the dev feature and the connections stay behind.
 
-Part of [wilanis](https://github.com/rfontes1987/wilanis-js). Apache-2.0.
+Part of [wilanis](https://github.com/wilanis/wilanis-js). Apache-2.0.

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
   "label": "API row",
   "layer": "edge",
   "description": "A record as the monitor API returns it. Extra fields are tolerated -- reponseStatus is the API's own spelling and stays at the edge; trigger-facing shapes never see it.",

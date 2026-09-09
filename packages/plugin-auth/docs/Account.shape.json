@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
   "label": "Account",
   "description": "One entry of a directory written in a connection: a username, its password (plain, for development) or its scrypt hash (scrypt:<salt>:<hash>, base64url), a display name, and the groups it belongs to. Groups become the roles the sign-in graph writes into the token.",
   "layer": "edge",

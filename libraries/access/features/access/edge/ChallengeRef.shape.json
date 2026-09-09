@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
   "label": "Challenge reference",
   "description": "The id of an open challenge, as the caller was told it: --challenge-id=XXXX-XXXX. Required: wilanis run refuses the input without the flag.",
   "layer": "edge",

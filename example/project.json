@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/project.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/project.schema.json",
   "label": "Monitor",
   "name": "monitor",
   "description": "A monitor of observed HTTP calls: the routes talk to a REST API (mockapi.io); entries are imported from and exported to CSV files through the blob registry. Reads are public; writes are for signed-in employees holding the recorder role, identified by our own token, issued by the included access tree (@wilanis/access) at /api/v1/auth-employees against a directory this project binds (customers sign in at /api/v1/auth-customers and hold a token too, but no write). Preferences live in the session. A command-line greeting is gated by a one-time code. Plugins come from npm packages named by \"from\".",

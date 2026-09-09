@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
   "label": "Keep the theme",
   "description": "Data graph behind savePreferences: write the theme into the session the guard identified and answer the attributes whole. The checker holds the keys to the session shape (X104).",
   "resolvers": "@access/edge/session.resolvers.json",

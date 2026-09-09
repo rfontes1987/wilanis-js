@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/project.schema.json",
+  "$id": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/project.schema.json",
   "title": "project",
   "description": "project.json at the tree root: aliases (@name -> a path under the root), plugins and their settings, secrets (key -> environment variable), and profiles choosing a binding per domain port. A port with exactly one binding in the tree needs no profile entry.",
   "type": "object",
@@ -8,7 +8,7 @@
     "$schema": {
       "description": "The kind of this document: its published schema URL, or the alias @wilanis/project.schema.json.",
       "enum": [
-        "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/project.schema.json",
+        "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/project.schema.json",
         "@wilanis/project.schema.json"
       ]
     },

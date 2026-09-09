@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/feature.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/feature.schema.json",
   "label": "Access",
   "description": "Who is calling and what they may do: sign-in against two directories (customers, employees) that both end in our own token; refresh and sign-out; preferences kept in the session; the policies other features gate their triggers with; and the one-time code a challenged command is unlocked with. identity.port.json is what a host binds to its own directories.",
   "exports": [

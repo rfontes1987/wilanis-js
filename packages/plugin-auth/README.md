@@ -85,4 +85,4 @@ guard does not verify or the kind cannot hand, and a policy reading the caller o
 Sessions and challenges are files under `settings.store.dir` (default `.wilanis/auth`), so a server and the
 `wilanis run` processes of the same tree share them. Depends on `@wilanis/core`, `@wilanis/engine` and `jose`.
 
-Part of [wilanis](https://github.com/rfontes1987/wilanis-js). Apache-2.0.
+Part of [wilanis](https://github.com/wilanis/wilanis-js). Apache-2.0.

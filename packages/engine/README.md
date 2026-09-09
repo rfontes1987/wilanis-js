@@ -20,4 +20,4 @@ not executed -- that is replay), and one element of a `map` as `'<id>.<index>'`.
 every element has, and its report lists each element's outcome in `items`, so after a failure the embedder
 can seed the elements that answered and run only the rest.
 
-Part of [wilanis](https://github.com/rfontes1987/wilanis-js). Apache-2.0.
+Part of [wilanis](https://github.com/wilanis/wilanis-js). Apache-2.0.

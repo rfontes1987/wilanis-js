@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
   "label": "Tokens",
   "description": "Our tokens. A sign-in graph issues them once a directory verified the credential, writing the realm and roles the business decided on; nothing downstream issues a token this tree accepts. Issuing opens a session; refreshing rotates the refresh token and keeps the session; the guard verifies the access token on every gated trigger.",
   "operations": {

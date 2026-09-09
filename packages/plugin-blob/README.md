@@ -23,4 +23,4 @@ command line, `wilanis run --file path` hands a file as `request.file` and `--ou
 
 Depends on `@wilanis/core` and `@wilanis/engine`.
 
-Part of [wilanis](https://github.com/rfontes1987/wilanis-js). Apache-2.0.
+Part of [wilanis](https://github.com/wilanis/wilanis-js). Apache-2.0.

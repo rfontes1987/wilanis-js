@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/connection.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/connection.schema.json",
   "label": "Monitor API",
   "description": "The monitor's REST API: GET /monitor, GET /monitor/{id}, POST /monitor, PUT /monitor/{id}, DELETE /monitor/{id}. A missing id answers 404 with the JSON string \"Not found\". At most four requests are in flight against it at once: a batch removal issues one DELETE per id, and the throttle paces them.",
   "kind": "@http/http.connection-kind.json",

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger-kind.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger-kind.schema.json",
   "label": "HTTP route",
   "description": "A route. The body is decoded by the consumes codec into request.body (typed by settings.body); query, route placeholders (request.params, each one required), headers and cookies are in the context too, and the guarding plugin adds the caller it identified (request.principal, request.session, request.challenge) for triggers whose policy attachments give it a credential. The trigger's input mapping picks what the graph gets; the trigger's policies decide before the graph runs; the answer is encoded by the produces codec with the status the response block chooses, and sets the cookies response.cookies takes from it. A refusal (a graph ending on purpose with a reason, a policy denying, the guard refusing a credential) is answered as { reason, message } plus what it carries, with the status response.refusals maps that reason to; every reason the route can reach must be mapped (T005). A fault is a 500.",
   "settings": {

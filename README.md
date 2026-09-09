@@ -175,7 +175,7 @@ Run the example, which talks to a public test API and needs no key. The one secr
 tokens are signed with:
 
 ```
-git clone https://github.com/rfontes1987/wilanis-js && cd wilanis-js
+git clone https://github.com/wilanis/wilanis-js && cd wilanis-js
 npm install && npm run build
 npx wilanis check example          # is the tree consistent?
 npx wilanis rehearse example       # run every branch of every route and policy, world stubbed
@@ -256,7 +256,7 @@ A project installs `@wilanis/runtime`, the plugin packages it uses, and the tree
 
 Skip this on a first read. It is the compact statement of the rules the checker enforces.
 
-- **Documents.** One JSON file each. The `$schema` names the kind: `https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json`, or the alias `@wilanis/graph.schema.json`.
+- **Documents.** One JSON file each. The `$schema` names the kind: `https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json`, or the alias `@wilanis/graph.schema.json`.
 - **References are paths.** `@features/tasks/tasks.port.json`; `project.json` declares aliases (`@tasks` → `@features/tasks`); plugins are alias roots (`@std`, `@http`); an operation is `path#operation`.
 - **A feature is three directories.** `features/<name>/edge/` holds the triggers, the shapes the world speaks and the resolvers; `domain/` the port, the core shapes and the graphs that hold business rules; `data/` the binding and the graphs that translate and reach effects. The directory *is* the layer: the checker reads it off the path (D008) and never infers it from who references a document.
 - **Shapes** have a layer: `edge` (what the world imposes) or `core` (ours). An edge shape lives in `edge/`, a core shape in `domain/`. `unknown` exists only in edge shapes and native contracts.
@@ -359,7 +359,7 @@ The schemas live in `packages/core/schemas/` and are published from the `schemas
 repository, so every document can name its schema by URL and an editor can fetch it:
 
 ```
-https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/<kind>.schema.json
+https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/<kind>.schema.json
 ```
 
 The branch name carries the schema major version. A breaking change to a schema goes to `schemas-v2`;

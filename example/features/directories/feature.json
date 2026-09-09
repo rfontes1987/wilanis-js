@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/feature.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/feature.schema.json",
   "label": "Directories",
   "description": "How this deployment verifies a credential: identity.port.json of the included access tree, bound to the two directories written in connections/. Swap the connections for an OIDC issuer or LDAP and nothing in access changes.",
   "dependsOn": [

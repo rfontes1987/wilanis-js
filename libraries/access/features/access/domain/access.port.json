@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
   "label": "Access",
   "description": "What the edge asks of access: sign in against one of two directories, refresh, sign out, read and keep preferences, deliver a challenge code -- and the four decisions the policies fire. Bound by access.binding.json.",
   "operations": {

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/binding.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/binding.schema.json",
   "label": "Access, met",
   "description": "access.port.json met: the sign-ins and the refresh are business graphs; the session operations are data graphs over the @auth session port, keyed by the session the guard identified; the decisions are the policy graphs.",
   "port": "@access/domain/access.port.json",

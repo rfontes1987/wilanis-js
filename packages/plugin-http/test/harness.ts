@@ -22,7 +22,7 @@ export const INCLUDES: ResolvedInclude[] = [
 
 export const UPSTREAM = 54322;
 export const SECRET = 'secret-secret-secret-secret-secret-1';
-const SCHEMAS = 'https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/';
+const SCHEMAS = 'https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/';
 
 /** The row the fake upstream starts with. */
 export const firstRow = (): Record<string, unknown> => ({

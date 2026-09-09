@@ -20,4 +20,4 @@ npx wilanis check .
 
 Depends on `@wilanis/core`, `@wilanis/engine`, `@wilanis/compiler`.
 
-Part of [wilanis](https://github.com/rfontes1987/wilanis-js). Apache-2.0.
+Part of [wilanis](https://github.com/wilanis/wilanis-js). Apache-2.0.

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
   "label": "Identity",
   "description": "What the sign-in graphs need from the outside: a directory's verdict on a credential, and our tokens. Bound by identity.binding.json to the @auth plugin and the two directories written in connections/; a production profile binds it to real directories.",
   "operations": {

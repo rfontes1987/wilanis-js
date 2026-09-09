@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rfontes1987/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
   "label": "DELETE /monitor",
   "description": "DELETE /monitor with a body of ids \u2192 the entries that were removed, in the order asked. Every deletion is issued at once, paced by the connection's throttle, and the answer leaves only after the last one settled; one entry that does not exist refuses the whole request as missing (404). Employees holding the recorder role only: 401 as anonymous without a token or as invalid_credential with a bad one, 403 as forbidden for a customer or an employee without the role.",
   "settings": {

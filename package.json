@@ -8,7 +8,7 @@
   "author": "Rafael Fontes <rfontes1987@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rfontes1987/wilanis-js.git"
+    "url": "git+https://github.com/wilanis/wilanis-js.git"
   },
   "workspaces": [
     "packages/*",
