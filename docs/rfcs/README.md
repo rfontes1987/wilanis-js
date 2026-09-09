@@ -17,7 +17,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0009](0009-queue-triggers-and-workers.md) | Queue messages as triggers, and workers | draft |
 | [0010](0010-scheduled-triggers.md) | Scheduled triggers | stub |
 | [0011](0011-effect-semantics-retry-idempotency-timeout.md) | Retry, idempotency and timeout as declared properties of an operation | draft |
-| [0012](0012-limits-and-cancellation.md) | Resource limits, timeouts and cancellation of a run | stub |
+| [0012](0012-limits-and-cancellation.md) | Resource limits, timeouts and cancellation of a run | draft |
 | [0013](0013-deployment-and-profiles.md) | A deployment model: profiles, environments and what a tree needs to run | stub |
 | [0014](0014-outcome-semantics.md) | Outcome semantics: refusals, failures and faults, end to end | stub |
 | [0015](0015-tenant-and-resource-scoping.md) | Tenant and resource scoping as a provenance rule | stub |
