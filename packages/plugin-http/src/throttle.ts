@@ -33,7 +33,7 @@ export class Throttle {
   private delay(now: number): number {
     if (this.inFlight >= this.concurrency) return Infinity;
     if (this.perSecond !== Infinity) {
-      this.started = this.started.filter(t => now - t < 1000);
+      this.started = this.started.filter(at => now - at < 1000);
       if (this.started.length >= this.perSecond) return this.started[0] + 1000 - now;
     }
     return 0;
@@ -42,10 +42,10 @@ export class Throttle {
   /** Run `fn` once the gate lets it through; the slot is held until it settles. */
   async run<T>(fn: () => Promise<T>): Promise<T> {
     for (;;) {
-      const d = this.delay(Date.now());
-      if (d === 0) break;
-      if (d === Infinity) await new Promise<void>(r => this.waiting.push(r));
-      else await new Promise<void>(r => setTimeout(r, d));
+      const wait = this.delay(Date.now());
+      if (wait === 0) break;
+      if (wait === Infinity) await new Promise<void>(freed => this.waiting.push(freed));
+      else await new Promise<void>(done => setTimeout(done, wait));
     }
     this.inFlight++;
     this.started.push(Date.now());
@@ -66,10 +66,10 @@ export function throttleFor(env: object, connection: string, settings: ThrottleS
     byConn = new Map();
     gates.set(env, byConn);
   }
-  let t = byConn.get(connection);
-  if (!t?.same(settings)) {
-    t = new Throttle(settings);
-    byConn.set(connection, t);
+  let gate = byConn.get(connection);
+  if (!gate?.same(settings)) {
+    gate = new Throttle(settings);
+    byConn.set(connection, gate);
   }
-  return t;
+  return gate;
 }

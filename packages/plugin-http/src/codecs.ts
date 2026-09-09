@@ -6,27 +6,35 @@
  * registry and answers the handle, so a file is never held in memory; multipart walks the stream once,
  * streaming each file part into the registry as it passes and keeping only the text fields.
  */
-import { PassThrough, type Readable } from 'node:stream';
+import type { Readable } from 'node:stream';
 import type { Codec, Encoded } from '@wilanis/core';
 import { conforms, isBlobHandle, readAll, type Type } from '@wilanis/core';
+import { MultipartParts } from './multipart.js';
 
-function judge(v: unknown, declared: Type | undefined) {
+/** The value, once the declared shape has accepted it; it throws when it does not fit. */
+function judge(value: unknown, declared: Type | undefined) {
   if (declared) {
-    const bad = conforms(v, declared);
+    const bad = conforms(value, declared);
     if (bad) throw new Error(`body does not conform: ${bad}`);
   }
-  return v;
+  return value;
 }
 
-const coerceFields = (o: Record<string, unknown>, declared: Type | undefined) => {
-  if (declared?.kind !== 'object') return o;
-  for (const [k, f] of Object.entries(declared.fields)) {
-    const v = o[k];
-    if (typeof v !== 'string') continue;
-    if (f.type.kind === 'number' && v.trim() !== '' && !Number.isNaN(Number(v))) o[k] = Number(v);
-    else if (f.type.kind === 'boolean' && (v === 'true' || v === 'false')) o[k] = v === 'true';
+/** A form's text, read as the declared field's kind: a number or a boolean where the text says one. */
+const coerced = (text: string, kind: string): unknown => {
+  if (kind === 'number' && text.trim() !== '' && !Number.isNaN(Number(text))) return Number(text);
+  if (kind === 'boolean' && (text === 'true' || text === 'false')) return text === 'true';
+  return text;
+};
+
+/** A form's fields, each read as the shape declares it; every value arrives as text. */
+const coerceFields = (fields: Record<string, unknown>, declared: Type | undefined) => {
+  if (declared?.kind !== 'object') return fields;
+  for (const [name, field] of Object.entries(declared.fields)) {
+    const value = fields[name];
+    if (typeof value === 'string') fields[name] = coerced(value, field.type.kind);
   }
-  return o;
+  return fields;
 };
 
 const buffered = (bytes: Buffer, contentType: string): Encoded => ({ body: bytes, contentType, length: bytes.length });
@@ -36,13 +44,13 @@ export const json: Codec = {
   async decode(body, _ct, declared) {
     const text = (await readAll(body)).toString('utf8');
     if (!text.trim()) return judge(undefined, declared);
-    let v: unknown;
+    let parsed: unknown;
     try {
-      v = JSON.parse(text);
+      parsed = JSON.parse(text);
     } catch {
       throw new Error('body is not JSON');
     }
-    return judge(v, declared);
+    return judge(parsed, declared);
   },
   encode(value) {
     return buffered(Buffer.from(value === undefined ? '' : JSON.stringify(value)), 'application/json');
@@ -63,14 +71,15 @@ export const text: Codec = {
 
 export const form: Codec = {
   async decode(body, _ct, declared) {
-    const o: Record<string, unknown> = {};
-    for (const [k, v] of new URLSearchParams((await readAll(body)).toString('utf8'))) o[k] = v;
-    return judge(coerceFields(o, declared), declared);
+    const fields: Record<string, unknown> = {};
+    for (const [name, value] of new URLSearchParams((await readAll(body)).toString('utf8'))) fields[name] = value;
+    return judge(coerceFields(fields, declared), declared);
   },
   encode(value) {
-    const p = new URLSearchParams();
-    for (const [k, v] of Object.entries((value ?? {}) as Record<string, unknown>)) p.append(k, String(v));
-    return buffered(Buffer.from(p.toString()), 'application/x-www-form-urlencoded');
+    const params = new URLSearchParams();
+    for (const [name, field] of Object.entries((value ?? {}) as Record<string, unknown>))
+      params.append(name, String(field));
+    return buffered(Buffer.from(params.toString()), 'application/x-www-form-urlencoded');
   },
 };
 
@@ -103,94 +112,19 @@ export const blob: Codec = {
   },
 };
 
-const CRLF2 = Buffer.from('\r\n\r\n');
+const _CRLF2 = Buffer.from('\r\n\r\n');
 
 /**
- * multipart/form-data, walked once. Text fields become strings. A file part is streamed into the registry
- * as its bytes arrive and becomes a blob handle: the part's filename and content type, the size as counted.
- * Only the window that might straddle a boundary is ever held.
+ * multipart/form-data: the parts are walked once by MultipartParts, which streams a file part into the registry and
+ * collects a text part as a string.
  */
 export const multipart: Codec = {
   async decode(body, ct, declared, blobs) {
-    const m = /boundary=("?)([^";]+)\1/i.exec(ct);
-    if (!m) throw new Error('multipart body without boundary');
-    const delimiter = Buffer.from(`\r\n--${m[2]}`);
-    const o: Record<string, unknown> = {};
-    const pending: Promise<void>[] = [];
-    // state: before the first boundary ('preamble'), reading a part's headers, or streaming a part's body
-    let state: 'preamble' | 'headers' | 'body' = 'preamble';
-    let window: Buffer = Buffer.alloc(0);
-    let name: string | undefined,
-      sink: PassThrough | undefined,
-      textChunks: Buffer[] = [];
-    const finishPart = () => {
-      if (sink) sink.end();
-      else if (name !== undefined) o[name] = Buffer.concat(textChunks).toString('utf8');
-      sink = undefined;
-      name = undefined;
-      textChunks = [];
-    };
-    const feed = (chunk: Buffer) => {
-      if (sink) sink.write(chunk);
-      else textChunks.push(chunk);
-    };
-    const startPart = (head: string) => {
-      name = /name="([^"]+)"/i.exec(head)?.[1];
-      const filename = /filename="([^"]*)"/i.exec(head)?.[1];
-      const partType = /content-type:\s*([^\r\n]+)/i.exec(head)?.[1]?.trim();
-      if (filename !== undefined && name !== undefined) {
-        sink = new PassThrough();
-        const field = name;
-        pending.push(
-          blobs.put(sink, { contentType: partType ?? 'application/octet-stream', filename }).then(h => {
-            o[field] = h;
-          }),
-        );
-      }
-    };
-    for await (const c of body) {
-      window = window.length ? Buffer.concat([window, c as Buffer]) : (c as Buffer);
-      for (;;) {
-        if (state === 'preamble') {
-          // the first boundary has no leading CRLF; the window starts with "--boundary"
-          const first = window.indexOf(delimiter.subarray(2));
-          if (first < 0) {
-            window = window.subarray(Math.max(0, window.length - delimiter.length));
-            break;
-          }
-          window = window.subarray(first + delimiter.length - 2);
-          state = 'headers';
-        }
-        if (state === 'headers') {
-          if (window.subarray(0, 2).toString() === '--') {
-            window = Buffer.alloc(0);
-            break;
-          } // the closing boundary
-          const end = window.indexOf(CRLF2);
-          if (end < 0) break;
-          startPart(window.subarray(0, end).toString('latin1'));
-          window = window.subarray(end + 4);
-          state = 'body';
-        }
-        // body: everything up to the next delimiter belongs to the part; what might be the start of one is kept
-        const at = window.indexOf(delimiter);
-        if (at < 0) {
-          const safe = window.length - (delimiter.length - 1);
-          if (safe > 0) {
-            feed(window.subarray(0, safe));
-            window = window.subarray(safe);
-          }
-          break;
-        }
-        feed(window.subarray(0, at));
-        finishPart();
-        window = window.subarray(at + delimiter.length);
-        state = 'headers';
-      }
-    }
-    if (state === 'body') finishPart();
-    await Promise.all(pending);
-    return judge(coerceFields(o, declared), declared);
+    const found = /boundary=("?)([^";]+)\1/i.exec(ct);
+    if (!found) throw new Error('multipart body without boundary');
+    const parts = new MultipartParts(found[2], blobs);
+    for await (const chunk of body) parts.feed(chunk as Buffer);
+    return judge(coerceFields(await parts.end(), declared), declared);
   },
   encode() {
     throw new Error('encoding multipart answers is not supported');
