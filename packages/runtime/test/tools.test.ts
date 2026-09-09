@@ -208,7 +208,9 @@ describe('wilanis run with files', () => {
     const dir = filesTree();
     const load = loadTree(dir, PLUGINS);
     expect(checkTree(load).items).toEqual([]);
-    const r = await runTrigger(load, '@features/files/edge/read.trigger.json', { file: join(dir, 'in.csv') }, []);
+    const r = await runTrigger(load, '@features/files/edge/read.trigger.json', {
+      flags: { file: join(dir, 'in.csv') },
+    });
     expect(r.report.status).toBe('done');
     // the node saw a handle, never the bytes
     expect(r.report.nodes.op.sub!.nodes.text.in).toMatchObject({
@@ -216,20 +218,25 @@ describe('wilanis run with files', () => {
     });
     expect(r.answer).toBe('url,method\nhttps://a.example/,GET\n');
     // without the flag the trigger's input cannot be built, and the run says so
-    await expect(runTrigger(load, '@features/files/edge/read.trigger.json', {}, [])).rejects.toThrow('input:');
+    await expect(runTrigger(load, '@features/files/edge/read.trigger.json', {})).rejects.toThrow('input:');
     rmSync(dir, { recursive: true, force: true });
   });
   it("delivers a blob answer as a stream from the registry, with its handle, and releases the run's blobs after", async () => {
     const dir = filesTree();
     const load = loadTree(dir, PLUGINS);
     const delivered: { handle: unknown; text: string }[] = [];
-    const r = await runTrigger(load, '@features/files/edge/hello.trigger.json', {}, [], {
-      deliver: async (body: Readable, handle) => {
-        let t = '';
-        for await (const c of body) t += c;
-        delivered.push({ handle, text: t });
+    const r = await runTrigger(
+      load,
+      '@features/files/edge/hello.trigger.json',
+      {},
+      {
+        deliver: async (body: Readable, handle) => {
+          let t = '';
+          for await (const c of body) t += c;
+          delivered.push({ handle, text: t });
+        },
       },
-    });
+    );
     expect(r.report.status).toBe('done');
     expect(isBlobHandle(r.answer)).toBe(true);
     expect(delivered).toEqual([

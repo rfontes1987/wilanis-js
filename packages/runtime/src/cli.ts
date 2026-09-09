@@ -130,11 +130,16 @@ async function main() {
           console.error(`wrote ${f2.out} (${h.contentType}, ${h.size} bytes)`);
         } else await pipeline(body, process.stdout, { end: false });
       };
-      const { report, answer } = await runTrigger(l, positional[0], f2, positional.slice(2), {
-        profile: flags.profile,
-        seed: flags.seed ? Number(flags.seed) : undefined,
-        deliver,
-      });
+      const { report, answer } = await runTrigger(
+        l,
+        positional[0],
+        { flags: f2, args: positional.slice(2) },
+        {
+          profile: flags.profile,
+          seed: flags.seed ? Number(flags.seed) : undefined,
+          deliver,
+        },
+      );
       if (flags.verbose) console.error(summarize(report));
       if (!delivered) console.log(typeof answer === 'string' ? answer : JSON.stringify(answer ?? report, null, 2));
       if (report.status !== 'done') process.exit(1);

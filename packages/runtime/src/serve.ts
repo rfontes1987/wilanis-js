@@ -185,38 +185,51 @@ export const contentTypeOf = (file: string) => BY_EXTENSION[extname(file).toLowe
  * streams a file into the blob registry and hands its handle as request.file; a blob answer is streamed to
  * `--out`, or to stdout, by `deliver`. The run's blobs are released once delivered.
  */
+/** What a command line hands a trigger: its flags and arguments, a body from --in, and a file streamed into the registry. */
+async function requestOf(
+  flags: Record<string, string>,
+  args: string[],
+  blobs: { put: (source: Readable, meta: { contentType: string; filename: string }) => Promise<BlobHandle> },
+): Promise<Record<string, unknown>> {
+  const request: Record<string, unknown> = { flags, args, cwd: process.cwd() };
+  if (flags.in !== undefined) request.body = JSON.parse(flags.in);
+  if (flags.file !== undefined)
+    request.file = await blobs.put(createReadStream(flags.file), {
+      contentType: contentTypeOf(flags.file),
+      filename: basename(flags.file),
+    });
+  return request;
+}
+
 export async function runTrigger(
   load: LoadResult,
   ref: string,
-  flags: Record<string, string>,
-  args: string[],
+  given: { flags?: Record<string, string>; args?: string[] } = {},
   opts: {
     profile?: string;
     seed?: number;
-    log?: (s: string) => void;
+    log?: (line: string) => void;
     deliver?: (body: Readable, handle: BlobHandle) => Promise<void>;
   } = {},
 ) {
+  const flags = given.flags ?? {};
+  const args = given.args ?? [];
   const t = load.registry.get('trigger', load.resolve(ref));
   if (!t) throw new Error(`no trigger at '${ref}'`);
   const emb = embedderFor(load, { profile: opts.profile, seed: opts.seed });
   const down =
-    opts.seed === undefined ? await postLoad(load, emb, opts.log ?? ((s: string) => console.error(s))) : async () => {};
+    opts.seed === undefined
+      ? await postLoad(load, emb, opts.log ?? ((line: string) => console.error(line)))
+      : async () => {};
   const blobs = emb.blobs.scope();
   try {
-    const request: Record<string, unknown> = { flags, args, cwd: process.cwd() };
-    if (flags.in !== undefined) request.body = JSON.parse(flags.in);
-    if (flags.file !== undefined)
-      request.file = await blobs.put(createReadStream(flags.file), {
-        contentType: contentTypeOf(flags.file),
-        filename: basename(flags.file),
-      });
+    const request = await requestOf(flags, args, blobs);
     const built = emb.inputFor(t.doc, request);
     if ('error' in built) throw new Error(`input: ${built.error}`);
     const report = await emb.fire(t.doc, built.input, request, { blobs });
     const runtime = load.plugins
-      .flatMap(p => Object.entries(p.triggers ?? {}))
-      .find(([k]) => k === load.resolve(t.doc.kind))?.[1];
+      .flatMap(plugin => Object.entries(plugin.triggers ?? {}))
+      .find(([kind]) => kind === load.resolve(t.doc.kind))?.[1];
     const answer = runtime?.encode ? runtime.encode(t.doc, report) : report.output;
     if (isBlobHandle(answer) && opts.deliver) await opts.deliver(blobs.open(answer), answer);
     return { report, answer };
