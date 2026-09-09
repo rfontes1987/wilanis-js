@@ -1,6 +1,6 @@
 # RFC 0001: The RFC process
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** area:process
 - **Tracking issue:** #1
 - **Depends on:** none
@@ -97,8 +97,9 @@ None.
 - `CONTRIBUTING.md` says how work flows and points here.
 - `.github/ISSUE_TEMPLATE/rfc.yml`, `task.yml`, `bug.yml` are the issue forms; blank issues are off.
 - `.github/PULL_REQUEST_TEMPLATE.md` asks which RFC or issue a pull request serves.
-- The Roadmap project board on the `wilanis` organisation shows every `rfc` and `task` issue by status
-  and milestone.
+- The Roadmap project board on the `wilanis` organisation shows every `rfc` and `task` issue with its
+  labels and milestone. The state of an RFC is its `status:*` label and nothing else; the board adds no
+  field of its own, and its built-in Status only says open or done.
 
 ### Plugin contract
 
@@ -118,7 +119,7 @@ None. The process is checked by reading.
    `roadmap` and `rfc` skills (the first pull request); the `review` skill (the second).
 2. The labels `rfc`, `task`, `status:draft`, `status:accepted`, `status:ready`, `area:*`, and the
    milestones of `docs/roadmap.md` on `wilanis/wilanis-js` (done by hand; recorded here).
-3. The Roadmap project board with a Status field mirroring the labels (needs the `project` token scope).
+3. The Roadmap project board (needs the `project` token scope).
 4. The first batch of RFCs, 0002 to 0026, as one pull request, with a tracking issue each.
 
 ## Drawbacks and alternatives

@@ -46,14 +46,18 @@ A yes covers this pull request or this RFC and nothing else. Never carry it to t
 ### Merge a pull request
 
 Rails, all of them: every check green; no unresolved thread; up to date with `main` (rebase, push, wait
-for the checks again if not); the head branch named `<issue>-<short-title>`. Then:
+for the checks again if not); the head branch named `<issue>-<short-title>`; and, when the pull request
+adds or changes a file under `docs/rfcs/`, every full spec in it has `**Status:** accepted` with the
+steps below done, or the maintainer has said which files stay draft and why. A merge is never the
+acceptance; the acceptance comes first. Then:
 
 ```
 gh pr merge N -R wilanis/wilanis-js --rebase --delete-branch
 ```
 
-Report the commits now on `main`. If the pull request closed a task, look at its RFC's other tasks; when it
-was the last, the RFC's status becomes `implemented` (the `roadmap` skill says how).
+Report the commits now on `main`. If the pull request closed a task, tick it in the tracking issue's
+checklist and look at the RFC's other tasks; when it was the last, the RFC's status becomes `implemented`
+(the `roadmap` skill says how).
 
 ### Comment on an RFC
 
@@ -76,11 +80,11 @@ issue exists. Then, in the pull request that holds the file:
 1. The header: `**Status:** accepted`. The row in `docs/rfcs/README.md`. Commit and push to the pull
    request's branch.
 2. The labels: `gh issue edit M -R wilanis/wilanis-js --remove-label status:draft --add-label status:accepted`.
-3. One task issue per step of the Implementation plan, with the RFC form's `task` template: labels `task`
-   and the RFC's `area:*`, the tracking issue's milestone, `good first issue` where the plan says so. Link
-   each as a sub-issue of the tracking issue (`gh api -X POST repos/wilanis/wilanis-js/issues/M/sub_issues
-   -F sub_issue_id=<the task's id, not its number>`). Label the unblocked ones `status:ready`.
-4. The board: `gh project item-edit` sets Stage to "Spec accepted" for the tracking issue.
-
+3. The tracking issue's **Tasks** section becomes the Implementation plan as a checklist, one line per
+   step, a step already done ticked with the pull request that did it. Each step still to do becomes a
+   task issue with the `task` template: labels `task` and the RFC's `area:*`, the tracking issue's
+   milestone, `good first issue` where the plan says so; linked as a sub-issue of the tracking issue
+   (`gh api -X POST repos/wilanis/wilanis-js/issues/M/sub_issues -F sub_issue_id=<the task's id, not its
+   number>`). Label the unblocked ones `status:ready`.
 The pull request merges when every full spec in it is accepted or moved out; the stubs in it merge as
 stubs.

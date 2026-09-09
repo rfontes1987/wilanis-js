@@ -6,7 +6,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 
 | RFC | Title | Status | Milestone |
 |---|---|---|---|
-| [0001](0001-the-rfc-process.md) | The RFC process | draft | none |
+| [0001](0001-the-rfc-process.md) | The RFC process | accepted | none |
 | [0002](0002-storage-plugin.md) | The `@storage` plugin: records of a shape behind a generic port | draft | A credible backend |
 | [0003](0003-storage-known-to-the-compiler.md) | Storage declarations the compiler judges | draft | A credible backend |
 | [0004](0004-atomic-graphs.md) | Atomic graphs: transactions as a property of a data graph | draft | A credible backend |
