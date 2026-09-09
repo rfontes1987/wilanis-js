@@ -161,15 +161,14 @@ async function rehearseTrigger(
   if (!found.length) return false;
 
   const inType = probe.types(t.doc).in;
-  const cases = (f: FoundSwitch) =>
-    casesFor(
-      f,
-      path => record[path],
-      path => types[path],
-      seed,
-      input,
-      inType,
-    );
+  const stubbing = {
+    generated: (path: string) => record[path],
+    typeOf: (path: string) => types[path],
+    seed,
+    inputSeed: input,
+    inType,
+  };
+  const cases = (found_: FoundSwitch) => casesFor(found_, stubbing);
   /**
    * The stubs and input that route every switch enclosing `sw` towards the node that contains it. A
    * nested switch is otherwise cancelled before it runs, and its own case would land on a dead path.
@@ -179,14 +178,7 @@ async function rehearseTrigger(
     const patches: { path: string[]; value: unknown }[] = [];
     // a switch inside a mapped operation runs only when the list it maps over has an element to run for
     for (const list of sw.lists) {
-      const need = nonEmpty(
-        list,
-        path => record[path],
-        path => types[path],
-        seed,
-        input,
-        inType,
-      );
+      const need = nonEmpty(list, stubbing);
       Object.assign(stubs, need.stubs);
       patches.push(...need.input);
     }
