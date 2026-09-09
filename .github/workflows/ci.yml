@@ -6,6 +6,16 @@ on:
   pull_request:
 
 jobs:
+  branch-name:
+    name: branch name
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: the head branch names the issue it serves
+        run: |
+          b="${{ github.head_ref }}"
+          echo "$b" | grep -Eq '^[0-9]+-[a-z0-9-]+$' && echo "ok: $b" || { echo "branch '$b' must be <issue>-<short-title>, e.g. 4-storage-plugin"; exit 1; }
+
   test:
     name: lint, build, test
     runs-on: ubuntu-latest

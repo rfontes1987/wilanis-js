@@ -27,7 +27,7 @@ named an issue, use it. Never take an issue whose RFC is `status:draft`: say so 
 
 ```
 gh issue edit N -R wilanis/wilanis-js --add-assignee @me
-git switch -c task-N-short-title main
+git switch -c N-short-title main   # the issue number first: the branch-name check requires it
 ```
 
 ## 4. Implement

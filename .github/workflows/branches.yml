@@ -1,0 +1,49 @@
+name: branches
+
+# A branch lives while it is worked on. Without an open pull request it is deleted 14 days after its last
+# commit; with one, the pull request is marked stale after 30 quiet days and closed 14 days later, and the
+# merge or close deletes the branch (the repository deletes head branches on merge). main is never touched.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  stale-pull-requests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          days-before-issue-stale: -1
+          days-before-pr-stale: 30
+          days-before-pr-close: 14
+          stale-pr-label: stale
+          stale-pr-message: "No activity for 30 days. This pull request closes in 14 days unless it moves; its branch goes with it."
+          delete-branch: true
+
+  expired-branches:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TTL_DAYS: 14
+    steps:
+      - name: delete branches with no open pull request and no commit in TTL_DAYS
+        run: |
+          now=$(date +%s)
+          gh api --paginate "repos/${{ github.repository }}/branches?per_page=100" --jq '.[].name' | while read -r b; do
+            [ "$b" = "main" ] && continue
+            open=$(gh pr list -R "${{ github.repository }}" --head "$b" --state open --json number --jq 'length')
+            [ "$open" != "0" ] && continue
+            when=$(gh api "repos/${{ github.repository }}/branches/$b" --jq '.commit.commit.committer.date')
+            age=$(( (now - $(date -d "$when" +%s)) / 86400 ))
+            if [ "$age" -gt "$TTL_DAYS" ]; then
+              gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/$b" && echo "deleted $b: $age days, no pull request"
+            else
+              echo "kept $b: $age days"
+            fi
+          done

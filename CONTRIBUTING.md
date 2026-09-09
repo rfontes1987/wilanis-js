@@ -24,6 +24,14 @@ gh issue list -R wilanis/wilanis-js --label "help wanted"
 Pick one, assign yourself, read its RFC, then work. If you use Claude Code, `/roadmap` does exactly
 this, and `/rfc` walks through proposing a new RFC. Both skills live in `.claude/skills/`.
 
+## Branches
+
+A branch is named after the issue it serves: `<issue>-<short-title>`, as in `4-storage-plugin`. A pull
+request from a branch named otherwise fails its `branch name` check. `main` takes pull requests only, with
+the checks green, and never a force push. A branch lives while it is worked on: with no open pull request
+it is deleted 14 days after its last commit; with one, the pull request is marked stale after 30 quiet days
+and closed 14 days later. Merging deletes the head branch.
+
 ## The rules the code follows
 
 `CLAUDE.md` is the whole story: where things live, which way dependencies point, the house rules
