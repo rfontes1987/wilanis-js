@@ -83,7 +83,7 @@
     },
     {
       // the debt: predates the linter, rules are warnings here until each directory is cleaned
-      "includes": ["packages/runtime/**", "packages/view/**"],
+      "includes": ["packages/runtime/**"],
       "linter": {
         "rules": {
           "complexity": {

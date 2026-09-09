@@ -20,7 +20,7 @@ export interface ServeViewOptions {
   host?: string;
   /** Plugins beyond the builtins and the packages project.json names (tests). */
   plugins?: Record<string, PluginModule>;
-  log?: (s: string) => void;
+  log?: (line: string) => void;
 }
 
 export interface ViewServer {
@@ -43,28 +43,26 @@ function schemaFile(rel: string): string | undefined {
 }
 
 /** A fingerprint of every JSON file under root: paths and modification times. Changes when the tree does. */
+/** Every JSON file under a directory, deepest last, as a path and the time it changed. */
+function stamps(dir: string, into: string[] = []): string[] {
+  for (const name of readdirSync(dir).sort()) {
+    if (name.startsWith('.') || name === 'node_modules') continue;
+    const path = join(dir, name);
+    const found = statSync(path);
+    if (found.isDirectory()) stamps(path, into);
+    else if (name.endsWith('.json')) into.push(path, String(found.mtimeMs));
+  }
+  return into;
+}
+
 export function versionOf(root: string): string {
-  let h = 2166136261;
-  const mix = (s: string) => {
-    for (const c of s) {
-      h ^= c.charCodeAt(0);
-      h = Math.imul(h, 16777619);
+  let hash = 2166136261;
+  for (const stamp of stamps(root))
+    for (const char of stamp) {
+      hash ^= char.charCodeAt(0);
+      hash = Math.imul(hash, 16777619);
     }
-  };
-  const walk = (dir: string) => {
-    for (const name of readdirSync(dir).sort()) {
-      if (name.startsWith('.') || name === 'node_modules') continue;
-      const p = join(dir, name);
-      const st = statSync(p);
-      if (st.isDirectory()) walk(p);
-      else if (name.endsWith('.json')) {
-        mix(p);
-        mix(String(st.mtimeMs));
-      }
-    }
-  };
-  walk(root);
-  return (h >>> 0).toString(16);
+  return (hash >>> 0).toString(16);
 }
 
 /** Serve the viewer for the tree at root. Answers the URL and a way to stop. */
@@ -74,34 +72,47 @@ export async function serveView(root: string, opts: ServeViewOptions = {}): Prom
     res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
     res.end(JSON.stringify(body));
   };
+  /** The page itself, which the browser asks for once. */
+  const page = (res: ServerResponse) => {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(readFileSync(PAGE));
+  };
+  /** One document's view, or why there is none. */
+  const document = async (res: ServerResponse, url: URL) => {
+    const path = url.searchParams.get('path');
+    if (!path) return json(res, 400, { error: 'path is required' });
+    const load = await loadProject(root, { plugins: opts.plugins });
+    const view = viewOf(load, path);
+    if (!view) return json(res, 404, { error: `no document at '${path}'`, refusals: load.refusals.items });
+    json(res, 200, view);
+  };
+  /** One schema, as the page shows it. */
+  const schema = (res: ServerResponse, url: URL) => {
+    const rel = url.searchParams.get('path');
+    if (!rel) return json(res, 400, { error: 'path is required' });
+    const file = schemaFile(rel);
+    if (!file) return json(res, 404, { error: `no schema at '${rel}'` });
+    json(res, 200, schemaViewOf(rel, JSON.parse(readFileSync(file, 'utf8')), file));
+  };
+  const routes: Record<string, (res: ServerResponse, url: URL) => void | Promise<void>> = {
+    '/': res => page(res),
+    '/api/version': res => json(res, 200, { version: versionOf(root) }),
+    '/api/index': async res => {
+      const load = await loadProject(root, { plugins: opts.plugins });
+      json(res, 200, { ...indexOf(load), version: versionOf(root) });
+    },
+    '/api/doc': document,
+    '/api/schema': schema,
+  };
   const handle = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     try {
-      if (url.pathname === '/') {
-        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-        res.end(readFileSync(PAGE));
-      } else if (url.pathname === '/api/version') {
-        json(res, 200, { version: versionOf(root) });
-      } else if (url.pathname === '/api/index') {
-        const load = await loadProject(root, { plugins: opts.plugins });
-        json(res, 200, { ...indexOf(load), version: versionOf(root) });
-      } else if (url.pathname === '/api/doc') {
-        const path = url.searchParams.get('path');
-        if (!path) return json(res, 400, { error: 'path is required' });
-        const load = await loadProject(root, { plugins: opts.plugins });
-        const view = viewOf(load, path);
-        if (!view) return json(res, 404, { error: `no document at '${path}'`, refusals: load.refusals.items });
-        json(res, 200, view);
-      } else if (url.pathname === '/api/schema') {
-        const rel = url.searchParams.get('path');
-        if (!rel) return json(res, 400, { error: 'path is required' });
-        const file = schemaFile(rel);
-        if (!file) return json(res, 404, { error: `no schema at '${rel}'` });
-        json(res, 200, schemaViewOf(rel, JSON.parse(readFileSync(file, 'utf8')), file));
-      } else json(res, 404, { error: 'not found' });
-    } catch (e) {
-      log(`error: ${(e as Error).stack ?? e}`);
-      json(res, 500, { error: (e as Error).message });
+      const route = routes[url.pathname];
+      if (route) await route(res, url);
+      else json(res, 404, { error: 'not found' });
+    } catch (error) {
+      log(`error: ${(error as Error).stack ?? error}`);
+      json(res, 500, { error: (error as Error).message });
     }
   };
   const server = createServer((req, res) => {
@@ -116,5 +127,9 @@ export async function serveView(root: string, opts: ServeViewOptions = {}): Prom
   const port = typeof addr === 'object' && addr ? addr.port : opts.port;
   const url = `http://${host}:${port}/`;
   log(`viewing ${root} at ${url}`);
-  return { url, server, close: () => new Promise<void>((ok, fail) => server.close(e => (e ? fail(e) : ok()))) };
+  return {
+    url,
+    server,
+    close: () => new Promise<void>((ok, fail) => server.close(error => (error ? fail(error) : ok()))),
+  };
 }
