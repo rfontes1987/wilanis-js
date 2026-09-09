@@ -1,0 +1,39 @@
+name: RFC tracking issue
+description: One issue per RFC under docs/rfcs. Opened with the pull request that proposes the RFC.
+title: "RFC NNNN: "
+labels: ["rfc", "status:draft"]
+body:
+  - type: input
+    id: file
+    attributes:
+      label: RFC file
+      description: The path under docs/rfcs, and the pull request that proposes it.
+      placeholder: docs/rfcs/0002-storage-plugin.md, proposed in #12
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: The RFC's Summary paragraph, copied.
+    validations:
+      required: true
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Milestone
+      options:
+        - A credible backend
+        - "1.0: published"
+        - Production grade
+        - The AI advantage
+        - Ecosystem
+    validations:
+      required: true
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks
+      description: Filled when the RFC is accepted, from its Implementation plan, one sub-issue each.
+      value: |
+        - [ ] (written when accepted)

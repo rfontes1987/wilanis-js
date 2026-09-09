@@ -1,0 +1,25 @@
+name: Task
+description: One implementation step of an accepted RFC, small enough for one pull request.
+title: ""
+labels: ["task"]
+body:
+  - type: input
+    id: rfc
+    attributes:
+      label: RFC and step
+      description: The tracking issue and the step number in the RFC's Implementation plan.
+      placeholder: "#12, step 3"
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: What exists when this is finished: the file, the rule and its code, the test, the line `describe` prints.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything the RFC leaves to implementation.
