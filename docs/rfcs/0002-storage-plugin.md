@@ -475,8 +475,10 @@ the document, `env.connections[canonical]` the connection, `env.resolveType` the
 
 Then it needs the engine, which lives in another package that `@storage` must not depend on -- an
 engine plugin depends on `@storage` for the contract, never the reverse, so the arrow points the way
-every other arrow in the workspace does. The seam is the one plugins already have: an engine plugin's
+every other arrow in the workspace does. The seam is the hook plugins already have: an engine plugin's
 `postLoad` registers itself, under the connection kind it grants, in a table the environment carries.
+`postLoad` is the right hook and not merely a convenient one: an engine must not exist before the tree
+it serves has been loaded and judged, and `postLoad` is by definition the moment after both.
 
 ```ts
 // @wilanis/plugin-storage-postgres, postLoad
@@ -489,6 +491,26 @@ is global and a reload starts clean. `@storage`'s handler looks the connection's
 fails the node with a message naming the missing package where no engine registered -- which X203
 has already refused at check time, so the run-time message is for a plugin that failed to load, not
 for a tree that is wrong.
+
+**The table exists before any engine registers, and that is not luck.** `postLoad` runs the hooks in
+`project.json` order, serially, and tears them down in reverse (`postLoad` in
+`packages/runtime/src/serve.ts`). Nothing sorts that list, so a tree that names its engine before
+`@storage` would, on a naive reading, register into a table that does not exist yet. Two things make
+the order irrelevant instead of merely usually-right:
+
+- `engines(env)` **creates the table on first use**, by either side. It is a `WeakMap` lookup with a
+  default, not a structure `@storage` builds in its own `postLoad`; an engine that registers first
+  makes the table and `@storage` finds what is already there. `@storage`'s `postLoad` therefore does
+  no setup an engine could race -- it opens nothing and registers nothing.
+- What an engine needs at registration time is the *contract*, which is a module import resolved
+  before any hook runs, never a live object of `@storage`'s.
+
+So there is no ordering requirement to state in `project.json`, and none for an author to get wrong.
+That is a deliberate design constraint on the seam, not an accident of it: were the table something
+`@storage` had to build first, the RFC would owe the loader a dependency order between plugins, which
+is a change to how every plugin loads and far beyond what storage should cost. Teardown inherits the
+same property -- reverse order stops the engines before or after `@storage` indifferently, since
+`@storage` holds no pool and closes nothing.
 
 **The `Engine` interface**, exported by `@wilanis/plugin-storage` in `src/engine.ts`: `get`, `find`,
 `count`, `put`, `patch`, `remove`, `newKey`, `ensure`, each taking the collection, its shape, its key
@@ -592,6 +614,10 @@ questions.
   code, as `packages/plugin-auth/test` does for X101-X103. X207 needs two stores over one connection.
 - `suite.ts`: the port's behaviour as a suite a package exports and an engine's tests import, so
   "this is an engine" has one meaning that is executable. Not a test file itself.
+- `engines.test.ts`: the registration table, both ways round. A tree whose `project.json` names the
+  engine *before* `@storage` works exactly as one that names it after, and a tree that names no engine
+  fails the node with the message that says which package is missing. This pins the ordering claim
+  above, which is otherwise the kind of property that holds until someone changes `postLoad`.
 
 `packages/plugin-storage-memory/test/engine.test.ts`: `suite.ts` against the memory engine, plus the
 `Map`'s lifetime (a second `loadTree` starts empty).
@@ -624,9 +650,9 @@ the `store` baseline. The compiler's new rows are exercised through sabotaged co
    `Order.shape.json`; no connection kind), the module, the exported `Engine` interface and
    `engines(env)` table, the handlers, the `where` evaluator, `suite.ts`. Workspace member; added to
    `npm run release` after `plugin-auth`.
-5. **`@wilanis/plugin-storage-memory`.** The connection kind, the engine, `postLoad` registering it,
-   `engine.test.ts` over the shared suite. The first proof that an engine needs nothing but the
-   contract. `good first issue` once step 4 lands.
+5. **`@wilanis/plugin-storage-memory`.** Its own package, not an entry point of `@storage`: the
+   connection kind, the engine, `postLoad` registering it, `engine.test.ts` over the shared suite. The
+   first proof that an engine needs nothing but the contract. `good first issue` once step 4 lands.
 6. **The rules.** `@storage`'s X201 to X207 and `rules.test.ts`.
 7. **`@wilanis/plugin-storage-postgres`.** Kysely with `pg`: the connection kind, the plugin's
    settings, the shape-to-table mapping, `ensure`, the operations, the filter compiled to Kysely
@@ -672,35 +698,33 @@ the `store` baseline. The compiler's new rows are exercised through sabotaged co
 
 ## Open questions
 
-Answered in review, and settled above rather than left open: the key's type is the shape's business
-and the engine's, never the port's (`$K`, X202, X222); `put` takes `replace` and there is no second
-write verb; `find` does not require `limit`, and a rule about unbounded reads is RFC 0015's if it is
-anyone's; `rehearse` reaches no non-pure node, so reaching a real store from a rehearsal is not a
-question this RFC leaves ajar.
+None before `accepted`: the review settled every one, and this section records what it decided rather
+than dropping the questions, so the reasoning survives with the spec.
 
-Before `accepted`:
+**Settled in review.**
 
-1. `resolves` is the one core addition here, and it is worth one more look. It buys two things and
-   costs one. It buys the removal of the repetition, and it keeps *where a type comes from* readable
-   in the port document, which is the principle the rest of the toolchain keeps (`describe` prints it;
-   what the DSL names, a reader can open). It costs core a path expression, however small, and it
-   breaks the invariant both binding sites encode today -- that a variable comes from a field of type
-   `type` at the call site. The alternative is a `resolveType` hook on the plugin contract: the
-   operation declares which input names a document and the plugin's own code answers the type. Core
-   stays free of path syntax, the checker and the compiler still agree because both call the hook, and
-   the loss is that the port document no longer says where the type comes from -- only that a plugin
-   decides. This RFC proposes the path, and the hook is the fallback if the path grows a second
-   feature.
-2. Does an engine plugin register through `postLoad` and a `WeakMap` (as above), or should the plugin
-   contract gain a first-class way for one plugin to grant a capability another consumes? `postLoad`
-   needs no core change and is how `@http` already keeps per-connection state; a declared capability
-   would let the checker, not just the run, know an engine is present -- X203 currently learns it from
-   which plugins are loaded, which is enough but reads like a coincidence.
+- **The key's type is the shape's business and the engine's, never the port's.** `$K` is resolved from
+  the collection's key field; X202 requires a required field and says nothing about its type; an
+  engine refuses in its own band what it cannot key by (X222 for postgres).
+- **One verb writes.** `put` takes `replace`, defaulting to true, and answers `{ record?, conflict }`.
+  There is no `insert`.
+- **`find` does not require `limit`.** A rule about unbounded reads is RFC 0015's if it is anyone's.
+- **`rehearse` reaches no non-pure node**, so no rehearsal reaches an engine, not even the memory one.
+  This is a fact of the runtime, not a knob this RFC could turn.
+- **No call site names a record type.** `resolves` is accepted: a native operation's static input may
+  say where a type variable comes from, read as a path from the document that input names. It costs
+  core one optional property on a field (*Compatibility*) and pays for the repetition every storage
+  call site would otherwise carry. The `resolveType` plugin hook remains the fallback if the path
+  grammar ever needs a second feature; it is not needed for this.
+- **An engine registers from `postLoad`.** It is the hook whose meaning is "the tree is loaded and
+  judged", which is exactly when an engine may exist, and the registration table is created by
+  whichever side reaches it first, so no plugin order is required of an author (*Runtime behaviour*).
+- **`@wilanis/plugin-storage-memory` is its own package.** Not a second entry point of `@storage`, and
+  not conditional on how the implementation turns out: "every engine is a plugin" is the design, and
+  the first two engines both obeying it is what keeps the claim honest.
 
-During implementation:
-
-3. The exact Kysely expression for `contains` and `startsWith` (`like` with escaping) and whether
-   `jsonb` fields may be ordered by.
-4. Whether `@wilanis/plugin-storage-memory` belongs in this repository at all or ships from
-   `@storage`'s own package as a second entry point. Its own package is proposed, since "every engine
-   is a plugin" is easier to keep true when the first two both obey it.
+**Left to implementation, deliberately.** Two things, because they are the implementing agent's and
+cost nothing to defer: the exact Kysely expressions behind `contains` and `startsWith`, and whether `jsonb`
+fields may be ordered by. Neither changes a document, a rule, a schema or the plan -- they are choices
+inside `@wilanis/plugin-storage-postgres` that the shared suite judges by behaviour. If one of them
+turns out to need a rule, it is a rule in that plugin's own band, added the way any rule is.
