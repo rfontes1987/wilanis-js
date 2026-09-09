@@ -1,45 +1,92 @@
 /**
  * The gates and the discovery commands. All of them work from a loaded, checked tree.
  */
-import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { EffectInfo } from '@wilanis/compiler';
 import type { LoadResult } from '@wilanis/core';
-import { Scope } from '@wilanis/core';
-import { Embedder } from './embed.js';
-import { runGraph, type EffectInfo } from '@wilanis/compiler';
+import {
+  type AnyDoc,
+  type BindingDoc,
+  generate,
+  hasVars,
+  type Kind,
+  type Loaded,
+  type PolicyDoc,
+  type PortDoc,
+  policyPath,
+  rng,
+  type ScenarioDoc,
+  Scope,
+  schemaUrl,
+  show,
+  splitOp,
+  substitute,
+  type TriggerDoc,
+  type TriggerKindDoc,
+  type Type,
+} from '@wilanis/core';
 import type { Handler, Report } from '@wilanis/engine';
 import { refusalOf } from '@wilanis/engine';
-import { generate, rng, substitute, hasVars, show, type Type } from '@wilanis/core';
-import { schemaUrl, splitOp, policyPath, type Kind, type Loaded, type ScenarioDoc, type TriggerDoc, type TriggerKindDoc, type PortDoc, type GraphDoc, type BindingDoc, type AnyDoc, type PolicyDoc } from '@wilanis/core';
-import { casesFor, nonEmpty, setPath, switchesOf, type FoundSwitch } from './branches.js';
+import { casesFor, type FoundSwitch, nonEmpty, setPath, switchesOf } from './branches.js';
+import { Embedder } from './embed.js';
 
 // ---- stubbing ---------------------------------------------------------------------------------------
 
-const hash = (s: string) => { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
+const hash = (s: string) => {
+  let h = 2166136261;
+  for (const c of s) {
+    h ^= c.charCodeAt(0);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+};
 
 /** Every effectful native operation answers a generated value of its declared type, deterministic per seed and node path. */
 export function stubEffects(seed: number, record?: Record<string, unknown>, types?: Record<string, Type>) {
-  return (info: EffectInfo): Handler => async ({ in: i, ctx }) => {
-    const resolve = ctx.env.resolveType as ((ref: string) => Type) | undefined;
-    let t = info.returns;
-    if (t && hasVars(t) && resolve) {
-      const subst: Record<string, Type> = {};
-      for (const [k, f] of Object.entries(info.op.accepts ?? {})) if (f.binds && f.type === 'type' && typeof i[k] === 'string') { try { subst[f.binds] = resolve(i[k] as string); } catch { /* unknown */ } }
-      t = substitute(t, subst);
-    }
-    const key = ctx.nodePath.join('.');
-    const value = t ? generate(t, rng(seed ^ hash(key))) : undefined;
-    if (record) record[key] = value;
-    if (types && t) types[key] = t;
-    return value;
-  };
+  return (info: EffectInfo): Handler =>
+    async ({ in: i, ctx }) => {
+      const resolve = ctx.env.resolveType as ((ref: string) => Type) | undefined;
+      let t = info.returns;
+      if (t && hasVars(t) && resolve) {
+        const subst: Record<string, Type> = {};
+        for (const [k, f] of Object.entries(info.op.accepts ?? {}))
+          if (f.binds && f.type === 'type' && typeof i[k] === 'string') {
+            try {
+              subst[f.binds] = resolve(i[k] as string);
+            } catch {
+              /* unknown */
+            }
+          }
+        t = substitute(t, subst);
+      }
+      const key = ctx.nodePath.join('.');
+      const value = t ? generate(t, rng(seed ^ hash(key))) : undefined;
+      if (record) record[key] = value;
+      if (types && t) types[key] = t;
+      return value;
+    };
 }
 
-export function embedderFor(load: LoadResult, opts: { seed?: number; record?: Record<string, unknown>; types?: Record<string, Type>; profile?: string; env?: NodeJS.ProcessEnv } = {}): Embedder {
+export function embedderFor(
+  load: LoadResult,
+  opts: {
+    seed?: number;
+    record?: Record<string, unknown>;
+    types?: Record<string, Type>;
+    profile?: string;
+    env?: NodeJS.ProcessEnv;
+  } = {},
+): Embedder {
   const scope = new Scope(load.registry, load.resolve);
   const env = opts.env ?? (opts.seed !== undefined ? fakeEnv(scope) : process.env);
-  return new Embedder(scope, load.plugins, { profile: opts.profile, stubEffects: opts.seed !== undefined ? stubEffects(opts.seed, opts.record, opts.types) : undefined, env, root: load.root });
+  return new Embedder(scope, load.plugins, {
+    profile: opts.profile,
+    stubEffects: opts.seed !== undefined ? stubEffects(opts.seed, opts.record, opts.types) : undefined,
+    env,
+    root: load.root,
+  });
 }
 
 /** An environment where every declared secret is present, for runs that never leave the process. */
@@ -50,7 +97,11 @@ function fakeEnv(scope: Scope): NodeJS.ProcessEnv {
 }
 
 /** A generated request context for a trigger kind, and a generated input for the trigger. */
-export function generatedFire(emb: Embedder, t: Loaded<TriggerDoc>, seed: number): { input: unknown; request: Record<string, unknown> } {
+export function generatedFire(
+  emb: Embedder,
+  t: Loaded<TriggerDoc>,
+  seed: number,
+): { input: unknown; request: Record<string, unknown> } {
   const kind = emb.scope.get('trigger-kind', t.doc.kind)!.doc as TriggerKindDoc;
   const r = rng(seed);
   const request = generate(emb.scope.contextType(kind, t.doc.settings), r) as Record<string, unknown>;
@@ -80,12 +131,22 @@ export function policyRoots(load: LoadResult): Loaded<TriggerDoc>[] {
   const out: Loaded<TriggerDoc>[] = [];
   const triggers = load.registry.all('trigger');
   for (const p of load.registry.all('policy')) {
-    const attaching = triggers.filter(t => (t.doc.policies ?? []).some(ref => load.resolve(policyPath(ref)) === p.path));
+    const attaching = triggers.filter(t =>
+      (t.doc.policies ?? []).some(ref => load.resolve(policyPath(ref)) === p.path),
+    );
     const seen = new Set<string>();
     for (const t of attaching.length ? attaching : triggers.slice(0, 1)) {
       const kind = load.resolve(t.doc.kind);
-      if (seen.has(kind)) continue; seen.add(kind);
-      const doc: TriggerDoc = { $schema: schemaUrl('trigger'), description: p.doc.description, label: p.doc.label, kind: t.doc.kind, settings: t.doc.settings, fire: p.doc.decide };
+      if (seen.has(kind)) continue;
+      seen.add(kind);
+      const doc: TriggerDoc = {
+        $schema: schemaUrl('trigger'),
+        description: p.doc.description,
+        label: p.doc.label,
+        kind: t.doc.kind,
+        settings: t.doc.settings,
+        fire: p.doc.decide,
+      };
       out.push({ ...p, kind: 'trigger', doc } as unknown as Loaded<TriggerDoc>);
     }
   }
@@ -113,20 +174,25 @@ export function failedBelow(id: string, n: Report['nodes'][string]): FailedNode 
 }
 
 export function summarize(report: Report, indent = ''): string {
-  const lines = [`${indent}${report.graph}: ${report.status}${report.needs?.length ? ` needs ${report.needs.join(', ')}` : ''}`];
+  const lines = [
+    `${indent}${report.graph}: ${report.status}${report.needs?.length ? ` needs ${report.needs.join(', ')}` : ''}`,
+  ];
   const node = (id: string, n: Report['nodes'][string], depth: string) => {
     lines.push(`${depth}${id}: ${n.status}${n.selected ? ` → ${n.selected}` : ''}${n.error ? ` -- ${n.error}` : ''}`);
-    if (n.sub) lines.push(summarize(n.sub, depth + '  '));
-    n.items?.forEach((e, i) => node(`${id}.${i}`, e, depth + '  '));
+    if (n.sub) lines.push(summarize(n.sub, `${depth}  `));
+    for (const [i, e] of (n.items ?? []).entries()) node(`${id}.${i}`, e, `${depth}  `);
   };
-  for (const [id, n] of Object.entries(report.nodes)) node(id, n, indent + '  ');
+  for (const [id, n] of Object.entries(report.nodes)) node(id, n, `${indent}  `);
   return lines.join('\n');
 }
 
 // ---- rehearse ----------------------------------------------------------------------------------------
 
 /** One line per outcome, and whether the whole rehearsal is acceptable. */
-export interface Rehearsal { ok: boolean; lines: string[] }
+export interface Rehearsal {
+  ok: boolean;
+  lines: string[];
+}
 
 /** What one run of one branch settled to, judged at the graph that owns the decision. */
 interface Settled {
@@ -149,7 +215,10 @@ function reportAt(report: Report, prefix: string[]): Report | undefined {
   for (let i = 0; i < prefix.length; i++) {
     const n: Report['nodes'][string] | undefined = cur?.nodes?.[prefix[i]];
     if (!n) return undefined;
-    if (n.items) { cur = n.items[Number(prefix[++i])]?.sub; continue; }
+    if (n.items) {
+      cur = n.items[Number(prefix[++i])]?.sub;
+      continue;
+    }
     cur = n.sub;
   }
   return cur;
@@ -176,8 +245,14 @@ function settle(report: Report, sw: FoundSwitch, aim: string): Settled {
   // a refusal in THIS graph is a declared outcome; a refusal that arrived from a graph this one calls is that
   // graph's declared outcome surfacing here, and naming it as ours would credit the wrong document
   const deeper = failedBelow(id, n);
-  if (!deeper && n.reason !== undefined) { out.declared = { reason: n.reason, message: n.error ?? '' }; return out; }
-  if (deeper?.reason !== undefined) { out.propagated = { node: id, reason: deeper.reason, error: deeper.error ?? '' }; return out; }
+  if (!deeper && n.reason !== undefined) {
+    out.declared = { reason: n.reason, message: n.error ?? '' };
+    return out;
+  }
+  if (deeper?.reason !== undefined) {
+    out.propagated = { node: id, reason: deeper.reason, error: deeper.error ?? '' };
+    return out;
+  }
   out.error = `${id}: ${n.error}`;
   return out;
 }
@@ -194,7 +269,10 @@ function settle(report: Report, sw: FoundSwitch, aim: string): Settled {
  * It is a problem when the graph blocks (an input nothing supplies), fails somewhere it did not declare,
  * routes somewhere other than where its rule points, or when no inputs can reach the branch at all.
  */
-export async function rehearse(load: LoadResult, opts: { seed?: number; profile?: string; verbose?: boolean } = {}): Promise<Rehearsal> {
+export async function rehearse(
+  load: LoadResult,
+  opts: { seed?: number; profile?: string; verbose?: boolean } = {},
+): Promise<Rehearsal> {
   const seed = opts.seed ?? 1;
   const lines: string[] = [];
   const decisions: Decision[] = [];
@@ -210,10 +288,12 @@ export async function rehearse(load: LoadResult, opts: { seed?: number; profile?
       const refused = refusalOf(report);
       const failed = Object.entries(report.nodes).find(([, n]) => n.status === 'failed');
       settledGraphs.push({
-        trigger: t.name, graph: t.doc.fire.run,
+        trigger: t.name,
+        graph: t.doc.fire.run,
         status: report.status === 'blocked' ? 'BLOCKED' : report.status,
         declared: refused ? `${refused.reason}: "${refused.message}"` : undefined,
-        error: report.status === 'failed' && !refused ? (failed ? `${failed[0]}: ${failed[1].error}` : 'failed') : undefined,
+        error:
+          report.status === 'failed' && !refused ? (failed ? `${failed[0]}: ${failed[1].error}` : 'failed') : undefined,
       });
     }
   }
@@ -234,14 +314,24 @@ interface Decision {
 /** Merge a switch's result into the decisions already gathered, so a shared graph is reported once. */
 function gather(decisions: Decision[], d: Decision) {
   const hit = decisions.find(x => x.graph === d.graph && x.node === d.node);
-  if (!hit) { decisions.push(d); return; }
+  if (!hit) {
+    decisions.push(d);
+    return;
+  }
   for (const tr of d.triggers) if (!hit.triggers.includes(tr)) hit.triggers.push(tr);
   // the same switch reached from two triggers should settle the same way; keep the worse of the two
   for (const b of d.branches) {
     const at = hit.branches.find(x => x.when === b.when && x.to === b.to);
-    if (!at) { hit.branches.push(b); continue; }
-    if (b.uncovered && !at.uncovered) { at.uncovered = b.uncovered; at.settled = undefined; }
-    if (b.settled && at.settled && (b.settled.error || b.settled.blocked || b.settled.misrouted)) at.settled = b.settled;
+    if (!at) {
+      hit.branches.push(b);
+      continue;
+    }
+    if (b.uncovered && !at.uncovered) {
+      at.uncovered = b.uncovered;
+      at.settled = undefined;
+    }
+    if (b.settled && at.settled && (b.settled.error || b.settled.blocked || b.settled.misrouted))
+      at.settled = b.settled;
   }
 }
 
@@ -270,20 +360,27 @@ function format(
   const problems: string[] = [];
   const short = (g: string) => g.replace(/^@/, '').replace(/\.graph\.json$/, '');
   for (const p of plain) {
-    if (p.error || p.status === 'BLOCKED') problems.push(`${short(p.graph)}: ${p.error ?? 'blocked -- an input it needs is never supplied'}`);
+    if (p.error || p.status === 'BLOCKED')
+      problems.push(`${short(p.graph)}: ${p.error ?? 'blocked -- an input it needs is never supplied'}`);
     lines.push(`${short(p.graph)}  (no branches)`);
-    lines.push(`  ${p.status === 'done' ? 'answers' : p.status === 'BLOCKED' ? 'BLOCKED' : 'fails'}${p.declared ? ` as declared: ${p.declared}` : p.error ? `: ${p.error}` : ''}`);
+    lines.push(
+      `  ${p.status === 'done' ? 'answers' : p.status === 'BLOCKED' ? 'BLOCKED' : 'fails'}${p.declared ? ` as declared: ${p.declared}` : p.error ? `: ${p.error}` : ''}`,
+    );
   }
   for (const d of decisions) {
     const covered = d.branches.filter(b => !b.uncovered).length;
-    lines.push(`${short(d.graph)}  switch '${d.node}'  ${covered}/${d.branches.length} branches${verbose ? `  [via ${d.triggers.join(', ')}]` : ''}`);
+    lines.push(
+      `${short(d.graph)}  switch '${d.node}'  ${covered}/${d.branches.length} branches${verbose ? `  [via ${d.triggers.join(', ')}]` : ''}`,
+    );
     // one width for the whole decision, so the outcomes line up and the odd one out is visible
     const w = Math.max(...d.branches.map(b => phrase(b.when).length));
     for (const b of d.branches) {
       const when = phrase(b.when).padEnd(w);
       if (b.uncovered) {
         lines.push(`  ??  ${when}  NEVER RUN -- ${b.uncovered}`);
-        problems.push(`${short(d.graph)} '${d.node}': the '${b.when}' branch to ${b.to} can never run -- ${b.uncovered}`);
+        problems.push(
+          `${short(d.graph)} '${d.node}': the '${b.when}' branch to ${b.to} can never run -- ${b.uncovered}`,
+        );
         continue;
       }
       const st = b.settled!;
@@ -294,24 +391,40 @@ function format(
       }
       if (st.blocked) {
         lines.push(`  !!  ${when}  BLOCKED at '${b.to}' -- an input it needs is never supplied`);
-        problems.push(`${short(d.graph)} '${d.node}': the branch to ${b.to} blocks -- an input it needs is never supplied`);
+        problems.push(
+          `${short(d.graph)} '${d.node}': the branch to ${b.to} blocks -- an input it needs is never supplied`,
+        );
         continue;
       }
       if (st.error) {
         lines.push(`  !!  ${when}  BROKE at '${b.to}' -- ${st.error}`);
-        problems.push(`${short(d.graph)} '${d.node}': the branch to ${b.to} fails where the graph declares no failure -- ${st.error}`);
+        problems.push(
+          `${short(d.graph)} '${d.node}': the branch to ${b.to} fails where the graph declares no failure -- ${st.error}`,
+        );
         continue;
       }
-      if (st.declared) { lines.push(`  ok  ${when}  refused on purpose at '${b.to}' as ${st.declared.reason}: "${st.declared.message}"`); continue; }
-      if (st.propagated) { lines.push(`  ok  ${when}  went to '${b.to}', which refused it as ${st.propagated.reason}: "${st.propagated.error}"`); continue; }
+      if (st.declared) {
+        lines.push(`  ok  ${when}  refused on purpose at '${b.to}' as ${st.declared.reason}: "${st.declared.message}"`);
+        continue;
+      }
+      if (st.propagated) {
+        lines.push(
+          `  ok  ${when}  went to '${b.to}', which refused it as ${st.propagated.reason}: "${st.propagated.error}"`,
+        );
+        continue;
+      }
       lines.push(`  ok  ${when}  answered from '${b.to}'`);
     }
   }
   const branches = decisions.reduce((n, d) => n + d.branches.length, 0);
   lines.push('');
   if (!problems.length) {
-    lines.push(`every branch settled -- ${branches} branch(es), ${decisions.length} decision(s), ${new Set(decisions.map(d => d.graph)).size} graph(s).`);
-    lines.push('"refused on purpose" is a refuse node the graph declares: a designed outcome with a reason the trigger maps, not a fault. Effects are stubbed, so no request left this process.');
+    lines.push(
+      `every branch settled -- ${branches} branch(es), ${decisions.length} decision(s), ${new Set(decisions.map(d => d.graph)).size} graph(s).`,
+    );
+    lines.push(
+      '"refused on purpose" is a refuse node the graph declares: a designed outcome with a reason the trigger maps, not a fault. Effects are stubbed, so no request left this process.',
+    );
     return true;
   }
   lines.push(`${problems.length} problem(s):`);
@@ -324,7 +437,13 @@ function format(
  * once, then each case patches only the fields its rule reads, so a branch differs from an ordinary run
  * in the routing it forces and nothing else. Answers false when the trigger reaches no switch at all.
  */
-async function rehearseTrigger(load: LoadResult, t: Loaded<TriggerDoc>, seed: number, opts: { profile?: string }, decisions: Decision[]): Promise<boolean> {
+async function rehearseTrigger(
+  load: LoadResult,
+  t: Loaded<TriggerDoc>,
+  seed: number,
+  opts: { profile?: string },
+  decisions: Decision[],
+): Promise<boolean> {
   // a first run records what the seed generated for every effectful node, the base each case patches,
   // and the type each node declared, so a case can generate a type-correct value for a field the seed
   // left out. Nodes on a branch this run did not take are absent from the recording; those cases start
@@ -340,7 +459,11 @@ async function rehearseTrigger(load: LoadResult, t: Loaded<TriggerDoc>, seed: nu
   // a binding sits one level deeper than the document suggests: the kernel stubs it at `<node>.op.<id>`.
   const nested = (handler: string): { nodes: Record<string, unknown> } | undefined => {
     if (handler.startsWith('graph:')) {
-      try { return probe.graph(handler.slice('graph:'.length)).spec; } catch { return undefined; }
+      try {
+        return probe.graph(handler.slice('graph:'.length)).spec;
+      } catch {
+        return undefined;
+      }
     }
     const ref = bindingGraph(probe, handler);
     if (!ref) return undefined;
@@ -350,7 +473,15 @@ async function rehearseTrigger(load: LoadResult, t: Loaded<TriggerDoc>, seed: nu
   if (!found.length) return false;
 
   const inType = probe.types(t.doc).in;
-  const cases = (f: FoundSwitch) => casesFor(f, path => record[path], path => types[path], seed, input, inType);
+  const cases = (f: FoundSwitch) =>
+    casesFor(
+      f,
+      path => record[path],
+      path => types[path],
+      seed,
+      input,
+      inType,
+    );
   /**
    * The stubs and input that route every switch enclosing `sw` towards the node that contains it. A
    * nested switch is otherwise cancelled before it runs, and its own case would land on a dead path.
@@ -360,7 +491,14 @@ async function rehearseTrigger(load: LoadResult, t: Loaded<TriggerDoc>, seed: nu
     const patches: { path: string[]; value: unknown }[] = [];
     // a switch inside a mapped operation runs only when the list it maps over has an element to run for
     for (const list of sw.lists) {
-      const need = nonEmpty(list, path => record[path], path => types[path], seed, input, inType);
+      const need = nonEmpty(
+        list,
+        path => record[path],
+        path => types[path],
+        seed,
+        input,
+        inType,
+      );
       Object.assign(stubs, need.stubs);
       patches.push(...need.input);
     }
@@ -368,7 +506,11 @@ async function rehearseTrigger(load: LoadResult, t: Loaded<TriggerDoc>, seed: nu
       // the enclosing call is `<...>.<node>`; the switch governing it is a sibling in the same spec
       const segs = ancestorAt.split('.');
       const nodeId = segs[segs.length - 1];
-      const governing = found.find(f => f.prefix.join('.') === segs.slice(0, -1).join('.') && [...f.node.rules.map(r => r.to), f.node.else].includes(nodeId));
+      const governing = found.find(
+        f =>
+          f.prefix.join('.') === segs.slice(0, -1).join('.') &&
+          [...f.node.rules.map(r => r.to), f.node.else].includes(nodeId),
+      );
       if (!governing) continue;
       const want = cases(governing).find(c => c.branch.to === nodeId && !c.branch.unsolved && !c.unreachable?.length);
       if (!want) continue;
@@ -405,11 +547,25 @@ async function rehearseTrigger(load: LoadResult, t: Loaded<TriggerDoc>, seed: nu
       const answering = cases(other).find(c => c.branch.rule >= 0 && !c.branch.unsolved && !c.unreachable?.length);
       if (answering) Object.assign(downstream, answering.stubs);
     }
-    const d: Decision = { graph: graphOf(probe, t, sw), node: sw.at.split('.').pop()!, triggers: [t.name], branches: [] };
+    const d: Decision = {
+      graph: graphOf(probe, t, sw),
+      node: sw.at.split('.').pop()!,
+      triggers: [t.name],
+      branches: [],
+    };
     for (const c of cases(sw)) {
       const at = { when: c.branch.when, to: c.branch.to };
-      if (c.branch.unsolved) { d.branches.push({ ...at, uncovered: c.branch.unsolved }); continue; }
-      if (c.unreachable?.length) { d.branches.push({ ...at, uncovered: `${c.unreachable.join(', ')} is the trigger's own input and the rehearsal cannot vary it` }); continue; }
+      if (c.branch.unsolved) {
+        d.branches.push({ ...at, uncovered: c.branch.unsolved });
+        continue;
+      }
+      if (c.unreachable?.length) {
+        d.branches.push({
+          ...at,
+          uncovered: `${c.unreachable.join(', ')} is the trigger's own input and the rehearsal cannot vary it`,
+        });
+        continue;
+      }
       const emb = embedderFor(load, { seed, profile: opts.profile });
       // a demand on the graph's own input is met by firing with a patched input, not by a stub
       let fired = input;
@@ -425,7 +581,9 @@ async function rehearseTrigger(load: LoadResult, t: Loaded<TriggerDoc>, seed: nu
 /** The graph document a switch belongs to: the trigger's own graph, or the one its enclosing call runs. */
 function graphOf(emb: Embedder, t: Loaded<TriggerDoc>, sw: FoundSwitch): string {
   let spec = emb.operation(t.doc.fire.run).spec as { nodes: Record<string, unknown> };
-  let graph = bindingGraph(emb, `${emb.scope.canon(t.doc.fire.run.split('#')[0])}#${t.doc.fire.run.split('#')[1]}`) ?? t.doc.fire.run;
+  let graph =
+    bindingGraph(emb, `${emb.scope.canon(t.doc.fire.run.split('#')[0])}#${t.doc.fire.run.split('#')[1]}`) ??
+    t.doc.fire.run;
   graph = emb.scope.canon(graph);
   for (const seg of sw.prefix) {
     const n = spec.nodes?.[seg] as Record<string, unknown> | undefined;
@@ -434,7 +592,11 @@ function graphOf(emb: Embedder, t: Loaded<TriggerDoc>, sw: FoundSwitch): string 
     const ref = handler.startsWith('graph:') ? handler.slice('graph:'.length) : bindingGraph(emb, handler);
     if (!ref) continue;
     graph = emb.scope.canon(ref);
-    try { spec = emb.graph(ref).spec; } catch { /* keep what we have */ }
+    try {
+      spec = emb.graph(ref).spec;
+    } catch {
+      /* keep what we have */
+    }
   }
   return graph;
 }
@@ -444,8 +606,11 @@ function bindingGraph(emb: Embedder, handler: string): string | undefined {
   const hash = handler.lastIndexOf('#');
   if (hash < 0) return undefined;
   const [path, opName] = [handler.slice(0, hash), handler.slice(hash + 1)];
-  try { return (emb.scope.get('binding', path)?.doc as BindingDoc | undefined)?.operations?.[opName]?.graph; }
-  catch { return undefined; }
+  try {
+    return (emb.scope.get('binding', path)?.doc as BindingDoc | undefined)?.operations?.[opName]?.graph;
+  } catch {
+    return undefined;
+  }
 }
 
 // ---- fuzz / regress ----------------------------------------------------------------------------------
@@ -454,14 +619,21 @@ function pick(report: Report, prefix = ''): ScenarioDoc['expect']['nodes'] {
   const out: ScenarioDoc['expect']['nodes'] = {};
   for (const [id, n] of Object.entries(report.nodes)) {
     const key = prefix ? `${prefix}.${id}` : id;
-    out[key] = { status: n.status, ...(n.selected ? { selected: n.selected } : {}), ...(n.status === 'done' && n.out !== undefined ? { out: n.out } : {}) };
+    out[key] = {
+      status: n.status,
+      ...(n.selected ? { selected: n.selected } : {}),
+      ...(n.status === 'done' && n.out !== undefined ? { out: n.out } : {}),
+    };
     if (n.sub) Object.assign(out, pick(n.sub, key));
   }
   return out;
 }
 
 /** Run each trigger under N seeds with stubbed effects and write one scenario per run. */
-export async function fuzz(load: LoadResult, opts: { runs?: number; profile?: string; out?: string } = {}): Promise<string[]> {
+export async function fuzz(
+  load: LoadResult,
+  opts: { runs?: number; profile?: string; out?: string } = {},
+): Promise<string[]> {
   const written: string[] = [];
   const dir = join(load.root, opts.out ?? 'scenarios');
   mkdirSync(dir, { recursive: true });
@@ -474,11 +646,19 @@ export async function fuzz(load: LoadResult, opts: { runs?: number; profile?: st
       const sc: ScenarioDoc = {
         $schema: schemaUrl('scenario'),
         description: `${t.path} under seed ${seed}: ${report.status}. Generated by wilanis fuzz; edit stubs to pin an edge case.`,
-        trigger: t.path, seed, in: input, request, stubs: record,
-        expect: { status: report.status, ...(report.status === 'done' ? { output: report.output } : {}), nodes: pick(report) },
+        trigger: t.path,
+        seed,
+        in: input,
+        request,
+        stubs: record,
+        expect: {
+          status: report.status,
+          ...(report.status === 'done' ? { output: report.output } : {}),
+          nodes: pick(report),
+        },
       };
       const file = join(dir, `${t.name}.${seed}.scenario.json`);
-      writeFileSync(file, JSON.stringify(sc, null, 2) + '\n');
+      writeFileSync(file, `${JSON.stringify(sc, null, 2)}\n`);
       written.push(file);
     }
   }
@@ -488,14 +668,21 @@ export async function fuzz(load: LoadResult, opts: { runs?: number; profile?: st
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /** Replay every scenario with its recorded stubs and diff the report node by node. */
-export async function regress(load: LoadResult, opts: { profile?: string } = {}): Promise<{ ok: boolean; lines: string[] }> {
+export async function regress(
+  load: LoadResult,
+  opts: { profile?: string } = {},
+): Promise<{ ok: boolean; lines: string[] }> {
   const lines: string[] = [];
   let ok = true;
   const emb = embedderFor(load, { seed: 0, profile: opts.profile, env: fakeEnvFor(load) });
   for (const sc of load.registry.all('scenario')) {
     const trigger = load.registry.all('trigger').find(t => t.path === load.resolve(sc.doc.trigger));
     // S001 has already refused a scenario whose trigger is gone; skip rather than replay nothing.
-    if (!trigger) { ok = false; lines.push(`${sc.path}: names unknown trigger '${sc.doc.trigger}'`); continue; }
+    if (!trigger) {
+      ok = false;
+      lines.push(`${sc.path}: names unknown trigger '${sc.doc.trigger}'`);
+      continue;
+    }
     const report: Report = await emb.fire(trigger.doc, sc.doc.in, sc.doc.request ?? {}, { stubs: sc.doc.stubs });
     const diffs: string[] = [];
     if (report.status !== sc.doc.expect.status) diffs.push(`status ${sc.doc.expect.status} → ${report.status}`);
@@ -503,14 +690,17 @@ export async function regress(load: LoadResult, opts: { profile?: string } = {})
     const got = pick(report);
     for (const [id, e] of Object.entries(sc.doc.expect.nodes)) {
       const n = got[id];
-      if (!n) { diffs.push(`${id}: gone`); continue; }
+      if (!n) {
+        diffs.push(`${id}: gone`);
+        continue;
+      }
       if (n.status !== e.status) diffs.push(`${id}: ${e.status} → ${n.status}`);
       if (e.selected && n.selected !== e.selected) diffs.push(`${id}: routed ${e.selected} → ${n.selected}`);
       if ('out' in e && !same(n.out, e.out)) diffs.push(`${id}: out changed`);
     }
     for (const id of Object.keys(got)) if (!(id in sc.doc.expect.nodes)) diffs.push(`${id}: new`);
     if (diffs.length) ok = false;
-    lines.push(`${sc.path}: ${diffs.length ? 'DIFF ' + diffs.join('; ') : 'same'}`);
+    lines.push(`${sc.path}: ${diffs.length ? `DIFF ${diffs.join('; ')}` : 'same'}`);
   }
   return { ok, lines };
 }
@@ -527,7 +717,10 @@ export function ls(load: LoadResult, kind?: Kind): string[] {
   return load.registry.files
     .filter(f => !kind || f.kind === kind)
     .sort((a, b) => a.kind.localeCompare(b.kind) || a.path.localeCompare(b.path))
-    .map(f => `${f.kind.padEnd(16)} ${f.path}${f.native ? '  (native)' : f.included ? `  (included from ${f.included})` : ''}`);
+    .map(
+      f =>
+        `${f.kind.padEnd(16)} ${f.path}${f.native ? '  (native)' : f.included ? `  (included from ${f.included})` : ''}`,
+    );
 }
 
 export function describe(load: LoadResult, ref: string): string {
@@ -537,59 +730,133 @@ export function describe(load: LoadResult, ref: string): string {
   if (!doc) return `no document at '${ref}'`;
   // a native document is a plugin's: say which, and the package it came from, so who implements it is not a code detail
   const from = doc.native ? scope.project?.plugins.find(p => p.use === doc.native)?.from : undefined;
-  const grantedBy = doc.native ? [`granted by  ${doc.native}${from ? `  (${from})` : '  (built into the runtime)'}`] : doc.included ? [`included from  ${doc.included}`] : [];
-  const lines = [`${doc.kind}  ${doc.path}`, ...(doc.file ? [`file  ${doc.file}`] : []), ...grantedBy, doc.doc.description, ''];
-  const showType = (t: unknown) => { try { return show(scope.types.spec(t as string)); } catch { return JSON.stringify(t); } };
+  const grantedBy = doc.native
+    ? [`granted by  ${doc.native}${from ? `  (${from})` : '  (built into the runtime)'}`]
+    : doc.included
+      ? [`included from  ${doc.included}`]
+      : [];
+  const lines = [
+    `${doc.kind}  ${doc.path}`,
+    ...(doc.file ? [`file  ${doc.file}`] : []),
+    ...grantedBy,
+    doc.doc.description,
+    '',
+  ];
+  const showType = (t: unknown) => {
+    try {
+      return show(scope.types.spec(t as string));
+    } catch {
+      return JSON.stringify(t);
+    }
+  };
   if (doc.kind === 'port') {
     for (const [name, op] of Object.entries((doc.doc as PortDoc).operations)) {
-      lines.push(`#${name}${op.pure ? '  (pure)' : ''}${op.refuses ? '  (refuses on purpose)' : ''}${op.holds ? '  (holds until stopped)' : ''}: ${op.description}`);
-      for (const [k, f] of Object.entries(op.accepts ?? {})) lines.push(`    in  ${k}${f.required === false ? '?' : ''}: ${f.type === 'type' ? 'type' : showType(f.type)}${f.static || f.type === 'type' ? '  (static)' : ''}${f.binds ? ` binds ${f.binds}` : ''}${f.enum ? ` ∈ ${f.enum.join('|')}` : ''}${f.description ? '  -- ' + f.description : ''}`);
+      lines.push(
+        `#${name}${op.pure ? '  (pure)' : ''}${op.refuses ? '  (refuses on purpose)' : ''}${op.holds ? '  (holds until stopped)' : ''}: ${op.description}`,
+      );
+      for (const [k, f] of Object.entries(op.accepts ?? {}))
+        lines.push(
+          `    in  ${k}${f.required === false ? '?' : ''}: ${f.type === 'type' ? 'type' : showType(f.type)}${f.static || f.type === 'type' ? '  (static)' : ''}${f.binds ? ` binds ${f.binds}` : ''}${f.enum ? ` ∈ ${f.enum.join('|')}` : ''}${f.description ? `  -- ${f.description}` : ''}`,
+        );
       if (op.returns) lines.push(`    returns ${showType(op.returns)}`);
     }
   } else if (doc.kind === 'trigger-kind' || doc.kind === 'connection-kind' || doc.kind === 'plugin') {
     const d = doc.doc as TriggerKindDoc;
-    if (d.settings) { lines.push('settings:'); for (const [k, f] of Object.entries(d.settings.fields)) lines.push(`    ${k}${f.required === false ? '?' : ''}: ${typeof f.type === 'string' ? f.type : showType(f.type)}${f.enum ? ` ∈ ${f.enum.join('|')}` : ''}${f.binds ? ` binds ${f.binds}` : ''}${f.description ? '  -- ' + f.description : ''}`); }
-    if ('context' in d) { lines.push('context (request.*):'); for (const [k, f] of Object.entries(d.context.fields)) lines.push(`    ${k}${f.required === false ? '?' : ''}: ${typeof f.type === 'string' ? f.type : showType(f.type)}${f.description ? '  -- ' + f.description : ''}`); }
-    if (d.refusals) lines.push(`refusals: settings.${d.refusals} maps each reason a trigger can reach to how it is answered (T005, T006)`);
-    if ('grants' in (d as unknown as { grants?: unknown })) lines.push(`grants: ${JSON.stringify((d as unknown as { grants: unknown }).grants)}`);
-    const guard = (d as unknown as { guard?: { context: { fields: Record<string, { type: unknown; required?: boolean; description?: string }> }; refuses?: Record<string, string>; credentials?: Record<string, { type: unknown; yields: string[]; description?: string }> } }).guard;
+    if (d.settings) {
+      lines.push('settings:');
+      for (const [k, f] of Object.entries(d.settings.fields))
+        lines.push(
+          `    ${k}${f.required === false ? '?' : ''}: ${typeof f.type === 'string' ? f.type : showType(f.type)}${f.enum ? ` ∈ ${f.enum.join('|')}` : ''}${f.binds ? ` binds ${f.binds}` : ''}${f.description ? `  -- ${f.description}` : ''}`,
+        );
+    }
+    if ('context' in d) {
+      lines.push('context (request.*):');
+      for (const [k, f] of Object.entries(d.context.fields))
+        lines.push(
+          `    ${k}${f.required === false ? '?' : ''}: ${typeof f.type === 'string' ? f.type : showType(f.type)}${f.description ? `  -- ${f.description}` : ''}`,
+        );
+    }
+    if (d.refusals)
+      lines.push(
+        `refusals: settings.${d.refusals} maps each reason a trigger can reach to how it is answered (T005, T006)`,
+      );
+    if ('grants' in (d as unknown as { grants?: unknown }))
+      lines.push(`grants: ${JSON.stringify((d as unknown as { grants: unknown }).grants)}`);
+    const guard = (
+      d as unknown as {
+        guard?: {
+          context: { fields: Record<string, { type: unknown; required?: boolean; description?: string }> };
+          refuses?: Record<string, string>;
+          credentials?: Record<string, { type: unknown; yields: string[]; description?: string }>;
+        };
+      }
+    ).guard;
     if (guard) {
       lines.push('guard: identifies callers before any policy runs');
-      lines.push('  adds to request.*:'); for (const [k, f] of Object.entries(guard.context.fields)) lines.push(`    ${k}${f.required === false ? '?' : ''}: ${typeof f.type === 'string' ? f.type : showType(f.type)}${f.description ? '  -- ' + f.description : ''}`);
+      lines.push('  adds to request.*:');
+      for (const [k, f] of Object.entries(guard.context.fields))
+        lines.push(
+          `    ${k}${f.required === false ? '?' : ''}: ${typeof f.type === 'string' ? f.type : showType(f.type)}${f.description ? `  -- ${f.description}` : ''}`,
+        );
       for (const [r, why] of Object.entries(guard.refuses ?? {})) lines.push(`  refuses '${r}': ${why}`);
-      lines.push('  takes, where a trigger attaches a policy ("in"):'); for (const [k, c] of Object.entries(guard.credentials ?? {})) lines.push(`    ${k}: ${typeof c.type === 'string' ? c.type : showType(c.type)}  yields request.${c.yields.join(', request.')}${c.description ? '  -- ' + c.description : ''}`);
+      lines.push('  takes, where a trigger attaches a policy ("in"):');
+      for (const [k, c] of Object.entries(guard.credentials ?? {}))
+        lines.push(
+          `    ${k}: ${typeof c.type === 'string' ? c.type : showType(c.type)}  yields request.${c.yields.join(', request.')}${c.description ? `  -- ${c.description}` : ''}`,
+        );
     }
   } else if (doc.kind === 'shape') {
     lines.push(JSON.stringify(doc.doc, null, 2));
     // who makes or writes values of this shape: every node or delegation whose static `type` names it, with the keys it gives --
     // for a session shape, the link from each attribute to the operation that fills it
     const writers: string[] = [];
-    const literal = (v: unknown) => v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v as Record<string, unknown>) : [];
+    const literal = (v: unknown) =>
+      v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v as Record<string, unknown>) : [];
     const note = (file: string, where: string, run: string, given: Record<string, unknown> | undefined) => {
       // a `type` field naming the shape (object#make, session#set), or an input the contract declares as the shape (issue's attributes)
       const keys: string[] = [];
       let hit = typeof given?.type === 'string' && scope.canon(given.type) === doc.path;
       if (hit) keys.push(...literal(given?.values), ...literal(given?.value));
       const o = scope.op(run);
-      if (typeof o !== 'string') for (const [k, f] of Object.entries(o.op.accepts ?? {})) if (typeof f.type === 'string' && scope.canon(f.type) === doc.path && given?.[k] !== undefined) { hit = true; keys.push(...literal(given[k])); }
+      if (typeof o !== 'string')
+        for (const [k, f] of Object.entries(o.op.accepts ?? {}))
+          if (typeof f.type === 'string' && scope.canon(f.type) === doc.path && given?.[k] !== undefined) {
+            hit = true;
+            keys.push(...literal(given[k]));
+          }
       if (hit) writers.push(`    ${file}#${where}  via ${run}${keys.length ? `  (${keys.join(', ')})` : ''}`);
     };
-    for (const g of load.registry.all('graph')) for (const n of g.doc.nodes) if ('run' in n) note(g.path, n.id, n.run, n.in);
-    for (const b of load.registry.all('binding')) for (const [name, op] of Object.entries(b.doc.operations)) if (op.run) note(b.path, name, op.run, op.in);
+    for (const g of load.registry.all('graph'))
+      for (const n of g.doc.nodes) if ('run' in n) note(g.path, n.id, n.run, n.in);
+    for (const b of load.registry.all('binding'))
+      for (const [name, op] of Object.entries(b.doc.operations)) if (op.run) note(b.path, name, op.run, op.in);
     if (writers.length) lines.push('made or written by (the attributes each gives):', ...writers);
   } else if (doc.kind === 'policy') {
     const d = doc.doc as PolicyDoc;
     lines.push(`decides through  ${d.decide.run}`);
-    for (const [k, v] of Object.entries(d.decide.in ?? {})) lines.push(`    ${k} ← ${typeof v === 'string' ? v : JSON.stringify(v)}`);
+    for (const [k, v] of Object.entries(d.decide.in ?? {}))
+      lines.push(`    ${k} ← ${typeof v === 'string' ? v : JSON.stringify(v)}`);
     lines.push('outcomes (allow is the decision answering):');
-    for (const [reason, o] of Object.entries(d.outcomes)) lines.push(`    ${reason} → ${o.effect}${o.method ? ` (${o.method})` : ''}${o.description ? '  -- ' + o.description : ''}`);
-    const gated = load.registry.all('trigger').filter(t => (t.doc.policies ?? []).some(ref => load.resolve(policyPath(ref)) === doc.path));
-    lines.push(gated.length ? `gates: ${gated.map(t => t.path).join(', ')}` : 'gates: nothing yet -- name it under a trigger\'s policies');
+    for (const [reason, o] of Object.entries(d.outcomes))
+      lines.push(
+        `    ${reason} → ${o.effect}${o.method ? ` (${o.method})` : ''}${o.description ? `  -- ${o.description}` : ''}`,
+      );
+    const gated = load.registry
+      .all('trigger')
+      .filter(t => (t.doc.policies ?? []).some(ref => load.resolve(policyPath(ref)) === doc.path));
+    lines.push(
+      gated.length
+        ? `gates: ${gated.map(t => t.path).join(', ')}`
+        : "gates: nothing yet -- name it under a trigger's policies",
+    );
   } else if (doc.kind === 'trigger') {
     const d = doc.doc as TriggerDoc;
     lines.push(JSON.stringify(doc.doc, null, 2));
     if (d.policies?.length) lines.push(`policies, in order: ${d.policies.map(policyPath).join(', ')}`);
-    for (const u of d.policies ?? []) if (typeof u !== 'string' && u.in) for (const [k, v] of Object.entries(u.in)) lines.push(`  gives the guard '${k}' read from ${JSON.stringify(v)}`);
+    for (const u of d.policies ?? [])
+      if (typeof u !== 'string' && u.in)
+        for (const [k, v] of Object.entries(u.in))
+          lines.push(`  gives the guard '${k}' read from ${JSON.stringify(v)}`);
   } else {
     lines.push(JSON.stringify(doc.doc, null, 2));
   }
@@ -602,33 +869,56 @@ export function map(load: LoadResult): string[] {
   const lines: string[] = [];
   const graph = (ref: string, indent: string, seen: Set<string>) => {
     const g = scope.get('graph', ref);
-    if (!g) { lines.push(`${indent}?? ${ref}`); return; }
+    if (!g) {
+      lines.push(`${indent}?? ${ref}`);
+      return;
+    }
     lines.push(`${indent}${g.path}`);
-    if (seen.has(g.path)) return; seen.add(g.path);
+    if (seen.has(g.path)) return;
+    seen.add(g.path);
     for (const n of g.doc.nodes) {
-      if (!('run' in n)) { lines.push(`${indent}  ${n.id} [switch → ${[...n.rules.map(r => r.to), n.else].join(' | ')}]`); continue; }
+      if (!('run' in n)) {
+        lines.push(`${indent}  ${n.id} [switch → ${[...n.rules.map(r => r.to), n.else].join(' | ')}]`);
+        continue;
+      }
       const o = scope.op(n.run);
-      if (typeof o === 'string') { lines.push(`${indent}  ${n.id} ?? ${n.run}`); continue; }
-      if (o.port.native) { lines.push(`${indent}  ${n.id} ${n.run}${o.op.pure ? '' : '  (effect)'}`); continue; }
+      if (typeof o === 'string') {
+        lines.push(`${indent}  ${n.id} ?? ${n.run}`);
+        continue;
+      }
+      if (o.port.native) {
+        lines.push(`${indent}  ${n.id} ${n.run}${o.op.pure ? '' : '  (effect)'}`);
+        continue;
+      }
       const b = scope.bindingFor(o.path);
       lines.push(`${indent}  ${n.id} ${n.run}`);
-      if (typeof b === 'string') { lines.push(`${indent}    ?? ${b}`); continue; }
+      if (typeof b === 'string') {
+        lines.push(`${indent}    ?? ${b}`);
+        continue;
+      }
       const bop = b.doc.operations[o.opName];
       lines.push(`${indent}    ${b.path}#${o.opName}${bop?.run ? ` → ${bop.run}` : ''}`);
-      if (bop?.graph) graph(bop.graph, indent + '      ', seen);
+      if (bop?.graph) graph(bop.graph, `${indent}      `, seen);
     }
   };
   for (const t of load.registry.all('trigger')) {
     lines.push(`${t.path}  (${t.doc.kind})`);
-    for (const use of t.doc.policies ?? []) { const ref = policyPath(use); const p = scope.get('policy', ref); lines.push(`  gated by ${p?.path ?? `?? ${ref}`}${p ? ` → ${p.doc.decide.run}` : ''}${typeof use !== 'string' && use.in ? `  given ${Object.keys(use.in).join(', ')}` : ''}`); }
+    for (const use of t.doc.policies ?? []) {
+      const ref = policyPath(use);
+      const p = scope.get('policy', ref);
+      lines.push(
+        `  gated by ${p?.path ?? `?? ${ref}`}${p ? ` → ${p.doc.decide.run}` : ''}${typeof use !== 'string' && use.in ? `  given ${Object.keys(use.in).join(', ')}` : ''}`,
+      );
+    }
     const o = load.registry.get('port', load.resolve(t.doc.fire.run.split('#')[0]));
     const opName = t.doc.fire.run.split('#')[1];
     lines.push(`  ${t.doc.fire.run}`);
-    if (o) for (const b of load.registry.all('binding').filter(b => load.resolve(b.doc.port) === o.path)) {
-      const bop = b.doc.operations[opName];
-      if (bop?.graph) graph(bop.graph, '    ', new Set());
-      else if (bop?.run) lines.push(`    ${b.path}#${opName} → ${bop.run}`);
-    }
+    if (o)
+      for (const b of load.registry.all('binding').filter(b => load.resolve(b.doc.port) === o.path)) {
+        const bop = b.doc.operations[opName];
+        if (bop?.graph) graph(bop.graph, '    ', new Set());
+        else if (bop?.run) lines.push(`    ${b.path}#${opName} → ${bop.run}`);
+      }
   }
   const reached = new Set(lines.filter(l => l.trim().endsWith('.graph.json')).map(l => l.trim()));
   for (const g of load.registry.all('graph')) if (!reached.has(g.path)) lines.push(`orphan  ${g.path}`);
@@ -654,16 +944,51 @@ function into(target: string, layer: 'edge' | 'domain' | 'data', kind: string): 
   return `${layer}/${target}${suffix}`;
 }
 
-export function scaffold(root: string, kind: string, target: string, opts: Record<string, string | undefined>): string[] {
+export function scaffold(
+  root: string,
+  kind: string,
+  target: string,
+  opts: Record<string, string | undefined>,
+): string[] {
   const files: [string, unknown][] = [];
   const S = (k: Kind) => schemaUrl(k);
   switch (kind) {
     case 'project':
-      files.push(['package.json', { name: target, private: true, type: 'module', scripts: { check: 'wilanis check .', rehearse: 'wilanis rehearse .', start: 'wilanis start .' }, dependencies: { '@wilanis/plugin-http': '^0.1.0', '@wilanis/runtime': '^0.1.0' } }]);
-      files.push(['project.json', { $schema: S('project'), name: target, description: 'TODO', aliases: {}, plugins: [{ use: '@std' }, { use: '@cli' }, { use: '@http', from: '@wilanis/plugin-http', settings: { port: 8080, codecs: { 'application/json': '@http/codecs/json.codec.json' } } }], secrets: {} }]);
+      files.push([
+        'package.json',
+        {
+          name: target,
+          private: true,
+          type: 'module',
+          scripts: { check: 'wilanis check .', rehearse: 'wilanis rehearse .', start: 'wilanis start .' },
+          dependencies: { '@wilanis/plugin-http': '^0.1.0', '@wilanis/runtime': '^0.1.0' },
+        },
+      ]);
+      files.push([
+        'project.json',
+        {
+          $schema: S('project'),
+          name: target,
+          description: 'TODO',
+          aliases: {},
+          plugins: [
+            { use: '@std' },
+            { use: '@cli' },
+            {
+              use: '@http',
+              from: '@wilanis/plugin-http',
+              settings: { port: 8080, codecs: { 'application/json': '@http/codecs/json.codec.json' } },
+            },
+          ],
+          secrets: {},
+        },
+      ]);
       break;
     case 'feature':
-      files.push([`features/${target}/feature.json`, { $schema: S('feature'), description: 'TODO', exports: [], effects: [] }]);
+      files.push([
+        `features/${target}/feature.json`,
+        { $schema: S('feature'), description: 'TODO', exports: [], effects: [] },
+      ]);
       break;
     case 'shape': {
       // a shape is the world's (edge) or ours (domain); `layer: core` is the domain's word for it. The directory
@@ -674,33 +999,95 @@ export function scaffold(root: string, kind: string, target: string, opts: Recor
       break;
     }
     case 'port':
-      files.push([into(target, 'domain', 'port'), { $schema: S('port'), description: 'TODO', operations: { example: { description: 'TODO', accepts: {}, returns: 'string' } } }]);
+      files.push([
+        into(target, 'domain', 'port'),
+        {
+          $schema: S('port'),
+          description: 'TODO',
+          operations: { example: { description: 'TODO', accepts: {}, returns: 'string' } },
+        },
+      ]);
       break;
     case 'graph':
-      files.push([into(target, opts.layer === 'data' ? 'data' : 'domain', 'graph'), { $schema: S('graph'), description: 'TODO', nodes: [{ type: '@wilanis/node/run.schema.json', id: 'first', run: '@std/text.port.json#fill', in: { values: {}, template: 'hello' } }], out: { type: 'string', from: 'first' } }]);
+      files.push([
+        into(target, opts.layer === 'data' ? 'data' : 'domain', 'graph'),
+        {
+          $schema: S('graph'),
+          description: 'TODO',
+          nodes: [
+            {
+              type: '@wilanis/node/run.schema.json',
+              id: 'first',
+              run: '@std/text.port.json#fill',
+              in: { values: {}, template: 'hello' },
+            },
+          ],
+          out: { type: 'string', from: 'first' },
+        },
+      ]);
       break;
     case 'binding':
       // meets the `example` operation a scaffolded port declares, by delegation; a real port's operations are B001s that name themselves
-      files.push([into(target, 'data', 'binding'), { $schema: S('binding'), description: 'TODO', port: opts.port ?? '@features/TODO/domain/TODO.port.json', operations: { example: { description: 'TODO', run: '@std/text.port.json#fill', in: { values: {}, template: 'TODO' } } } }]);
+      files.push([
+        into(target, 'data', 'binding'),
+        {
+          $schema: S('binding'),
+          description: 'TODO',
+          port: opts.port ?? '@features/TODO/domain/TODO.port.json',
+          operations: {
+            example: { description: 'TODO', run: '@std/text.port.json#fill', in: { values: {}, template: 'TODO' } },
+          },
+        },
+      ]);
       break;
     case 'resolvers':
-      files.push([into(target, 'edge', 'resolvers'), { $schema: S('resolvers'), description: 'TODO', resolvers: { caller: { read: "request.headers['user-agent']", description: 'TODO' } } }]);
+      files.push([
+        into(target, 'edge', 'resolvers'),
+        {
+          $schema: S('resolvers'),
+          description: 'TODO',
+          resolvers: { caller: { read: "request.headers['user-agent']", description: 'TODO' } },
+        },
+      ]);
       break;
     case 'trigger':
-      files.push([into(target, 'edge', 'trigger'), { $schema: S('trigger'), description: 'TODO', kind: opts.kind ?? '@http/http.trigger-kind.json', settings: { route: '/todo', method: 'GET', produces: 'application/json' }, fire: { run: opts.run ?? '@features/TODO/domain/TODO.port.json#todo' } }]);
+      files.push([
+        into(target, 'edge', 'trigger'),
+        {
+          $schema: S('trigger'),
+          description: 'TODO',
+          kind: opts.kind ?? '@http/http.trigger-kind.json',
+          settings: { route: '/todo', method: 'GET', produces: 'application/json' },
+          fire: { run: opts.run ?? '@features/TODO/domain/TODO.port.json#todo' },
+        },
+      ]);
       break;
     case 'policy':
       // a gate: decides through a domain operation over what the guard hands, and says what each reason means
-      files.push([into(target, 'edge', 'policy'), { $schema: S('policy'), description: 'TODO', decide: { run: opts.run ?? '@features/TODO/domain/TODO.port.json#todo', in: { principal: '{{request.principal}}' } }, outcomes: { anonymous: { effect: 'deny' } } }]);
+      files.push([
+        into(target, 'edge', 'policy'),
+        {
+          $schema: S('policy'),
+          description: 'TODO',
+          decide: {
+            run: opts.run ?? '@features/TODO/domain/TODO.port.json#todo',
+            in: { principal: '{{request.principal}}' },
+          },
+          outcomes: { anonymous: { effect: 'deny' } },
+        },
+      ]);
       break;
-    default: throw new Error(`unknown kind '${kind}'; one of project, feature, shape, port, graph, binding, trigger, policy, resolvers`);
+    default:
+      throw new Error(
+        `unknown kind '${kind}'; one of project, feature, shape, port, graph, binding, trigger, policy, resolvers`,
+      );
   }
   const written: string[] = [];
   for (const [rel, doc] of files) {
     const abs = join(root, rel);
     if (existsSync(abs)) throw new Error(`${rel} exists`);
     mkdirSync(dirname(abs), { recursive: true });
-    writeFileSync(abs, JSON.stringify(doc as AnyDoc, null, 2) + '\n');
+    writeFileSync(abs, `${JSON.stringify(doc as AnyDoc, null, 2)}\n`);
     written.push(rel);
   }
   return written;
@@ -710,17 +1097,27 @@ export function scaffold(root: string, kind: string, target: string, opts: Recor
  * wilanis init: write the agent's CLAUDE.md and hooks into a tree from the runtime's templates. A file that
  * exists is kept, never overwritten. Answers one line per file: `wrote <path>` or `kept <path>`.
  */
-export function init(root: string, templates = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates')): string[] {
+export function init(
+  root: string,
+  templates = join(dirname(fileURLToPath(import.meta.url)), '..', 'templates'),
+): string[] {
   const out: string[] = [];
   const put = (from: string, to: string) => {
-    if (existsSync(to)) { out.push(`kept ${to}`); return; }
+    if (existsSync(to)) {
+      out.push(`kept ${to}`);
+      return;
+    }
     mkdirSync(dirname(to), { recursive: true });
     writeFileSync(to, readFileSync(from));
     out.push(`wrote ${to}`);
   };
   for (const f of readdirSync(templates)) {
-    const from = join(templates, f), to = join(root, f.replace(/^dot-/, '.'));
-    if (f === 'dot-claude') { for (const g of readdirSync(from)) put(join(from, g), join(to, g)); continue; }
+    const from = join(templates, f),
+      to = join(root, f.replace(/^dot-/, '.'));
+    if (f === 'dot-claude') {
+      for (const g of readdirSync(from)) put(join(from, g), join(to, g));
+      continue;
+    }
     put(from, to);
   }
   return out;

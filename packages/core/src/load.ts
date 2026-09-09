@@ -4,91 +4,31 @@
  * Judges each file against its kind schema, canonicalises paths (@root, project aliases, plugin roots),
  * and answers a Registry the checker and compiler share.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { basename, join, relative, sep } from 'node:path';
-import { layerOf, RefusalList, Registry, type AnyDoc, type Kind, type Layer, type Loaded, type ProjectDoc, type Refusal } from './model.js';
-import { validateDocument } from './validate.js';
+import { join, relative } from 'node:path';
+import { Documents, PROJECT_FILE, parseJson, readProject } from './documents.js';
+import type { ProjectDoc } from './model.js';
+import { makeResolver, RESERVED_ROOTS, subdirectories, treePath, walk } from './paths.js';
 import type { PluginModule } from './plugin.js';
+import { type Refusal, RefusalList, Registry } from './registry.js';
+import { validateDocument } from './validate.js';
+
+export { featureOf, makeResolver, stem } from './paths.js';
 
 export interface LoadResult {
-  registry: Registry; refusals: RefusalList; root: string; plugins: PluginModule[]; resolve: (ref: string) => string;
+  registry: Registry;
+  refusals: RefusalList;
+  root: string;
+  plugins: PluginModule[];
+  resolve: (ref: string) => string;
   /** Every alias in force: the project's, and those the includes brought along. */
   aliases: Record<string, string>;
 }
 
 /** A tree this one includes, resolved to where its package sits on disk: the runtime resolves it from the project's node_modules. */
-export interface ResolvedInclude { from: string; dir: string; features?: string[] }
-
-function walk(dir: string, out: string[] = []): string[] {
-  for (const name of readdirSync(dir)) {
-    if (name.startsWith('.') || name === 'node_modules') continue;
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) walk(p, out);
-    else if (name.endsWith('.json') && name !== 'package.json' && name !== 'package-lock.json' && name !== 'tsconfig.json') out.push(p);
-  }
-  return out;
-}
-
-export function featureOf(rel: string): string | undefined {
-  const parts = rel.split(sep);
-  return parts[0] === 'features' && parts.length > 2 ? parts[1] : undefined;
-}
-
-/** The filename stem without the kind suffix: tasks.port.json -> tasks. */
-export const stem = (file: string) => basename(file).replace(/\.json$/, '').replace(/\.[a-z-]+$/, '');
-
-/** Canonicalise a reference: expand a project alias (@tasks/x -> @features/tasks/x). Plugin roots and root paths stay as they are. */
-export function makeResolver(aliases: Record<string, string>, pluginRoots: Set<string>) {
-  return (ref: string): string => {
-    const m = /^(@[a-z][a-z0-9-]*)(\/.*)?$/.exec(ref);
-    if (!m) return ref;
-    const [, alias, rest] = m;
-    if (pluginRoots.has(alias) || alias === '@features' || alias === '@connections' || alias === '@scenarios') return ref;
-    const target = aliases[alias];
-    if (target !== undefined) return target.replace(/\/$/, '') + (rest ?? '');
-    return ref;
-  };
-}
-
-/**
- * Where a kind may live. A feature's documents sit in one of three layer directories and the layer is the
- * rule: `edge/` speaks the world, `domain/` holds the business rules, `data/` translates and carries the
- * effects. A connection is a channel shared across features, so it stays at the tree's root.
- */
-const HOME: Partial<Record<Kind, { layers?: Layer[]; dir?: string; why: string }>> = {
-  trigger: { layers: ['edge'], why: 'a trigger is a way in: it speaks the world\'s vocabulary' },
-  policy: { layers: ['edge'], why: 'a policy gates a way in: it reads the request the way a trigger does' },
-  graph: { layers: ['domain', 'data'], why: 'a graph is business rules (domain/) or a translation (data/)' },
-  binding: { layers: ['data'], why: 'a binding says how a domain port is met, which is the data layer\'s job' },
-  port: { layers: ['domain'], why: 'a domain port is the contract the business offers' },
-  shape: { layers: ['edge', 'domain'], why: 'a shape is the world\'s (edge/) or ours (domain/)' },
-  resolvers: { layers: ['edge'], why: 'a resolvers document names what is read from the request, which is the world\'s vocabulary' },
-  connection: { dir: 'connections', why: 'a connection is a channel to an external system, shared across features' },
-  scenario: { dir: 'scenarios', why: 'a scenario is a recorded run' },
-};
-
-/** The refusal for a document that is not where its kind lives, or null when it is home. */
-function misplaced(kind: Kind, file: string, feature: string | undefined, doc: unknown): Refusal | null {
-  const home = HOME[kind];
-  if (!home) return null;
-  if (home.dir) {
-    if (file.split('/')[0] === home.dir) return null;
-    return { code: 'D008', file, message: `a ${kind} lives under ${home.dir}/`, hint: `${home.why}; move it to ${home.dir}/${stem(file)}.${kind}.json` };
-  }
-  const layers = home.layers!;
-  if (!feature) return { code: 'D008', file, message: `a ${kind} lives inside a feature, under ${layers.map(l => `${l}/`).join(' or ')}`, hint: `${home.why}; move it to features/<name>/${layers[0]}/` };
-  const layer = layerOf(`@${file}`);
-  // a shape says its layer twice -- in `layer` and in the directory. They must agree, and the directory wins.
-  if (kind === 'shape' && layer) {
-    const declared = (doc as { layer?: string }).layer === 'edge' ? 'edge' : 'domain';
-    if (declared !== layer) return { code: 'D008', file, at: 'layer', message: `shape declares layer '${(doc as { layer?: string }).layer}' but sits in ${layer}/`, hint: `a shape's layer is where it lives; move it to features/${feature}/${declared}/, or set "layer": "${layer === 'edge' ? 'edge' : 'core'}"` };
-  }
-  if (layer && layers.includes(layer)) return null;
-  return {
-    code: 'D008', file,
-    message: layer ? `a ${kind} may not live in the ${layer} layer` : `a ${kind} must sit in a layer directory (${layers.join(', ')})`,
-    hint: `${home.why}; move it to features/${feature}/${layers[0]}/${stem(file)}.${kind}.json`,
-  };
+export interface ResolvedInclude {
+  from: string;
+  dir: string;
+  features?: string[];
 }
 
 /**
@@ -96,116 +36,240 @@ function misplaced(kind: Kind, file: string, feature: string | undefined, doc: u
  * project includes, resolved to their directories. An include's features load as if they sat here -- the same
  * paths, the same rules -- and its aliases come along; its connections, plugins and settings stay behind.
  */
-export function loadTree(root: string, available: Record<string, PluginModule>, includes: ResolvedInclude[] = []): LoadResult {
-  const registry = new Registry();
-  const refusals = new RefusalList();
-  const files = walk(root);
+export function loadTree(
+  root: string,
+  available: Record<string, PluginModule>,
+  includes: ResolvedInclude[] = [],
+): LoadResult {
+  return new Loader(root, available, includes).load();
+}
 
-  // project first: aliases and plugins shape every other resolution
-  const projectFile = files.find(f => relative(root, f) === 'project.json');
-  let project: ProjectDoc | undefined;
-  if (!projectFile) refusals.add({ code: 'D005', file: 'project.json', message: 'no project.json at the root', hint: 'wilanis new project <name>' });
-  else {
-    try {
-      const parsed = JSON.parse(readFileSync(projectFile, 'utf8'));
-      const v = validateDocument(parsed, 'project.json');
-      v.refusals.forEach(r => refusals.add(r));
-      if (!v.refusals.length && v.kind === 'project') project = parsed as ProjectDoc;
-      else if (!v.refusals.length) refusals.add({ code: 'D003', file: 'project.json', message: 'project.json must be a project document' });
-    } catch (e) { refusals.add({ code: 'D000', file: 'project.json', message: `not JSON: ${(e as Error).message}` }); }
+class Loader {
+  private readonly registry = new Registry();
+  private readonly refusals = new RefusalList();
+  private readonly documents = new Documents(this.registry, this.refusals);
+  private readonly plugins: PluginModule[] = [];
+  private readonly pluginRoots = new Set<string>();
+  private readonly aliases: Record<string, string> = {};
+  private readonly files: string[];
+  private readonly project: ProjectDoc | undefined;
+
+  constructor(
+    private readonly root: string,
+    private readonly available: Record<string, PluginModule>,
+    private readonly includes: ResolvedInclude[],
+  ) {
+    this.files = walk(root);
+    // project first: aliases and plugins shape every other resolution
+    this.project = this.loadProject();
   }
 
-  const plugins: PluginModule[] = [];
-  const pluginRoots = new Set<string>();
-  for (const [i, p] of (project?.plugins ?? []).entries()) {
-    const mod = available[p.use];
-    if (!mod) { refusals.add({ code: 'D006', file: 'project.json', at: `plugins/${i}`, message: `unknown plugin '${p.use}'`, hint: `available here: ${Object.keys(available).join(', ')}. A plugin package is named by "from" in project.json` }); continue; }
-    plugins.push(mod); pluginRoots.add(p.use);
+  load(): LoadResult {
+    this.resolvePlugins();
+    Object.assign(this.aliases, this.project?.aliases ?? {});
+    for (const alias of Object.keys(this.aliases)) this.checkAlias(alias, `aliases/${alias}`);
+    const included = this.includes.filter((include, index) => this.readInclude(include, index));
+    this.registerTree();
+    this.registerIncludes(included);
+    for (const plugin of this.plugins) this.documents.registerPlugin(plugin);
+    const resolve = makeResolver(this.aliases, this.pluginRoots);
+    return {
+      registry: this.registry,
+      refusals: this.refusals,
+      root: this.root,
+      plugins: this.plugins,
+      resolve,
+      aliases: this.aliases,
+    };
   }
-  const aliases: Record<string, string> = { ...(project?.aliases ?? {}) };
-  const checkAlias = (a: string, at: string) => {
-    if (pluginRoots.has(a)) refusals.add({ code: 'D007', file: 'project.json', at, message: `alias '${a}' collides with plugin root '${a}'` });
-    if (['@wilanis', '@features', '@connections', '@scenarios'].includes(a)) refusals.add({ code: 'D007', file: 'project.json', at, message: `alias '${a}' is reserved` });
-    const top = readdirSync(root).filter(n => statSync(join(root, n)).isDirectory());
-    if (top.includes(a.slice(1))) refusals.add({ code: 'D007', file: 'project.json', at, message: `alias '${a}' collides with the folder '${a.slice(1)}/'` });
-  };
-  for (const a of Object.keys(aliases)) checkAlias(a, `aliases/${a}`);
 
-  // includes: each is a wilanis tree of its own. Its aliases come along, so its documents keep naming themselves; its
-  // plugins must be ones this project names, since the host configures them; nothing else of its project.json is read
-  const included: { inc: ResolvedInclude; i: number }[] = [];
-  for (const [i, inc] of includes.entries()) {
-    const at = `includes/${i}`;
-    let theirs: ProjectDoc | undefined;
-    try {
-      const parsed = JSON.parse(readFileSync(join(inc.dir, 'project.json'), 'utf8'));
-      const v = validateDocument(parsed, `${inc.from}/project.json`);
-      if (!v.refusals.length && v.kind === 'project') theirs = parsed as ProjectDoc;
-    } catch { /* reported below */ }
-    if (!theirs) { refusals.add({ code: 'D010', file: 'project.json', at, message: `'${inc.from}' is not a wilanis tree: no project.json in ${inc.dir}`, hint: 'an include is a package holding project.json and features/' }); continue; }
-    for (const p of theirs.plugins) if (!pluginRoots.has(p.use)) refusals.add({ code: 'D010', file: 'project.json', at, message: `'${inc.from}' uses plugin '${p.use}', which this project does not name`, hint: `add { "use": "${p.use}"${p.use === '@std' || p.use === '@cli' ? '' : `, "from": "..."`} } to project.json → plugins, with the settings its README says` });
-    for (const [a, target] of Object.entries(theirs.aliases ?? {})) {
-      if (a in aliases) { if (aliases[a] !== target) refusals.add({ code: 'D007', file: 'project.json', at, message: `alias '${a}' is '${aliases[a]}' here and '${target}' in '${inc.from}'`, hint: 'an include brings its aliases along; drop yours or rename it' }); continue; }
-      aliases[a] = target; checkAlias(a, at);
+  private refuse(refusal: Refusal): void {
+    this.refusals.add(refusal);
+  }
+
+  // ---- the project --------------------------------------------------------------------------------
+
+  /** D005 without a project.json, D000 when it is not JSON, D003 when it is another kind; its own schema refusals otherwise. */
+  private loadProject(): ProjectDoc | undefined {
+    const abs = join(this.root, PROJECT_FILE);
+    if (!this.files.some(file => relative(this.root, file) === PROJECT_FILE)) {
+      this.refuse({
+        code: 'D005',
+        file: PROJECT_FILE,
+        message: 'no project.json at the root',
+        hint: 'wilanis new project <name>',
+      });
+      return undefined;
     }
-    included.push({ inc, i });
-  }
-  const resolve = makeResolver(aliases, pluginRoots);
-
-  /** Judge and register one tree document, the host's or an include's. */
-  const register = (abs: string, file: string, from?: string) => {
-    let parsed: unknown;
-    try { parsed = JSON.parse(readFileSync(abs, 'utf8')); }
-    catch (e) { refusals.add({ code: 'D000', file, message: `not JSON: ${(e as Error).message}` }); return; }
-    const v = validateDocument(parsed, file);
-    if (v.refusals.length) { v.refusals.forEach(r => refusals.add(r)); return; }
-    const kind = v.kind!;
-    const doc = parsed as AnyDoc;
-    const feature = featureOf(file.split('/').join(sep));
-    if (kind === 'project') { refusals.add({ code: 'D003', file, message: 'the project document is project.json at the root' }); return; }
-    if (kind === 'feature' && file !== `features/${feature}/feature.json`) { refusals.add({ code: 'D003', file, message: 'a feature lives at features/<name>/feature.json' }); return; }
-    if (['plugin', 'trigger-kind', 'connection-kind', 'codec'].includes(kind)) { refusals.add({ code: 'D004', file, message: `${kind} documents are shipped by plugins, never authored in a tree` }); return; }
-    const bad = misplaced(kind, file, feature, doc);
-    if (bad) { refusals.add(bad); return; }
-    registry.add({ doc, kind, path: `@${file}`, name: kind === 'feature' ? feature! : stem(file), feature, layer: layerOf(`@${file}`), file: abs, ...(from ? { included: from } : {}) });
-  };
-
-  for (const abs of files) {
-    const rel = relative(root, abs);
-    const file = rel.split(sep).join('/');
-    if (file === 'project.json') { if (project) registry.add({ doc: project, kind: 'project', path: '@project.json', name: project.name, file: abs }); continue; }
-    register(abs, file);
+    const parsed = parseJson(abs, PROJECT_FILE);
+    if ('refusal' in parsed) {
+      this.refuse(parsed.refusal);
+      return undefined;
+    }
+    const judged = validateDocument(parsed.doc, PROJECT_FILE);
+    for (const refusal of judged.refusals) this.refuse(refusal);
+    if (judged.refusals.length) return undefined;
+    if (judged.kind === 'project') return parsed.doc as ProjectDoc;
+    this.refuse({ code: 'D003', file: PROJECT_FILE, message: 'project.json must be a project document' });
+    return undefined;
   }
 
-  // an include's features, as if they sat here; one both here and there is refused rather than shadowed
-  const featuresHere = new Set(registry.files.map(f => f.feature).filter((f): f is string => Boolean(f)));
-  for (const { inc, i } of included) {
-    const dir = join(inc.dir, 'features');
+  /** D006: every plugin the project names is available here. */
+  private resolvePlugins(): void {
+    for (const [index, use] of (this.project?.plugins ?? []).entries()) {
+      const plugin = this.available[use.use];
+      if (!plugin) {
+        this.refuse({
+          code: 'D006',
+          file: PROJECT_FILE,
+          at: `plugins/${index}`,
+          message: `unknown plugin '${use.use}'`,
+          hint: `available here: ${Object.keys(this.available).join(', ')}. A plugin package is named by "from" in project.json`,
+        });
+        continue;
+      }
+      this.plugins.push(plugin);
+      this.pluginRoots.add(use.use);
+    }
+  }
+
+  /** D007: an alias collides with nothing -- not a plugin root, not a reserved root, not a folder of the tree. */
+  private checkAlias(alias: string, at: string): void {
+    const collision = (message: string) => this.refuse({ code: 'D007', file: PROJECT_FILE, at, message });
+    if (this.pluginRoots.has(alias)) collision(`alias '${alias}' collides with plugin root '${alias}'`);
+    if (RESERVED_ROOTS.includes(alias)) collision(`alias '${alias}' is reserved`);
+    if (subdirectories(this.root).includes(alias.slice(1)))
+      collision(`alias '${alias}' collides with the folder '${alias.slice(1)}/'`);
+  }
+
+  /** Every document of this tree; the project document takes its place under @project.json. */
+  private registerTree(): void {
+    for (const abs of this.files) {
+      const file = treePath(relative(this.root, abs));
+      if (file !== PROJECT_FILE) {
+        this.documents.register(abs, file);
+        continue;
+      }
+      if (this.project) {
+        this.registry.add({
+          doc: this.project,
+          kind: 'project',
+          path: '@project.json',
+          name: this.project.name,
+          file: abs,
+        });
+      }
+    }
+  }
+
+  // ---- includes -----------------------------------------------------------------------------------
+
+  /**
+   * An include is a wilanis tree of its own. Its aliases come along, so its documents keep naming themselves;
+   * its plugins must be ones this project names, since the host configures them; nothing else of its
+   * project.json is read (D010, D007). Answers whether the include can be walked.
+   */
+  private readInclude(include: ResolvedInclude, index: number): boolean {
+    const at = `includes/${index}`;
+    const theirs = readProject(include.dir, `${include.from}/project.json`);
+    if (!theirs) {
+      this.refuse({
+        code: 'D010',
+        file: PROJECT_FILE,
+        at,
+        message: `'${include.from}' is not a wilanis tree: no project.json in ${include.dir}`,
+        hint: 'an include is a package holding project.json and features/',
+      });
+      return false;
+    }
+    for (const use of theirs.plugins) {
+      if (this.pluginRoots.has(use.use)) continue;
+      const from = use.use === '@std' || use.use === '@cli' ? '' : `, "from": "..."`;
+      this.refuse({
+        code: 'D010',
+        file: PROJECT_FILE,
+        at,
+        message: `'${include.from}' uses plugin '${use.use}', which this project does not name`,
+        hint: `add { "use": "${use.use}"${from} } to project.json → plugins, with the settings its README says`,
+      });
+    }
+    for (const [alias, target] of Object.entries(theirs.aliases ?? {})) this.adoptAlias(alias, target, include, at);
+    return true;
+  }
+
+  /** An include's alias comes along; one this project also declares must mean the same thing. */
+  private adoptAlias(alias: string, target: string, include: ResolvedInclude, at: string): void {
+    if (!(alias in this.aliases)) {
+      this.aliases[alias] = target;
+      this.checkAlias(alias, at);
+      return;
+    }
+    if (this.aliases[alias] === target) return;
+    this.refuse({
+      code: 'D007',
+      file: PROJECT_FILE,
+      at,
+      message: `alias '${alias}' is '${this.aliases[alias]}' here and '${target}' in '${include.from}'`,
+      hint: 'an include brings its aliases along; drop yours or rename it',
+    });
+  }
+
+  /** Every include's features, as if they sat here; one both here and there is refused rather than shadowed (D009). */
+  private registerIncludes(included: ResolvedInclude[]): void {
+    const taken = new Set(
+      this.registry.files.map(entry => entry.feature).filter((name): name is string => Boolean(name)),
+    );
+    for (const include of included) {
+      const index = this.includes.indexOf(include);
+      const dir = join(include.dir, 'features');
+      const wanted = (this.featuresShipped(include, dir, index) ?? []).filter(
+        name => !include.features || include.features.includes(name),
+      );
+      for (const name of wanted) this.registerFeature(include, index, name, taken);
+    }
+  }
+
+  /** One feature of an include: every document under it, marked as included from that package. */
+  private registerFeature(include: ResolvedInclude, index: number, name: string, taken: Set<string>): void {
+    if (taken.has(name)) {
+      this.refuse({
+        code: 'D009',
+        file: PROJECT_FILE,
+        at: `includes/${index}`,
+        message: `feature '${name}' is both in this tree and included from '${include.from}'`,
+        hint: 'rename the local feature, or leave it out of the include with "features"',
+      });
+      return;
+    }
+    taken.add(name);
+    for (const abs of walk(join(include.dir, 'features', name))) {
+      this.documents.register(abs, treePath(relative(include.dir, abs)), include.from);
+    }
+  }
+
+  /** The features an include ships, or nothing when it ships no features/ directory; each one asked for must be among them. */
+  private featuresShipped(include: ResolvedInclude, dir: string, index: number): string[] | undefined {
     let names: string[];
-    try { names = readdirSync(dir).filter(n => statSync(join(dir, n)).isDirectory()); } catch { refusals.add({ code: 'D010', file: 'project.json', at: `includes/${i}`, message: `'${inc.from}' ships no features/ directory` }); continue; }
-    for (const want of inc.features ?? []) if (!names.includes(want)) refusals.add({ code: 'D010', file: 'project.json', at: `includes/${i}/features`, message: `'${inc.from}' ships no feature '${want}' (it ships ${names.join(', ') || 'none'})` });
-    for (const name of names) {
-      if (inc.features && !inc.features.includes(name)) continue;
-      if (featuresHere.has(name)) { refusals.add({ code: 'D009', file: 'project.json', at: `includes/${i}`, message: `feature '${name}' is both in this tree and included from '${inc.from}'`, hint: 'rename the local feature, or leave it out of the include with "features"' }); continue; }
-      featuresHere.add(name);
-      for (const abs of walk(join(dir, name))) register(abs, relative(inc.dir, abs).split(sep).join('/'), inc.from);
+    try {
+      names = subdirectories(dir);
+    } catch {
+      this.refuse({
+        code: 'D010',
+        file: PROJECT_FILE,
+        at: `includes/${index}`,
+        message: `'${include.from}' ships no features/ directory`,
+      });
+      return undefined;
     }
-  }
-
-  for (const mod of plugins) {
-    let docs: string[];
-    try { docs = walk(mod.docs); } catch (e) { refusals.add({ code: 'D006', file: 'project.json', message: `plugin '${mod.root}' has no documents at ${mod.docs}: ${(e as Error).message}` }); continue; }
-    if (!docs.some(f => relative(mod.docs, f) === 'plugin.json')) refusals.add({ code: 'D006', file: 'project.json', message: `plugin '${mod.root}' ships no plugin.json in ${mod.docs}` });
-    for (const abs of docs) {
-      const path = `${mod.root}/${relative(mod.docs, abs).split(sep).join('/')}`;
-      let parsed: unknown;
-      try { parsed = JSON.parse(readFileSync(abs, 'utf8')); }
-      catch (e) { refusals.add({ code: 'D000', file: path, message: `not JSON: ${(e as Error).message}` }); continue; }
-      const v = validateDocument(parsed, path);
-      v.refusals.forEach(r => refusals.add(r));
-      if (v.refusals.length) continue;
-      registry.add({ doc: parsed as AnyDoc, kind: v.kind!, path, name: stem(path), native: mod.root, file: abs } as Loaded);
+    for (const want of include.features ?? []) {
+      if (names.includes(want)) continue;
+      this.refuse({
+        code: 'D010',
+        file: PROJECT_FILE,
+        at: `includes/${index}/features`,
+        message: `'${include.from}' ships no feature '${want}' (it ships ${names.join(', ') || 'none'})`,
+      });
     }
+    return names;
   }
-  return { registry, refusals, root, plugins, resolve, aliases };
 }

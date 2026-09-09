@@ -2,24 +2,37 @@
 import { createReadStream } from 'node:fs';
 import { basename, extname } from 'node:path';
 import type { Readable } from 'node:stream';
-import { isBlobHandle, type BlobHandle, type LoadResult, type Serving, type TriggerDoc } from '@wilanis/core';
-import type { Embedder } from './embed.js';
-import type { Report } from '@wilanis/engine';
 import { checkTree } from '@wilanis/compiler';
+import { type BlobHandle, isBlobHandle, type LoadResult, type Serving } from '@wilanis/core';
+import type { Report } from '@wilanis/engine';
+import { FileBlobStore } from './blobs.js';
+import type { Embedder } from './embed.js';
 import { loadProject } from './project.js';
 import { embedderFor } from './tools.js';
-import { FileBlobStore } from './blobs.js';
 
 /** Run every plugin's postLoad hook in project.json order; answers a teardown that runs theirs in reverse. */
-export async function postLoad(load: LoadResult, emb: Embedder, log: (s: string) => void): Promise<() => Promise<void>> {
+export async function postLoad(
+  load: LoadResult,
+  emb: Embedder,
+  log: (s: string) => void,
+): Promise<() => Promise<void>> {
   const downs: (() => Promise<void>)[] = [];
   for (const p of load.plugins) {
     if (!p.postLoad) continue;
     const settings = (emb.env.plugins as Record<string, Record<string, unknown>>)[p.root] ?? {};
-    const down = await p.postLoad({ root: load.root, registry: load.registry, scope: emb.scope, settings, env: emb.env, log });
+    const down = await p.postLoad({
+      root: load.root,
+      registry: load.registry,
+      scope: emb.scope,
+      settings,
+      env: emb.env,
+      log,
+    });
     if (down) downs.push(down);
   }
-  return async () => { for (const d of downs.reverse()) await d(); };
+  return async () => {
+    for (const d of downs.reverse()) await d();
+  };
 }
 
 /**
@@ -32,10 +45,18 @@ export async function runStartup(load: LoadResult, emb: Embedder, log: (s: strin
   for (const [i, step] of steps.entries()) {
     const name = step.label ?? step.run;
     const report = await emb.startup(step);
-    if (report.status === 'done') { log(`startup ${i + 1}/${steps.length} ${name}: ok`); continue; }
+    if (report.status === 'done') {
+      log(`startup ${i + 1}/${steps.length} ${name}: ok`);
+      continue;
+    }
     const why = failureOf(report);
-    if (step.required === false) { log(`startup ${i + 1}/${steps.length} ${name}: ${why} (optional, going on)`); continue; }
-    throw new Error(`startup step ${i} '${name}' ${why}; nothing is serving. Mark it "required": false in project.json to serve without it.`);
+    if (step.required === false) {
+      log(`startup ${i + 1}/${steps.length} ${name}: ${why} (optional, going on)`);
+      continue;
+    }
+    throw new Error(
+      `startup step ${i} '${name}' ${why}; nothing is serving. Mark it "required": false in project.json to serve without it.`,
+    );
   }
 }
 
@@ -54,9 +75,17 @@ function failureOf(report: Report): string {
  * one load, so `swap` can put a freshly loaded tree behind a socket that never closed -- what `@reload` does.
  */
 export class Served {
-  constructor(private current: { load: LoadResult; emb: Embedder }, readonly log: (s: string) => void, private readonly profile?: string) {}
-  get emb() { return this.current.emb; }
-  get load() { return this.current.load; }
+  constructor(
+    private current: { load: LoadResult; emb: Embedder },
+    readonly log: (s: string) => void,
+    private readonly profile?: string,
+  ) {}
+  get emb() {
+    return this.current.emb;
+  }
+  get load() {
+    return this.current.load;
+  }
 
   /**
    * Load and judge the tree again; serve it only if it is clean. What was held stays held -- the listener is
@@ -76,20 +105,30 @@ export class Served {
     return { ok: true, documents: load.registry.files.length };
   }
   /** Put a newly loaded tree behind whatever is already listening. The old embedder's held things are not stopped: the listener is the same one. */
-  swap(load: LoadResult, emb: Embedder) { this.current = { load, emb }; }
+  swap(load: LoadResult, emb: Embedder) {
+    this.current = { load, emb };
+  }
   /** What a `holds` operation reads as env.serving: every member goes through `current`, so a swap is seen at once. */
   serving(): Serving {
     const held = this;
     return {
-      triggers: kind => held.load.registry.all('trigger').filter(t => held.load.resolve(t.doc.kind) === kind).map(t => t.doc),
+      triggers: kind =>
+        held.load.registry
+          .all('trigger')
+          .filter(t => held.load.resolve(t.doc.kind) === kind)
+          .map(t => t.doc),
       fire: ({ trigger, input, request, blobs }) => held.emb.fire(trigger, input, request, { blobs }),
       types: t => held.emb.types(t),
       inputFor: (t, r) => held.emb.inputFor(t, r),
       codecs: root => held.emb.codecsOf(root),
-      get blobs() { return held.emb.blobs; },
+      get blobs() {
+        return held.emb.blobs;
+      },
       log: held.log,
       reload: () => held.reload(),
-      get root() { return held.load.root; },
+      get root() {
+        return held.load.root;
+      },
     };
   }
 }
@@ -99,7 +138,10 @@ export class Served {
  * listens, and whether anything listens at all, is what those steps say: a tree whose startup names no
  * `holds` operation serves nothing and this answers at once. Answers the way to stop what was held.
  */
-export async function start(load: LoadResult, opts: { profile?: string; log?: (s: string) => void } = {}): Promise<{ stop: () => Promise<void>; held: number }> {
+export async function start(
+  load: LoadResult,
+  opts: { profile?: string; log?: (s: string) => void } = {},
+): Promise<{ stop: () => Promise<void>; held: number }> {
   const log = opts.log ?? ((s: string) => console.log(s));
   const emb = embedderFor(load, { profile: opts.profile });
   if (emb.missingSecrets.length) throw new Error(`missing secrets: ${emb.missingSecrets.join(', ')}`);
@@ -111,13 +153,30 @@ export async function start(load: LoadResult, opts: { profile?: string; log?: (s
     await down();
     if (emb.blobs instanceof FileBlobStore) emb.blobs.destroy();
   };
-  try { await runStartup(load, emb, log); }
-  catch (e) { await bye(); throw e; }
+  try {
+    await runStartup(load, emb, log);
+  } catch (e) {
+    await bye();
+    throw e;
+  }
   return { stop: bye, held: emb.held.length };
 }
 
 /** The content type a file on disk is taken to have, by its extension; anything else is a stream of bytes. */
-const BY_EXTENSION: Record<string, string> = { '.csv': 'text/csv', '.json': 'application/json', '.txt': 'text/plain', '.md': 'text/markdown', '.html': 'text/html', '.xml': 'application/xml', '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.zip': 'application/zip' };
+const BY_EXTENSION: Record<string, string> = {
+  '.csv': 'text/csv',
+  '.json': 'application/json',
+  '.txt': 'text/plain',
+  '.md': 'text/markdown',
+  '.html': 'text/html',
+  '.xml': 'application/xml',
+  '.pdf': 'application/pdf',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.zip': 'application/zip',
+};
 export const contentTypeOf = (file: string) => BY_EXTENSION[extname(file).toLowerCase()] ?? 'application/octet-stream';
 
 /**
@@ -126,22 +185,44 @@ export const contentTypeOf = (file: string) => BY_EXTENSION[extname(file).toLowe
  * streams a file into the blob registry and hands its handle as request.file; a blob answer is streamed to
  * `--out`, or to stdout, by `deliver`. The run's blobs are released once delivered.
  */
-export async function runTrigger(load: LoadResult, ref: string, flags: Record<string, string>, args: string[], opts: { profile?: string; seed?: number; log?: (s: string) => void; deliver?: (body: Readable, handle: BlobHandle) => Promise<void> } = {}) {
+export async function runTrigger(
+  load: LoadResult,
+  ref: string,
+  flags: Record<string, string>,
+  args: string[],
+  opts: {
+    profile?: string;
+    seed?: number;
+    log?: (s: string) => void;
+    deliver?: (body: Readable, handle: BlobHandle) => Promise<void>;
+  } = {},
+) {
   const t = load.registry.get('trigger', load.resolve(ref));
   if (!t) throw new Error(`no trigger at '${ref}'`);
   const emb = embedderFor(load, { profile: opts.profile, seed: opts.seed });
-  const down = opts.seed === undefined ? await postLoad(load, emb, opts.log ?? ((s: string) => console.error(s))) : async () => {};
+  const down =
+    opts.seed === undefined ? await postLoad(load, emb, opts.log ?? ((s: string) => console.error(s))) : async () => {};
   const blobs = emb.blobs.scope();
   try {
     const request: Record<string, unknown> = { flags, args, cwd: process.cwd() };
     if (flags.in !== undefined) request.body = JSON.parse(flags.in);
-    if (flags.file !== undefined) request.file = await blobs.put(createReadStream(flags.file), { contentType: contentTypeOf(flags.file), filename: basename(flags.file) });
+    if (flags.file !== undefined)
+      request.file = await blobs.put(createReadStream(flags.file), {
+        contentType: contentTypeOf(flags.file),
+        filename: basename(flags.file),
+      });
     const built = emb.inputFor(t.doc, request);
     if ('error' in built) throw new Error(`input: ${built.error}`);
     const report = await emb.fire(t.doc, built.input, request, { blobs });
-    const runtime = load.plugins.flatMap(p => Object.entries(p.triggers ?? {})).find(([k]) => k === load.resolve(t.doc.kind))?.[1];
+    const runtime = load.plugins
+      .flatMap(p => Object.entries(p.triggers ?? {}))
+      .find(([k]) => k === load.resolve(t.doc.kind))?.[1];
     const answer = runtime?.encode ? runtime.encode(t.doc, report) : report.output;
     if (isBlobHandle(answer) && opts.deliver) await opts.deliver(blobs.open(answer), answer);
     return { report, answer };
-  } finally { await blobs.release(); await down(); if (emb.blobs instanceof FileBlobStore) emb.blobs.destroy(); }
+  } finally {
+    await blobs.release();
+    await down();
+    if (emb.blobs instanceof FileBlobStore) emb.blobs.destroy();
+  }
 }

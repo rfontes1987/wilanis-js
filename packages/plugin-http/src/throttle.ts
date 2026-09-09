@@ -3,7 +3,10 @@
  * most `perSecond` started in any one second. A request past either limit waits its turn; nothing is dropped.
  * One gate per connection, so every node that names the connection shares the same limit.
  */
-export interface ThrottleSettings { concurrency?: number; perSecond?: number }
+export interface ThrottleSettings {
+  concurrency?: number;
+  perSecond?: number;
+}
 
 export class Throttle {
   private inFlight = 0;
@@ -21,7 +24,9 @@ export class Throttle {
 
   /** Whether these settings would build the same gate. */
   same(settings: ThrottleSettings = {}): boolean {
-    return (settings.concurrency ?? Infinity) === this.concurrency && (settings.perSecond ?? Infinity) === this.perSecond;
+    return (
+      (settings.concurrency ?? Infinity) === this.concurrency && (settings.perSecond ?? Infinity) === this.perSecond
+    );
   }
 
   /** How long until one more request may start: 0 now, Infinity once a slot frees up, else the milliseconds to wait. */
@@ -44,8 +49,12 @@ export class Throttle {
     }
     this.inFlight++;
     this.started.push(Date.now());
-    try { return await fn(); }
-    finally { this.inFlight--; this.waiting.shift()?.(); }
+    try {
+      return await fn();
+    } finally {
+      this.inFlight--;
+      this.waiting.shift()?.();
+    }
   }
 }
 
@@ -53,8 +62,14 @@ export class Throttle {
 const gates = new WeakMap<object, Map<string, Throttle>>();
 export function throttleFor(env: object, connection: string, settings: ThrottleSettings | undefined): Throttle {
   let byConn = gates.get(env);
-  if (!byConn) { byConn = new Map(); gates.set(env, byConn); }
+  if (!byConn) {
+    byConn = new Map();
+    gates.set(env, byConn);
+  }
   let t = byConn.get(connection);
-  if (!t || !t.same(settings)) { t = new Throttle(settings); byConn.set(connection, t); }
+  if (!t?.same(settings)) {
+    t = new Throttle(settings);
+    byConn.set(connection, t);
+  }
   return t;
 }

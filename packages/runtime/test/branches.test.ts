@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { branchesOf, satisfy, type Branch } from '../src/branches.js';
+import { type Branch, branchesOf, satisfy } from '../src/branches.js';
 
 /** The demands of one case, by the node it routes to. */
 const to = (bs: Branch[], target: string) => bs.find(b => b.to === target)!;
 
 describe('solving a switch to its branches', () => {
   it('gives one case per rule and one for the else', () => {
-    const bs = branchesOf([{ when: 'a == 1', to: 'x' }, { when: 'a == 2', to: 'y' }], 'z');
+    const bs = branchesOf(
+      [
+        { when: 'a == 1', to: 'x' },
+        { when: 'a == 2', to: 'y' },
+      ],
+      'z',
+    );
     expect(bs.map(b => b.to)).toEqual(['x', 'y', 'z']);
     expect(bs.map(b => b.rule)).toEqual([0, 1, -1]);
   });
@@ -19,13 +25,25 @@ describe('solving a switch to its branches', () => {
   });
 
   it('narrows a later rule against the rules before it', () => {
-    const bs = branchesOf([{ when: 'n > 10', to: 'big' }, { when: 'n > 5', to: 'mid' }], 'small');
+    const bs = branchesOf(
+      [
+        { when: 'n > 10', to: 'big' },
+        { when: 'n > 5', to: 'mid' },
+      ],
+      'small',
+    );
     expect(to(bs, 'mid').demands).toEqual({ n: { gt: 5, present: true, lte: 10 } });
     expect(to(bs, 'small').demands).toEqual({ n: { lte: 5, present: true } });
   });
 
   it('treats a missing path as satisfying an inequality', () => {
-    const bs = branchesOf([{ when: 'kind == "urgent"', to: 'a' }, { when: '!has(kind)', to: 'b' }], 'c');
+    const bs = branchesOf(
+      [
+        { when: 'kind == "urgent"', to: 'a' },
+        { when: '!has(kind)', to: 'b' },
+      ],
+      'c',
+    );
     expect(to(bs, 'b').demands.kind.absent).toBe(true);
   });
 
@@ -42,7 +60,13 @@ describe('solving a switch to its branches', () => {
   });
 
   it('reports a rule shadowed by an earlier one as uncovered', () => {
-    const bs = branchesOf([{ when: 'status >= 200', to: 'rows' }, { when: 'status == 200', to: 'also' }], 'failed');
+    const bs = branchesOf(
+      [
+        { when: 'status >= 200', to: 'rows' },
+        { when: 'status == 200', to: 'also' },
+      ],
+      'failed',
+    );
     expect(to(bs, 'also').unsolved).toMatch(/no inputs satisfy/);
   });
 

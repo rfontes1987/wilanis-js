@@ -9,10 +9,39 @@
  * For every kind, the references the document makes and the documents that make references to it, so a
  * reader can walk the tree in both directions. Nothing here draws; it answers JSON a page lays out.
  */
-import { policyPath, Scope, expr, show, splitPath, substitute, hasVars, isRun, isSwitch, isMap, typeAt, TEMPLATE, WHOLE_TEMPLATE } from '@wilanis/core';
-import type { Kind, Layer, Loaded, LoadResult, GraphDoc, Operation, Outcome, PolicyDoc, Refusal, TriggerDoc, Type, Values } from '@wilanis/core';
-import { SCHEMA_BASE, WILANIS } from '@wilanis/core';
+
 import { bindings, checkTree, refusalsOfTrigger } from '@wilanis/compiler';
+import type {
+  GraphDoc,
+  Kind,
+  Layer,
+  Loaded,
+  LoadResult,
+  Operation,
+  Outcome,
+  PolicyDoc,
+  Refusal,
+  TriggerDoc,
+  Type,
+  Values,
+} from '@wilanis/core';
+import {
+  expr,
+  hasVars,
+  isMap,
+  isRun,
+  isSwitch,
+  policyPath,
+  SCHEMA_BASE,
+  Scope,
+  show,
+  splitPath,
+  substitute,
+  TEMPLATE,
+  typeAt,
+  WHOLE_TEMPLATE,
+  WILANIS,
+} from '@wilanis/core';
 
 export interface VPort {
   /** The port's name; an attribute port is its path below the parent, joined with dots (body.id). */
@@ -114,7 +143,10 @@ export interface VDecision {
  * One line of a condition said in words: `if status is 200`, `and body exists`. Its parts are words, values
  * as written, and the inputs the rule reads, so a page can point from a name in the sentence to the port.
  */
-export interface VSaid { lead: 'if' | 'and' | 'or'; parts: VSaidPart[] }
+export interface VSaid {
+  lead: 'if' | 'and' | 'or';
+  parts: VSaidPart[];
+}
 export type VSaidPart = { text: string } | { value: string } | { input: string; text: string };
 
 export interface VEdge {
@@ -161,7 +193,11 @@ export interface DocView {
   refusals: Refusal[];
   graph?: { nodes: VNode[]; edges: VEdge[]; role: 'domain' | 'data' };
   /** On a port: every binding that meets it, and what each does per operation. */
-  implementations?: { path: string; label: string; operations: Record<string, { graph?: string; graphLabel?: string; run?: string }> }[];
+  implementations?: {
+    path: string;
+    label: string;
+    operations: Record<string, { graph?: string; graphLabel?: string; run?: string }>;
+  }[];
   /** On a trigger: the port operation it fires, and where that leads. */
   fires?: VTarget;
   /** On a trigger whose kind maps refusals: every reason it can reach or maps, how it is answered, and the nodes that refuse with it. */
@@ -179,17 +215,43 @@ export interface DocView {
 }
 
 /** One refusal reason at a trigger: how the trigger answers it (absent: not mapped), and where it comes from (empty: nothing reaches it). */
-export interface VAnswer { reason: string; answer?: unknown; from: { graph: string; graphLabel: string; node: string; nodeLabel: string }[] }
+export interface VAnswer {
+  reason: string;
+  answer?: unknown;
+  from: { graph: string; graphLabel: string; node: string; nodeLabel: string }[];
+}
 /** A trigger that reaches a refusing node: how it answers that node's reason. `maps` is false when the kind answers every refusal alike. */
-export interface VAnsweredBy { trigger: string; triggerLabel: string; maps: boolean; answer?: unknown }
+export interface VAnsweredBy {
+  trigger: string;
+  triggerLabel: string;
+  maps: boolean;
+  answer?: unknown;
+}
 
-export interface IndexEntry { path: string; kind: Kind; name: string; label: string; feature?: string; layer?: Layer; native?: string; included?: string; file?: string; description: string }
+export interface IndexEntry {
+  path: string;
+  kind: Kind;
+  name: string;
+  label: string;
+  feature?: string;
+  layer?: Layer;
+  native?: string;
+  included?: string;
+  file?: string;
+  description: string;
+}
 
 /** A document's label, or its file name made readable (get-row → Get row). */
-export function labelOf(doc: Loaded | undefined): string { return doc?.doc.label ?? readable(doc?.name ?? ''); }
+export function labelOf(doc: Loaded | undefined): string {
+  return doc?.doc.label ?? readable(doc?.name ?? '');
+}
 /** kebab-case, snake_case or camelCase made into words, capitalised once. */
 export function readable(id: string): string {
-  const words = id.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').trim().toLowerCase();
+  const words = id
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[-_]+/g, ' ')
+    .trim()
+    .toLowerCase();
   return words ? words[0].toUpperCase() + words.slice(1) : id;
 }
 
@@ -208,9 +270,27 @@ export interface TreeIndex {
 export function indexOf(load: LoadResult): TreeIndex {
   const refusals = checkTree(load).items;
   const docs = load.registry.files
-    .slice().sort((a, b) => a.kind.localeCompare(b.kind) || a.path.localeCompare(b.path))
-    .map(f => ({ path: f.path, kind: f.kind, name: f.name, label: labelOf(f), feature: f.feature, layer: f.layer, native: f.native, file: f.file, description: f.doc.description }));
-  return { root: load.root, project: load.registry.project?.doc.name, aliases: load.aliases, schemaBase: SCHEMA_BASE, docs, refusals };
+    .slice()
+    .sort((a, b) => a.kind.localeCompare(b.kind) || a.path.localeCompare(b.path))
+    .map(f => ({
+      path: f.path,
+      kind: f.kind,
+      name: f.name,
+      label: labelOf(f),
+      feature: f.feature,
+      layer: f.layer,
+      native: f.native,
+      file: f.file,
+      description: f.doc.description,
+    }));
+  return {
+    root: load.root,
+    project: load.registry.project?.doc.name,
+    aliases: load.aliases,
+    schemaBase: SCHEMA_BASE,
+    docs,
+    refusals,
+  };
 }
 
 // ---- schemas --------------------------------------------------------------------------------------
@@ -251,8 +331,19 @@ export interface SchemaView {
 /** The view of one schema, read from core's schemas directory. */
 export function schemaViewOf(rel: string, schema: unknown, file?: string): SchemaView {
   const s = (schema ?? {}) as { title?: string; description?: string };
-  const kind = rel.includes('/') || rel === 'common.schema.json' ? undefined : (rel.replace(/\.schema\.json$/, '') as Kind);
-  return { kind: 'schema', path: `${WILANIS}/${rel}`, rel, judges: kind, label: s.title ?? rel, description: s.description ?? '', url: `${SCHEMA_BASE}/${rel}`, file, schema };
+  const kind =
+    rel.includes('/') || rel === 'common.schema.json' ? undefined : (rel.replace(/\.schema\.json$/, '') as Kind);
+  return {
+    kind: 'schema',
+    path: `${WILANIS}/${rel}`,
+    rel,
+    judges: kind,
+    label: s.title ?? rel,
+    description: s.description ?? '',
+    url: `${SCHEMA_BASE}/${rel}`,
+    file,
+    schema,
+  };
 }
 
 /** The view of one document by path (an alias is accepted); undefined when there is no such document. */
@@ -263,29 +354,61 @@ export function viewOf(load: LoadResult, ref: string): DocView | undefined {
   const index = referenceIndex(load, scope);
   const refusals = checkTree(load).items.filter(r => r.file === doc.path || `@${r.file}` === doc.path);
   const view: DocView = {
-    path: doc.path, kind: doc.kind, name: doc.name, label: labelOf(doc), feature: doc.feature, layer: doc.layer, native: doc.native, included: doc.included,
-    from: doc.native ? scope.project?.plugins.find(p => p.use === doc.native)?.from : undefined, file: doc.file,
-    description: doc.doc.description, doc: doc.doc,
-    refs: index.filter(r => r.from === doc.path).map(r => ({ path: r.to, label: labelOf(scope.registry.any(r.to)), kind: r.kind, at: r.at })),
+    path: doc.path,
+    kind: doc.kind,
+    name: doc.name,
+    label: labelOf(doc),
+    feature: doc.feature,
+    layer: doc.layer,
+    native: doc.native,
+    included: doc.included,
+    from: doc.native ? scope.project?.plugins.find(p => p.use === doc.native)?.from : undefined,
+    file: doc.file,
+    description: doc.doc.description,
+    doc: doc.doc,
+    refs: index
+      .filter(r => r.from === doc.path)
+      .map(r => ({ path: r.to, label: labelOf(scope.registry.any(r.to)), kind: r.kind, at: r.at })),
     callers: callersOf(doc.path, index, scope),
     refusals,
   };
   if (doc.kind === 'graph') view.graph = graphView(scope, doc as Loaded<GraphDoc>);
-  if (doc.kind === 'port') view.implementations = scope.bindingsFor(doc.path).map(b => ({
-    path: b.path, label: labelOf(b),
-    operations: Object.fromEntries(Object.entries(b.doc.operations).map(([op, bop]) => { const g = bop.graph ? scope.get('graph', bop.graph) : undefined; return [op, { graph: g?.path, graphLabel: g ? labelOf(g) : undefined, run: bop.run }]; })),
-  }));
+  if (doc.kind === 'port')
+    view.implementations = scope.bindingsFor(doc.path).map(b => ({
+      path: b.path,
+      label: labelOf(b),
+      operations: Object.fromEntries(
+        Object.entries(b.doc.operations).map(([op, bop]) => {
+          const g = bop.graph ? scope.get('graph', bop.graph) : undefined;
+          return [op, { graph: g?.path, graphLabel: g ? labelOf(g) : undefined, run: bop.run }];
+        }),
+      ),
+    }));
   if (doc.kind === 'trigger') {
     const t = doc.doc as TriggerDoc;
-    view.fires = targetOf(scope, t.fire.run).target; view.answers = answersOf(scope, doc as Loaded<TriggerDoc>);
-    if (t.policies?.length) view.policies = t.policies.map(use => { const ref = policyPath(use); const p = scope.get('policy', ref); return { path: p?.path ?? scope.canon(ref), label: p ? labelOf(p) : readable(stemOf(ref)), decide: p?.doc.decide.run ?? '', ...(typeof use !== 'string' && use.in ? { gives: use.in } : {}) }; });
+    view.fires = targetOf(scope, t.fire.run).target;
+    view.answers = answersOf(scope, doc as Loaded<TriggerDoc>);
+    if (t.policies?.length)
+      view.policies = t.policies.map(use => {
+        const ref = policyPath(use);
+        const p = scope.get('policy', ref);
+        return {
+          path: p?.path ?? scope.canon(ref),
+          label: p ? labelOf(p) : readable(stemOf(ref)),
+          decide: p?.doc.decide.run ?? '',
+          ...(typeof use !== 'string' && use.in ? { gives: use.in } : {}),
+        };
+      });
   }
   if (doc.kind === 'policy') {
     const p = doc.doc as PolicyDoc;
     view.decides = targetOf(scope, p.decide.run).target;
     view.outcomes = p.outcomes;
     if (p.proves?.length) view.proves = p.proves;
-    view.gates = scope.registry.all('trigger').filter(t => (t.doc.policies ?? []).some(ref => scope.canon(policyPath(ref)) === doc.path)).map(t => ({ path: t.path, label: labelOf(t) }));
+    view.gates = scope.registry
+      .all('trigger')
+      .filter(t => (t.doc.policies ?? []).some(ref => scope.canon(policyPath(ref)) === doc.path))
+      .map(t => ({ path: t.path, label: labelOf(t) }));
   }
   return view;
 }
@@ -300,8 +423,16 @@ function refusalMapOf(scope: Scope, t: Loaded<TriggerDoc>): { at: string; map: R
   const kind = scope.get('trigger-kind', t.doc.kind);
   const at = kind?.doc.refusals;
   if (!at) return undefined;
-  const table = at.split('.').reduce<unknown>((v, k) => (v && typeof v === 'object' ? (v as Record<string, unknown>)[k] : undefined), t.doc.settings);
-  return { at, map: table && typeof table === 'object' && !Array.isArray(table) ? (table as Record<string, unknown>) : {} };
+  const table = at
+    .split('.')
+    .reduce<unknown>(
+      (v, k) => (v && typeof v === 'object' ? (v as Record<string, unknown>)[k] : undefined),
+      t.doc.settings,
+    );
+  return {
+    at,
+    map: table && typeof table === 'object' && !Array.isArray(table) ? (table as Record<string, unknown>) : {},
+  };
 }
 
 /** Every reason a trigger can reach under any profile, with the nodes that refuse with it; plus each reason it maps, reached or not. */
@@ -309,7 +440,14 @@ function answersOf(scope: Scope, t: Loaded<TriggerDoc>): VAnswer[] | undefined {
   const declared = refusalMapOf(scope, t);
   if (!declared) return undefined;
   const byReason = new Map<string, VAnswer>();
-  const answer = (reason: string) => { let a = byReason.get(reason); if (!a) { a = { reason, answer: declared.map[reason], from: [] }; byReason.set(reason, a); } return a; };
+  const answer = (reason: string) => {
+    let a = byReason.get(reason);
+    if (!a) {
+      a = { reason, answer: declared.map[reason], from: [] };
+      byReason.set(reason, a);
+    }
+    return a;
+  };
   // what the trigger fires, what its policies decide through, and the guard's own reasons (a plugin.json, node 'identify': no graph node to point at)
   for (const prof of profilesOf(scope)) {
     for (const r of refusalsOfTrigger(scope, t.doc, prof)) {
@@ -317,7 +455,12 @@ function answersOf(scope: Scope, t: Loaded<TriggerDoc>): VAnswer[] | undefined {
       if (a.from.some(f => f.graph === r.file && f.node === r.node)) continue;
       const g = scope.registry.get('graph', r.file);
       const n = g?.doc.nodes.find(x => x.id === r.node);
-      a.from.push({ graph: r.file, graphLabel: labelOf(scope.registry.any(r.file)), node: r.node, nodeLabel: n?.label ?? readable(r.node) });
+      a.from.push({
+        graph: r.file,
+        graphLabel: labelOf(scope.registry.any(r.file)),
+        node: r.node,
+        nodeLabel: n?.label ?? readable(r.node),
+      });
     }
   }
   for (const reason of Object.keys(declared.map)) answer(reason);
@@ -328,17 +471,30 @@ function answersOf(scope: Scope, t: Loaded<TriggerDoc>): VAnswer[] | undefined {
 function answeredBy(scope: Scope, graphPath: string, node: string): VAnsweredBy[] {
   const out: VAnsweredBy[] = [];
   for (const t of scope.registry.all('trigger')) {
-    const hit = profilesOf(scope).flatMap(p => refusalsOfTrigger(scope, t.doc, p)).find(r => r.file === graphPath && r.node === node);
+    const hit = profilesOf(scope)
+      .flatMap(p => refusalsOfTrigger(scope, t.doc, p))
+      .find(r => r.file === graphPath && r.node === node);
     if (!hit) continue;
     const declared = refusalMapOf(scope, t);
-    out.push({ trigger: t.path, triggerLabel: labelOf(t), maps: Boolean(declared), ...(declared ? { answer: declared.map[hit.reason] } : {}) });
+    out.push({
+      trigger: t.path,
+      triggerLabel: labelOf(t),
+      maps: Boolean(declared),
+      ...(declared ? { answer: declared.map[hit.reason] } : {}),
+    });
   }
   return out;
 }
 
 // ---- references -----------------------------------------------------------------------------------
 
-interface IndexedRef { from: string; to: string; kind: Kind; at: string; opName?: string }
+interface IndexedRef {
+  from: string;
+  to: string;
+  kind: Kind;
+  at: string;
+  opName?: string;
+}
 
 /** Every string in every document that names another document, with the JSON pointer it sits at. */
 function referenceIndex(load: LoadResult, scope: Scope): IndexedRef[] {
@@ -347,11 +503,16 @@ function referenceIndex(load: LoadResult, scope: Scope): IndexedRef[] {
     if (typeof v === 'string') {
       if (!v.startsWith('@') || v.startsWith('@wilanis/')) return;
       const i = v.lastIndexOf('#');
-      const path = i < 0 ? v : v.slice(0, i), op = i < 0 ? undefined : v.slice(i + 1);
+      const path = i < 0 ? v : v.slice(0, i),
+        op = i < 0 ? undefined : v.slice(i + 1);
       const target = scope.any(path.replace(/(\[\])+$/, ''));
-      if (target && target.path !== from.path) out.push({ from: from.path, to: target.path, kind: target.kind, at, opName: op });
-    } else if (Array.isArray(v)) v.forEach((x, i) => walk(from, x, `${at}/${i}`));
-    else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v as Record<string, unknown>)) { if (k !== '$schema') walk(from, x, `${at}/${k}`); }
+      if (target && target.path !== from.path)
+        out.push({ from: from.path, to: target.path, kind: target.kind, at, opName: op });
+    } else if (Array.isArray(v)) for (const [i, x] of v.entries()) walk(from, x, `${at}/${i}`);
+    else if (v && typeof v === 'object')
+      for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+        if (k !== '$schema') walk(from, x, `${at}/${k}`);
+      }
   };
   for (const f of load.registry.files) walk(f, f.doc, '');
   return out;
@@ -372,7 +533,8 @@ function callersOf(path: string, index: IndexedRef[], scope: Scope): VRef[] {
     const port = scope.canon(b.doc.port);
     for (const c of index) {
       if (c.opName !== m[1] || c.to !== port) continue;
-      if (!out.some(o => o.path === c.from && o.at === c.at)) out.push({ path: c.from, label: label(c.from), kind: c.kind, at: c.at, via: `${port}#${m[1]}` });
+      if (!out.some(o => o.path === c.from && o.at === c.at))
+        out.push({ path: c.from, label: label(c.from), kind: c.kind, at: c.at, via: `${port}#${m[1]}` });
     }
   }
   // the index carries the target's kind; a caller's is its own
@@ -389,38 +551,108 @@ function graphView(scope: Scope, g: Loaded<GraphDoc>): NonNullable<DocView['grap
   const edges: VEdge[] = [];
   /** Each node's result type, for typing the attribute ports deep reads open. */
   const types = new Map<string, Type | undefined>();
-  const typeOf = (spec: unknown): string | undefined => { try { return show(scope.types.spec(spec as string)); } catch { return typeof spec === 'string' ? spec : undefined; } };
-  const resolvedType = (spec: unknown): Type | undefined => { try { return scope.types.spec(spec as string); } catch { return undefined; } };
+  const typeOf = (spec: unknown): string | undefined => {
+    try {
+      return show(scope.types.spec(spec as string));
+    } catch {
+      return typeof spec === 'string' ? spec : undefined;
+    }
+  };
+  const resolvedType = (spec: unknown): Type | undefined => {
+    try {
+      return scope.types.spec(spec as string);
+    } catch {
+      return undefined;
+    }
+  };
 
   // the graph's input: one output port per field of its in type
-  if (doc.in) { const t = resolvedType(doc.in); types.set('in', t); nodes.push({ id: 'in', kind: 'in', label: 'Input', type: typeOf(doc.in), inputs: [], outputs: fieldPorts(t, typeOf(doc.in)) }); }
+  if (doc.in) {
+    const t = resolvedType(doc.in);
+    types.set('in', t);
+    nodes.push({
+      id: 'in',
+      kind: 'in',
+      label: 'Input',
+      type: typeOf(doc.in),
+      inputs: [],
+      outputs: fieldPorts(t, typeOf(doc.in)),
+    });
+  }
   if (doc.constants) {
     const fields: Record<string, { type: Type; required: boolean }> = {};
-    for (const [k, c] of Object.entries(doc.constants)) { const t = resolvedType(c.type); if (t) fields[k] = { type: t, required: true }; }
+    for (const [k, c] of Object.entries(doc.constants)) {
+      const t = resolvedType(c.type);
+      if (t) fields[k] = { type: t, required: true };
+    }
     types.set('const', { kind: 'object', fields, open: false });
-    nodes.push({ id: 'const', kind: 'const', label: 'Constants', inputs: [], outputs: Object.entries(doc.constants).map(([k, c]) => ({ name: k, type: typeOf(c.type), literal: JSON.stringify(c.value), description: c.description })) });
+    nodes.push({
+      id: 'const',
+      kind: 'const',
+      label: 'Constants',
+      inputs: [],
+      outputs: Object.entries(doc.constants).map(([k, c]) => ({
+        name: k,
+        type: typeOf(c.type),
+        literal: JSON.stringify(c.value),
+        description: c.description,
+      })),
+    });
   }
 
   // the resolvers this graph reads: name -> the segments below request, and the label a reader sees
   const resolvers = new Map<string, { path: string[]; label: string; description?: string }>();
   const rdoc = doc.resolvers ? scope.get('resolvers', doc.resolvers) : undefined;
-  if (rdoc) for (const [name, r] of Object.entries(rdoc.doc.resolvers)) resolvers.set(name, { path: splitPath(r.read).slice(1), label: r.label ?? readable(name), description: r.description });
+  if (rdoc)
+    for (const [name, r] of Object.entries(rdoc.doc.resolvers))
+      resolvers.set(name, {
+        path: splitPath(r.read).slice(1),
+        label: r.label ?? readable(name),
+        description: r.description,
+      });
 
   for (const n of doc.nodes) {
     if (isSwitch(n)) {
       const label = n.label ?? readable(n.id);
       n.rules.forEach((r, i) => {
-        const id = `${n.id}/${i + 1}`, last = i === n.rules.length - 1;
+        const id = `${n.id}/${i + 1}`,
+          last = i === n.rules.length - 1;
         const otherwise = last ? n.else : `${n.id}/${i + 2}`;
         // a rule reads only what its condition names; a condition that does not parse (a refusal says so) reads everything
         const says = said(r.when);
-        const names = says ? new Set(says.flatMap(l => l.parts).flatMap(p => 'input' in p ? [p.input] : [])) : undefined;
+        const names = says
+          ? new Set(says.flatMap(l => l.parts).flatMap(p => ('input' in p ? [p.input] : [])))
+          : undefined;
         const read = Object.fromEntries(Object.entries(n.in).filter(([k]) => !names || names.has(k)));
         const inputs: VPort[] = Object.entries(read).map(([k, v]) => ({ name: k, ...written(scope, v) }));
-        const outputs: VPort[] = [{ name: 'then', description: r.to }, ...(last ? [{ name: 'otherwise', description: n.else }] : [])];
+        const outputs: VPort[] = [
+          { name: 'then', description: r.to },
+          ...(last ? [{ name: 'otherwise', description: n.else }] : []),
+        ];
         const lines = says ?? [{ lead: 'if' as const, parts: [{ text: r.when }] }];
-        const spoken = lines.map(l => l.lead + ' ' + l.parts.map(p => 'value' in p ? p.value : p.text).join('')).join(' ');
-        nodes.push({ id, kind: 'rule', label: spoken, description: r.description, inputs, outputs, says: lines, decision: { id: n.id, label, description: n.description, when: r.when, rule: i + 1, of: n.rules.length, then: r.to, otherwise, last } });
+        const spoken = lines
+          .map(l => `${l.lead} ${l.parts.map(p => ('value' in p ? p.value : p.text)).join('')}`)
+          .join(' ');
+        nodes.push({
+          id,
+          kind: 'rule',
+          label: spoken,
+          description: r.description,
+          inputs,
+          outputs,
+          says: lines,
+          decision: {
+            id: n.id,
+            label,
+            description: n.description,
+            when: r.when,
+            rule: i + 1,
+            of: n.rules.length,
+            then: r.to,
+            otherwise,
+            last,
+          },
+        });
         wire(edges, id, read, resolvers);
         edges.push({ from: id, fromPort: 'then', to: r.to, toPort: WHOLE, kind: 'route' });
         edges.push({ from: id, fromPort: 'otherwise', to: otherwise, toPort: WHOLE, kind: 'route' });
@@ -432,13 +664,37 @@ function graphView(scope: Scope, g: Loaded<GraphDoc>): NonNullable<DocView['grap
     const result = resultType(scope, op, n.in);
     if (isRun(n)) {
       types.set(n.id, result);
-      nodes.push({ id: n.id, kind: 'run', label: n.label ?? readable(n.id), op: n.run, description: n.description, inputs: inputPorts(scope, op, n.in), outputs: outputPorts(result, op), target: t.target, ...(t.target.refuses ? { answeredBy: answeredBy(scope, g.path, n.id) } : {}) });
+      nodes.push({
+        id: n.id,
+        kind: 'run',
+        label: n.label ?? readable(n.id),
+        op: n.run,
+        description: n.description,
+        inputs: inputPorts(scope, op, n.in),
+        outputs: outputPorts(result, op),
+        target: t.target,
+        ...(t.target.refuses ? { answeredBy: answeredBy(scope, g.path, n.id) } : {}),
+      });
       wire(edges, n.id, n.in, resolvers);
     } else if (isMap(n)) {
       const list: Type | undefined = result ? { kind: 'list', of: result } : undefined;
       types.set(n.id, list);
-      const inputs: VPort[] = [{ name: 'over', ...written(scope, n.over), description: 'the list mapped over' }, ...inputPorts(scope, op, n.in, n.bind)];
-      nodes.push({ id: n.id, kind: 'map', label: n.label ?? readable(n.id), op: n.run, description: n.description, inputs, outputs: list ? [{ name: WHOLE, type: show(list) }] : [], target: t.target, bind: n.bind, onItemFailure: n.onItemFailure });
+      const inputs: VPort[] = [
+        { name: 'over', ...written(scope, n.over), description: 'the list mapped over' },
+        ...inputPorts(scope, op, n.in, n.bind),
+      ];
+      nodes.push({
+        id: n.id,
+        kind: 'map',
+        label: n.label ?? readable(n.id),
+        op: n.run,
+        description: n.description,
+        inputs,
+        outputs: list ? [{ name: WHOLE, type: show(list) }] : [],
+        target: t.target,
+        bind: n.bind,
+        onItemFailure: n.onItemFailure,
+      });
       wire(edges, n.id, { over: n.over, ...(n.in ?? {}) }, resolvers);
     }
   }
@@ -447,13 +703,38 @@ function graphView(scope: Scope, g: Loaded<GraphDoc>): NonNullable<DocView['grap
     const from = Array.isArray(doc.out.from) ? doc.out.from : [doc.out.from];
     // the out node shows what the graph answers: the fields of its type. Candidates arrive at the node, not at a port:
     // with several, the first that settled is the answer, and the edge says which place each one holds
-    nodes.push({ id: 'out', kind: 'out', label: 'Output', type: typeOf(doc.out.type), description: doc.out.description, inputs: [], outputs: [], fields: fieldPorts(resolvedType(doc.out.type)) });
-    from.forEach((f, i) => edges.push({ from: f, fromPort: WHOLE, to: 'out', toPort: WHOLE, kind: 'out', label: from.length > 1 ? `${ordinal(i + 1)} candidate` : undefined }));
+    nodes.push({
+      id: 'out',
+      kind: 'out',
+      label: 'Output',
+      type: typeOf(doc.out.type),
+      description: doc.out.description,
+      inputs: [],
+      outputs: [],
+      fields: fieldPorts(resolvedType(doc.out.type)),
+    });
+    for (const [i, f] of from.entries())
+      edges.push({
+        from: f,
+        fromPort: WHOLE,
+        to: 'out',
+        toPort: WHOLE,
+        kind: 'out',
+        label: from.length > 1 ? `${ordinal(i + 1)} candidate` : undefined,
+      });
   }
 
   // the request node: only when a read goes through a resolver. Its ports are the paths the resolvers name.
   if (rdoc && edges.some(e => e.from === 'request')) {
-    nodes.unshift({ id: 'request', kind: 'request', label: 'Request', opens: rdoc.path, description: `what the trigger kind hands, read through ${labelOf(rdoc)}`, inputs: [], outputs: [] });
+    nodes.unshift({
+      id: 'request',
+      kind: 'request',
+      label: 'Request',
+      opens: rdoc.path,
+      description: `what the trigger kind hands, read through ${labelOf(rdoc)}`,
+      inputs: [],
+      outputs: [],
+    });
   }
 
   // a deep read opens the attribute it reads as a port under its parent, typed from the node's result
@@ -462,10 +743,31 @@ function graphView(scope: Scope, g: Loaded<GraphDoc>): NonNullable<DocView['grap
     if (e.kind !== 'data' || e.fromPort === WHOLE) continue;
     const src = byId.get(e.from);
     if (!src) continue;
-    attributePorts(src, e.fromPort, src.kind === 'request' ? (p => { const r = scope.requestRead(p); return typeof r === 'string' ? undefined : r.type; }) : (p => { const t = types.get(src.id); if (!t) return undefined; const r = typeAt(t, p); return typeof r === 'string' ? undefined : r.type; }));
+    attributePorts(
+      src,
+      e.fromPort,
+      src.kind === 'request'
+        ? p => {
+            const r = scope.requestRead(p);
+            return typeof r === 'string' ? undefined : r.type;
+          }
+        : p => {
+            const t = types.get(src.id);
+            if (!t) return undefined;
+            const r = typeAt(t, p);
+            return typeof r === 'string' ? undefined : r.type;
+          },
+    );
   }
   const request = byId.get('request');
-  if (request) for (const r of resolvers.values()) { const p = request.outputs.find(o => o.name === r.path.join('.')); if (p) { p.label = r.label; p.description = r.description; } }
+  if (request)
+    for (const r of resolvers.values()) {
+      const p = request.outputs.find(o => o.name === r.path.join('.'));
+      if (p) {
+        p.label = r.label;
+        p.description = r.description;
+      }
+    }
   return { nodes, edges, role: scope.roleOf(g.path) };
 }
 
@@ -475,35 +777,58 @@ function graphView(scope: Scope, g: Loaded<GraphDoc>): NonNullable<DocView['grap
  */
 function said(when: string): VSaid[] | undefined {
   let e: expr.Expr;
-  try { e = expr.parse(when); } catch { return undefined; }
-  const top = e.t === 'bin' && (e.op === '&&' || e.op === '||') ? e.op : '&&';
-  const chain = (x: expr.Expr): expr.Expr[] => x.t === 'bin' && x.op === top ? [...chain(x.l), ...chain(x.r)] : [x];
+  try {
+    e = expr.parse(when);
+  } catch {
+    return undefined;
+  }
+  const top = e.kind === 'bin' && (e.op === '&&' || e.op === '||') ? e.op : '&&';
+  const chain = (x: expr.Expr): expr.Expr[] =>
+    x.kind === 'bin' && x.op === top ? [...chain(x.left), ...chain(x.right)] : [x];
   return chain(e).map((x, i) => ({ lead: i === 0 ? 'if' : top === '&&' ? 'and' : 'or', parts: clause(x, false) }));
 }
 
-const VERB: Record<string, [string, string]> = { '==': ['is', 'is not'], '!=': ['is not', 'is'], '<': ['is below', 'is at least'], '<=': ['is at most', 'is above'], '>': ['is above', 'is at most'], '>=': ['is at least', 'is below'] };
+const VERB: Record<string, [string, string]> = {
+  '==': ['is', 'is not'],
+  '!=': ['is not', 'is'],
+  '<': ['is below', 'is at least'],
+  '<=': ['is at most', 'is above'],
+  '>': ['is above', 'is at most'],
+  '>=': ['is at least', 'is below'],
+};
 
 /** One clause in words; `negate` says the clause sits under a `!`, which is folded into the verb. */
 function clause(e: expr.Expr, negate: boolean): VSaidPart[] {
   const path = (p: string[]): VSaidPart => ({ input: p[0], text: p.join(' › ') });
-  switch (e.t) {
-    case 'lit': return [{ value: JSON.stringify(negate ? !e.v : e.v) }];
-    case 'path': return negate ? [{ text: 'not ' }, path(e.p)] : [path(e.p)];
-    case 'has': return [path(e.p), { text: negate ? ' is missing' : ' exists' }];
-    case 'not': return clause(e.e, !negate);
-    case 'len': return [{ text: 'the size of ' }, ...clause(e.e, false)];
+  switch (e.kind) {
+    case 'lit':
+      return [{ value: JSON.stringify(negate ? !e.value : e.value) }];
+    case 'path':
+      return negate ? [{ text: 'not ' }, path(e.path)] : [path(e.path)];
+    case 'has':
+      return [path(e.path), { text: negate ? ' is missing' : ' exists' }];
+    case 'not':
+      return clause(e.arg, !negate);
+    case 'len':
+      return [{ text: 'the size of ' }, ...clause(e.arg, false)];
     case 'bin': {
       if (e.op === '&&' || e.op === '||') {
         // a nested group reads inline; under a `!` it flips (De Morgan) so the verbs stay positive
         const both = (e.op === '&&') !== negate;
-        return [{ text: both ? 'both ' : 'either ' }, ...clause(e.l, negate), { text: both ? ' and ' : ' or ' }, ...clause(e.r, negate)];
+        return [
+          { text: both ? 'both ' : 'either ' },
+          ...clause(e.left, negate),
+          { text: both ? ' and ' : ' or ' },
+          ...clause(e.right, negate),
+        ];
       }
-      return [...clause(e.l, false), { text: ` ${VERB[e.op][negate ? 1 : 0]} ` }, ...clause(e.r, false)];
+      return [...clause(e.left, false), { text: ` ${VERB[e.op][negate ? 1 : 0]} ` }, ...clause(e.right, false)];
     }
   }
 }
 
-const ordinal = (n: number) => `${n}${['th', 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : Math.min(n % 10, 4) % 4] ?? 'th'}`;
+const ordinal = (n: number) =>
+  `${n}${['th', 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : Math.min(n % 10, 4) % 4] ?? 'th'}`;
 
 /**
  * Make sure a node offers the port a read names, opening every level of a deep path as an attribute under
@@ -513,15 +838,19 @@ function attributePorts(node: VNode, name: string, typeAtPath: (path: string[]) 
   if (node.outputs.some(p => p.name === name)) return;
   const segs = name.split('.');
   for (let i = 1; i <= segs.length; i++) {
-    const path = segs.slice(0, i), pname = path.join('.');
+    const path = segs.slice(0, i),
+      pname = path.join('.');
     if (node.outputs.some(p => p.name === pname)) continue;
     const t = typeAtPath(path);
     const port: VPort = { name: pname, type: t ? show(t) : undefined, ...(i > 1 ? { depth: i - 1 } : {}) };
     const parentAt = i > 1 ? node.outputs.findIndex(p => p.name === segs.slice(0, i - 1).join('.')) : -1;
-    if (parentAt < 0) { node.outputs.push(port); continue; }
+    if (parentAt < 0) {
+      node.outputs.push(port);
+      continue;
+    }
     // after the parent and after every attribute already under it
     let at = parentAt + 1;
-    while (at < node.outputs.length && node.outputs[at].name.startsWith(segs.slice(0, i - 1).join('.') + '.')) at++;
+    while (at < node.outputs.length && node.outputs[at].name.startsWith(`${segs.slice(0, i - 1).join('.')}.`)) at++;
     node.outputs.splice(at, 0, port);
   }
 }
@@ -530,16 +859,43 @@ function attributePorts(node: VNode, name: string, typeAtPath: (path: string[]) 
 function targetOf(scope: Scope, opRef: string): { op?: Operation; target: VTarget } {
   const hit = scope.op(opRef);
   const i = opRef.lastIndexOf('#');
-  const path = i < 0 ? opRef : opRef.slice(0, i), opName = i < 0 ? '' : opRef.slice(i + 1);
+  const path = i < 0 ? opRef : opRef.slice(0, i),
+    opName = i < 0 ? '' : opRef.slice(i + 1);
   const portPath = scope.canon(path);
-  if (typeof hit === 'string') return { target: { op: opRef, opName, port: portPath, portLabel: labelOf(scope.registry.any(portPath)) || readable(stemOf(portPath)), native: false, implementation: portPath } };
-  const target: VTarget = { op: `${hit.path}#${hit.opName}`, opName: hit.opName, port: hit.path, portLabel: labelOf(hit.port), native: Boolean(hit.port.native), implementation: hit.path };
-  if (hit.port.native) { target.pure = hit.op.pure === true; target.effect = hit.op.pure !== true; if (hit.op.refuses) target.refuses = true; }
-  else {
+  if (typeof hit === 'string')
+    return {
+      target: {
+        op: opRef,
+        opName,
+        port: portPath,
+        portLabel: labelOf(scope.registry.any(portPath)) || readable(stemOf(portPath)),
+        native: false,
+        implementation: portPath,
+      },
+    };
+  const target: VTarget = {
+    op: `${hit.path}#${hit.opName}`,
+    opName: hit.opName,
+    port: hit.path,
+    portLabel: labelOf(hit.port),
+    native: Boolean(hit.port.native),
+    implementation: hit.path,
+  };
+  if (hit.port.native) {
+    target.pure = hit.op.pure === true;
+    target.effect = hit.op.pure !== true;
+    if (hit.op.refuses) target.refuses = true;
+  } else {
     target.bindings = scope.bindingsFor(hit.path).map(b => {
       const bop = b.doc.operations[hit.opName];
       const graph = bop?.graph ? scope.get('graph', bop.graph) : undefined;
-      return { path: b.path, label: labelOf(b), graph: graph?.path, graphLabel: graph ? labelOf(graph) : undefined, run: bop?.run };
+      return {
+        path: b.path,
+        label: labelOf(b),
+        graph: graph?.path,
+        graphLabel: graph ? labelOf(graph) : undefined,
+        run: bop?.run,
+      };
     });
     const first = target.bindings[0];
     if (first) target.implementation = first.graph ?? first.path;
@@ -547,7 +903,11 @@ function targetOf(scope: Scope, opRef: string): { op?: Operation; target: VTarge
   return { op: hit.op, target };
 }
 
-const stemOf = (path: string) => path.slice(path.lastIndexOf('/') + 1).replace(/\.json$/, '').replace(/\.[a-z-]+$/, '');
+const stemOf = (path: string) =>
+  path
+    .slice(path.lastIndexOf('/') + 1)
+    .replace(/\.json$/, '')
+    .replace(/\.[a-z-]+$/, '');
 
 /** How one input value was written: a literal, text with reads, or a whole read (no annotation). */
 function written(scope: Scope, v: unknown): Pick<VPort, 'literal' | 'text' | 'ref'> {
@@ -564,39 +924,68 @@ function written(scope: Scope, v: unknown): Pick<VPort, 'literal' | 'text' | 're
 
 /** The input ports of an operation call: every declared field, marked when not given, plus any given field the contract does not declare. */
 /** The input ports of a call: each field the operation accepts, typed with the variables this call binds, and how it is given -- written, bound from each element of a map, or not at all. */
-function inputPorts(scope: Scope, op: Operation | undefined, given: Values | undefined, bind?: Record<string, string>): VPort[] {
+function inputPorts(
+  scope: Scope,
+  op: Operation | undefined,
+  given: Values | undefined,
+  bind?: Record<string, string>,
+): VPort[] {
   const ports: VPort[] = [];
   const subst = op ? bindings(scope, op, given) : {};
   const typeOf = (f: { type: unknown; enum?: string[] }): string | undefined => {
     if (f.type === 'type') return 'type';
     if (f.enum) return f.enum.map(e => JSON.stringify(e)).join(' | ');
-    try { let t = scope.types.spec(f.type as never); if (hasVars(t)) t = substitute(t, subst); return show(t); } catch { return typeof f.type === 'string' ? f.type : undefined; }
+    try {
+      let t = scope.types.spec(f.type as never);
+      if (hasVars(t)) t = substitute(t, subst);
+      return show(t);
+    } catch {
+      return typeof f.type === 'string' ? f.type : undefined;
+    }
   };
   for (const [k, f] of Object.entries(op?.accepts ?? {})) {
     const v = given?.[k];
     const how = v !== undefined ? written(scope, v) : bind && k in bind ? { bound: bind[k] } : { missing: true };
-    ports.push({ name: k, type: typeOf(f), required: f.required !== false, static: f.static || f.type === 'type' || undefined, description: f.description, ...how });
+    ports.push({
+      name: k,
+      type: typeOf(f),
+      required: f.required !== false,
+      static: f.static || f.type === 'type' || undefined,
+      description: f.description,
+      ...how,
+    });
   }
-  for (const [k, v] of Object.entries(given ?? {})) if (!op?.accepts?.[k]) ports.push({ name: k, ...written(scope, v) });
+  for (const [k, v] of Object.entries(given ?? {}))
+    if (!op?.accepts?.[k]) ports.push({ name: k, ...written(scope, v) });
   return ports;
 }
 
 /** What an operation answers at one call site: its return type with the variables its `type` fields bind. */
 function resultType(scope: Scope, op: Operation | undefined, given: Values | undefined): Type | undefined {
   if (!op?.returns) return undefined;
-  try { let t = scope.types.spec(op.returns); if (hasVars(t)) t = substitute(t, bindings(scope, op, given)); return t; } catch { return undefined; }
+  try {
+    let t = scope.types.spec(op.returns);
+    if (hasVars(t)) t = substitute(t, bindings(scope, op, given));
+    return t;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The output ports: the whole value first, then the fields of the result when it is an object. */
 function outputPorts(t: Type | undefined, op: Operation | undefined): VPort[] {
   if (!op?.returns) return [];
-  return [{ name: WHOLE, type: t ? show(t) : (typeof op.returns === 'string' ? op.returns : undefined) }, ...fieldPorts(t)];
+  return [
+    { name: WHOLE, type: t ? show(t) : typeof op.returns === 'string' ? op.returns : undefined },
+    ...fieldPorts(t),
+  ];
 }
 
 /** One port per top-level field of an object type. */
 function fieldPorts(t: Type | undefined, wholeLabel?: string): VPort[] {
   const out: VPort[] = wholeLabel !== undefined ? [{ name: WHOLE, type: wholeLabel }] : [];
-  if (t?.kind === 'object') for (const [k, f] of Object.entries(t.fields)) out.push({ name: k, type: show(f.type), required: f.required });
+  if (t?.kind === 'object')
+    for (const [k, f] of Object.entries(t.fields)) out.push({ name: k, type: show(f.type), required: f.required });
   return out;
 }
 

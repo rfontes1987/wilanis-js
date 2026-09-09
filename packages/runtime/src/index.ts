@@ -3,12 +3,38 @@
  * run, prune), the gates (rehearse, fuzz, regress), discovery (ls, describe, map), scaffolds, project
  * loading with plugin packages, start, and the `wilanis` command line. Ships the @std and @cli plugins.
  */
-export { Embedder, prune, fillTemplates, coerceWire, type FireOptions } from './embed.js';
-export { rehearse, fuzz, regress, describe, ls, map, scaffold, init, stubEffects, embedderFor, generatedFire, policyRoots, failedLeaf, summarize, type Rehearsal } from './tools.js';
-export { branchesOf, casesFor, switchesOf, satisfy, type Branch, type Case, type Demands, type Domain } from './branches.js';
-export { start, runTrigger, postLoad, runStartup, Served, contentTypeOf } from './serve.js';
+
 export { FileBlobStore } from './blobs.js';
-export { loadProject, resolvePlugins, resolveIncludes, type PluginResolution } from './project.js';
+export {
+  type Branch,
+  branchesOf,
+  type Case,
+  casesFor,
+  type Demands,
+  type Domain,
+  satisfy,
+  switchesOf,
+} from './branches.js';
+export { coerceWire, Embedder, type FireOptions, fillTemplates, prune } from './embed.js';
+export { cli as cliTriggers } from './plugins/cli-trigger.js';
 export { BUILTIN_PLUGINS } from './plugins/index.js';
 export { std } from './plugins/std.js';
-export { cli as cliTriggers } from './plugins/cli-trigger.js';
+export { loadProject, type PluginResolution, resolveIncludes, resolvePlugins } from './project.js';
+export { contentTypeOf, postLoad, runStartup, runTrigger, Served, start } from './serve.js';
+export {
+  describe,
+  embedderFor,
+  failedLeaf,
+  fuzz,
+  generatedFire,
+  init,
+  ls,
+  map,
+  policyRoots,
+  type Rehearsal,
+  regress,
+  rehearse,
+  scaffold,
+  stubEffects,
+  summarize,
+} from './tools.js';

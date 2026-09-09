@@ -6,9 +6,9 @@ before changing anything; it says where things live and which direction dependen
 ## Layout
 
 ```
-packages/engine/       @wilanis/engine     spec.ts kernel.ts                       depends on nothing
-packages/core/         @wilanis/core       model types expr scope load validate plugin, schemas/   → engine
-packages/compiler/     @wilanis/compiler   checker.ts compiler.ts                  → core, engine
+packages/engine/       @wilanis/engine     spec.ts kernel.ts run.ts plan.ts sources.ts redact.ts   depends on nothing
+packages/core/         @wilanis/core       model registry types assign values generate expr/ templates scope load documents placement paths validate plugin, schemas/   → engine
+packages/compiler/     @wilanis/compiler   checker.ts check/<family>.ts compiler.ts lower.ts env.ts refusals.ts documents.ts   → core, engine
 packages/runtime/      @wilanis/runtime    embed tools branches serve(start) project cli, plugins/{std,cli-trigger}, docs/{std,cli}, bin/, templates/   → core, engine, compiler
 packages/plugin-http/  @wilanis/plugin-http  index.ts codecs.ts throttle.ts, docs/  → core, engine
 packages/plugin-blob/  @wilanis/plugin-blob  index.ts, docs/                        → core, engine
@@ -44,7 +44,10 @@ plugin on the runtime, only as devDependencies, for tests.
 ```
 npm install                 # links the workspace
 npm run build               # tsc -b, project references, dependency order
-npm test                    # build, then vitest
+npm run lint                # biome: formatting and the house rules (biome.jsonc)
+npm run lint:fix            # the same, applying every safe fix
+npm run lint:debt           # what the directories that predate the linter still owe
+npm test                    # lint, build, then vitest
 npx wilanis check example   # the CLI from the built runtime
 npx wilanis check libraries/access   # the access tree on its own, with its development binding
 npx wilanis start example   # run what its startup declares (the http listener among them)
@@ -54,6 +57,21 @@ npm run release             # publishes engine, core, compiler, runtime, plugin-
 
 `npm test` must pass before a commit. Tests import the built `dist` of sibling packages, so a change in
 core needs a build before its effect shows in a runtime test; `npm test` does that.
+
+## Code quality
+
+Biome lints and formats every `src/` and `test/` file; `biome.jsonc` is the one place the rules live, and says
+why each is there. The house rules: a function under 50 lines and a cognitive complexity of 10; a file under
+300 lines; at most 4 parameters (an options object beyond that); callbacks nested at most 3 deep; no nested
+ternaries; no `!` and no `any` outside a test; a name of at least 2 characters (`_` for an ignored parameter).
+A rule that bites is a design signal, not an obstacle: split the function along the steps it takes and name
+each, or the file along the rule families it holds. The engine and the compiler are the reference: one class
+or module per concern, a one-line doc comment on every public function saying what it answers.
+
+Directories that predate the linter are listed as debt at the end of `biome.jsonc`; there the house rules are
+warnings, so `npm run lint` stays green while `npm run lint:debt` says what is left. When you touch a file in
+one of them, bring the file to the rules and remove the directory from the list once it is clean. Never add to
+the list.
 
 ## Principles, and what they mean here
 
@@ -90,10 +108,15 @@ core needs a build before its effect shows in a runtime test; `npm test` does th
 
 ## How to change things
 
-- **A new rule.** Add it to `packages/compiler/src/checker.ts` under its family, give it the next code,
-  write the hint, and add a sabotage test in `packages/runtime/test/example.test.ts` that breaks the example
-  and expects the code.
-- **A new placement rule.** Placement lives in one place: `HOME` in `packages/core/src/load.ts`, which says
+- **A new rule.** Add it to its family's module under `packages/compiler/src/check/` -- `project.ts` (C, B at
+  the project, startup), `contracts.ts` (shapes, ports, connections), `resolvers.ts` (P), `inputs.ts` (a call
+  site's inputs), `bindings.ts` (B), `graph.ts` with `graph-nodes.ts`, `graph-reads.ts`, `graph-whole.ts` and
+  `narrowing.ts` (G), `triggers.ts` (T, S), `access.ts` (A) -- give it the next code, write the hint, and add a
+  sabotage test in `packages/runtime/test/example.test.ts` that breaks the example and expects the code. What
+  every family shares (typing a spec, visibility, the layer a type may name, settings that read secrets only)
+  is a method of `Judge` in `check/judge.ts`; a refusal is made through `judge.refuser(file)`. The order the
+  families run in is `judgeTree` in `checker.ts`.
+- **A new placement rule.** Placement lives in one place: `HOME` in `packages/core/src/placement.ts`, which says
   the layer (or top-level directory) each kind lives in and refuses the rest as D008. Add the kind there, add
   its row to `packages/runtime/templates/CLAUDE.md`, and teach `into()` in `tools.ts` where `wilanis new`
   should write it. A document's layer is read off its path by `layerOf` in `model.ts` -- never inferred from
@@ -110,7 +133,7 @@ core needs a build before its effect shows in a runtime test; `npm test` does th
   includes it with `"features": [...]` and binds its ports in a feature of its own. The loader's include walk is
   in `load.ts`; `resolveIncludes` in the runtime's `project.ts` finds the package; tests that copy the example
   hand the include in as `ResolvedInclude` since a copy has no `node_modules`.
-- **A new access rule.** Policies and credentials are the `A` family in `checker.ts` (`checkPolicy`, `checkAccess`);
+- **A new access rule.** Policies and credentials are the `A` family in `check/access.ts` (`checkPolicy`, `checkAccess`);
   the guard's own reasons reach a trigger through `refusalsOfTrigger`. A rule about what the guard hands lives
   in the guard's `plugin.json` (`guard.credentials`, `guard.context`, `guard.refuses`), never in a trigger kind.
   What the `@auth` plugin alone can judge (a challenge method, a session write against the session shape) is its
@@ -119,7 +142,8 @@ core needs a build before its effect shows in a runtime test; `npm test` does th
   move to `schemas-v2`, and the old branch stays.
 - **A new plugin.** A new package under `packages/`, depending on core and engine only, exporting its
   `PluginModule` as default: `root`, `docs` (the directory of the JSON documents it ships, with
-  `plugin.json`; listed in the package's `files`), `handlers`, and optionally `triggers`, `codecs`, `check`,
+  `plugin.json`; listed in the package's `files`), `handlers`, and optionally `triggers`, `codecs`, `check`
+  (its X rules; it refuses with a `Refusal` object: code, file, message, at, hint),
   `postLoad`, and -- for at most one plugin of a tree -- `guard`. Every port, kind, codec or shape a plugin grants is a file under `docs/`, never an object in
   code: what the DSL names, a reader can open. A project names the plugin in `plugins[].from`. Plugins that
   carry an external dependency are always their own package.
@@ -133,7 +157,7 @@ core needs a build before its effect shows in a runtime test; `npm test` does th
   runtime stops what was held, in reverse, before the `postLoad` teardowns. Only a startup step may name one
   (L008 refuses a graph that runs one), and a native `holds` operation is the one native operation a startup
   step may name (B006 otherwise). `runStartup` and `Served` live in `serve.ts`; `checkStartup` in
-  `checker.ts` judges the steps (B006, B007, B008) and runs last, after the resolvers documents are read.
+  `check/project.ts` judges the steps (B006, B007, B008) and runs last, after the resolvers documents are read.
   A plugin's `postLoad` stays what it is: that plugin's own wiring, not the project's.
 - **The project template.** `packages/runtime/templates/` is what `wilanis init` writes into a consumer
   tree. Its `CLAUDE.md` addresses an agent that writes documents, not one that changes this repository.

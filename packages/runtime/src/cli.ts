@@ -4,9 +4,9 @@ import { createWriteStream, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { checkTree } from '@wilanis/compiler';
 import type { BlobHandle } from '@wilanis/core';
 import { KINDS, type Kind, type LoadResult } from '@wilanis/core';
-import { checkTree } from '@wilanis/compiler';
 import { loadProject } from './project.js';
 import { runTrigger, start } from './serve.js';
 import { describe, fuzz, init, ls, map, regress, rehearse, scaffold, summarize } from './tools.js';
@@ -49,14 +49,21 @@ function parse(argv: string[]) {
 
 async function load(root: string): Promise<LoadResult> {
   const abs = resolve(root);
-  if (!existsSync(join(abs, 'project.json'))) { console.error(`no project.json in ${abs}`); process.exit(2); }
+  if (!existsSync(join(abs, 'project.json'))) {
+    console.error(`no project.json in ${abs}`);
+    process.exit(2);
+  }
   return loadProject(abs);
 }
 
 async function check(root: string): Promise<LoadResult> {
   const l = await load(root);
   const r = checkTree(l);
-  if (!r.ok) { console.error(r.format()); console.error(`\n${r.items.length} refusal(s)`); process.exit(1); }
+  if (!r.ok) {
+    console.error(r.format());
+    console.error(`\n${r.items.length} refusal(s)`);
+    process.exit(1);
+  }
   return l;
 }
 
@@ -65,22 +72,51 @@ async function main() {
   const { flags, positional } = parse(rest);
   const rootArg = (n: number) => positional[n] ?? '.';
   switch (cmd) {
-    case 'check': { const l = await check(rootArg(0)); console.log(`ok: ${l.registry.files.length} documents`); break; }
+    case 'check': {
+      const l = await check(rootArg(0));
+      console.log(`ok: ${l.registry.files.length} documents`);
+      break;
+    }
     case 'rehearse': {
       const l = await check(rootArg(0));
-      const r = await rehearse(l, { seed: flags.seed ? Number(flags.seed) : undefined, profile: flags.profile, verbose: Boolean(flags.verbose) });
+      const r = await rehearse(l, {
+        seed: flags.seed ? Number(flags.seed) : undefined,
+        profile: flags.profile,
+        verbose: Boolean(flags.verbose),
+      });
       console.log(r.lines.join('\n'));
       if (!r.ok) process.exit(1);
       break;
     }
-    case 'fuzz': { const l = await check(rootArg(0)); const w = await fuzz(l, { runs: flags.runs ? Number(flags.runs) : undefined, profile: flags.profile }); console.log(w.map(f => `wrote ${f}`).join('\n')); break; }
-    case 'regress': { const l = await check(rootArg(0)); const r = await regress(l, { profile: flags.profile }); console.log(r.lines.join('\n') || 'no scenarios -- run wilanis fuzz first'); if (!r.ok) process.exit(1); break; }
+    case 'fuzz': {
+      const l = await check(rootArg(0));
+      const w = await fuzz(l, { runs: flags.runs ? Number(flags.runs) : undefined, profile: flags.profile });
+      console.log(w.map(f => `wrote ${f}`).join('\n'));
+      break;
+    }
+    case 'regress': {
+      const l = await check(rootArg(0));
+      const r = await regress(l, { profile: flags.profile });
+      console.log(r.lines.join('\n') || 'no scenarios -- run wilanis fuzz first');
+      if (!r.ok) process.exit(1);
+      break;
+    }
     case 'start': {
       const l = await check(rootArg(0));
       const { stop, held } = await start(l, { profile: flags.profile });
-      if (!held) { console.log('nothing is held: project.json declares no startup step that listens, so there is nothing to serve'); await stop(); break; }
-      const bye = async () => { await stop(); process.exit(0); };
-      process.on('SIGINT', bye); process.on('SIGTERM', bye);
+      if (!held) {
+        console.log(
+          'nothing is held: project.json declares no startup step that listens, so there is nothing to serve',
+        );
+        await stop();
+        break;
+      }
+      const bye = async () => {
+        await stop();
+        process.exit(0);
+      };
+      process.on('SIGINT', bye);
+      process.on('SIGTERM', bye);
       break;
     }
     case 'run': {
@@ -89,10 +125,16 @@ async function main() {
       let delivered = false;
       const deliver = async (body: Readable, h: BlobHandle) => {
         delivered = true;
-        if (f2.out) { await pipeline(body, createWriteStream(f2.out)); console.error(`wrote ${f2.out} (${h.contentType}, ${h.size} bytes)`); }
-        else await pipeline(body, process.stdout, { end: false });
+        if (f2.out) {
+          await pipeline(body, createWriteStream(f2.out));
+          console.error(`wrote ${f2.out} (${h.contentType}, ${h.size} bytes)`);
+        } else await pipeline(body, process.stdout, { end: false });
       };
-      const { report, answer } = await runTrigger(l, positional[0], f2, positional.slice(2), { profile: flags.profile, seed: flags.seed ? Number(flags.seed) : undefined, deliver });
+      const { report, answer } = await runTrigger(l, positional[0], f2, positional.slice(2), {
+        profile: flags.profile,
+        seed: flags.seed ? Number(flags.seed) : undefined,
+        deliver,
+      });
       if (flags.verbose) console.error(summarize(report));
       if (!delivered) console.log(typeof answer === 'string' ? answer : JSON.stringify(answer ?? report, null, 2));
       if (report.status !== 'done') process.exit(1);
@@ -104,17 +146,35 @@ async function main() {
       console.log(ls(await load(root), kind).join('\n'));
       break;
     }
-    case 'describe': console.log(describe(await load(rootArg(1)), positional[0])); break;
-    case 'map': console.log(map(await load(rootArg(0))).join('\n')); break;
+    case 'describe':
+      console.log(describe(await load(rootArg(1)), positional[0]));
+      break;
+    case 'map':
+      console.log(map(await load(rootArg(0))).join('\n'));
+      break;
     case 'new': {
       const [kind, target] = positional;
-      if (!kind || !target) { console.error(USAGE); process.exit(2); }
-      console.log(scaffold(resolve(rootArg(2)), kind, target, flags).map(f => `wrote ${f}`).join('\n'));
+      if (!kind || !target) {
+        console.error(USAGE);
+        process.exit(2);
+      }
+      console.log(
+        scaffold(resolve(rootArg(2)), kind, target, flags)
+          .map(f => `wrote ${f}`)
+          .join('\n'),
+      );
       break;
     }
-    case 'init': console.log(init(resolve(rootArg(0))).join('\n')); break;
-    default: console.log(USAGE); process.exit(cmd ? 2 : 0);
+    case 'init':
+      console.log(init(resolve(rootArg(0))).join('\n'));
+      break;
+    default:
+      console.log(USAGE);
+      process.exit(cmd ? 2 : 0);
   }
 }
 
-main().catch(e => { console.error((e as Error).message); process.exit(1); });
+main().catch(e => {
+  console.error((e as Error).message);
+  process.exit(1);
+});

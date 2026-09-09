@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { READ_PATH, TEMPLATE, WHOLE_TEMPLATE, joinPath, splitPath } from '../src/scope.js';
+import { joinPath, READ_PATH, splitPath, TEMPLATE, WHOLE_TEMPLATE } from '../src/templates.js';
 
 describe('read paths', () => {
   it('splits identifiers and quoted keys into segments', () => {
@@ -15,7 +15,7 @@ describe('read paths', () => {
   it('a template may carry a quoted key; a bare hyphen is not a path', () => {
     expect(WHOLE_TEMPLATE.exec("{{request.headers['user-agent']}}")?.[1]).toBe("request.headers['user-agent']");
     expect(WHOLE_TEMPLATE.test('{{request.headers.user-agent}}')).toBe(false);
-    expect([...'a {{x.y}} b {{z["k k"]}}'.matchAll(TEMPLATE)].map(m => m[1])).toEqual(['x.y', 'z["k k"]']);
+    expect([...'a {{x.y}} b {{z["k k"]}}'.matchAll(TEMPLATE)].map(match => match[1])).toEqual(['x.y', 'z["k k"]']);
     expect(READ_PATH.test("request.headers['user-agent']")).toBe(true);
     expect(READ_PATH.test('request.')).toBe(false);
   });

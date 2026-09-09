@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Serving } from '@wilanis/core';
+import { describe, expect, it } from 'vitest';
 import plugin from '../src/index.js';
 
 /** A stand-in for what the runtime hands a `holds` operation: it records the reloads it was asked for. */
@@ -13,8 +13,17 @@ function serving(answer: () => Awaited<ReturnType<Serving['reload']>>) {
   const held: { label: string; stop: () => Promise<void> }[] = [];
   const env = {
     plugins: { '@reload': {} },
-    hold: (what: { label: string; stop: () => Promise<void> }) => { held.push(what); },
-    serving: { root: dir, log: (s: string) => logs.push(s), reload: async () => { reloads++; return answer(); } } as unknown as Serving,
+    hold: (what: { label: string; stop: () => Promise<void> }) => {
+      held.push(what);
+    },
+    serving: {
+      root: dir,
+      log: (s: string) => logs.push(s),
+      reload: async () => {
+        reloads++;
+        return answer();
+      },
+    } as unknown as Serving,
   };
   return { dir, logs, held, env, reloads: () => reloads };
 }

@@ -6,12 +6,15 @@
  * registry and answers the handle, so a file is never held in memory; multipart walks the stream once,
  * streaming each file part into the registry as it passes and keeping only the text fields.
  */
-import { PassThrough, Readable } from 'node:stream';
-import type { BlobStore, Codec, Encoded } from '@wilanis/core';
+import { PassThrough, type Readable } from 'node:stream';
+import type { Codec, Encoded } from '@wilanis/core';
 import { conforms, isBlobHandle, readAll, type Type } from '@wilanis/core';
 
 function judge(v: unknown, declared: Type | undefined) {
-  if (declared) { const bad = conforms(v, declared); if (bad) throw new Error(`body does not conform: ${bad}`); }
+  if (declared) {
+    const bad = conforms(v, declared);
+    if (bad) throw new Error(`body does not conform: ${bad}`);
+  }
   return v;
 }
 
@@ -34,15 +37,28 @@ export const json: Codec = {
     const text = (await readAll(body)).toString('utf8');
     if (!text.trim()) return judge(undefined, declared);
     let v: unknown;
-    try { v = JSON.parse(text); } catch { throw new Error('body is not JSON'); }
+    try {
+      v = JSON.parse(text);
+    } catch {
+      throw new Error('body is not JSON');
+    }
     return judge(v, declared);
   },
-  encode(value) { return buffered(Buffer.from(value === undefined ? '' : JSON.stringify(value)), 'application/json'); },
+  encode(value) {
+    return buffered(Buffer.from(value === undefined ? '' : JSON.stringify(value)), 'application/json');
+  },
 };
 
 export const text: Codec = {
-  async decode(body) { return (await readAll(body)).toString('utf8'); },
-  encode(value) { return buffered(Buffer.from(typeof value === 'string' ? value : JSON.stringify(value)), 'text/plain; charset=utf-8'); },
+  async decode(body) {
+    return (await readAll(body)).toString('utf8');
+  },
+  encode(value) {
+    return buffered(
+      Buffer.from(typeof value === 'string' ? value : JSON.stringify(value)),
+      'text/plain; charset=utf-8',
+    );
+  },
 };
 
 export const form: Codec = {
@@ -65,12 +81,25 @@ export const form: Codec = {
  */
 export const blob: Codec = {
   async decode(body, ct, declared, blobs) {
-    const filename = /filename="([^"]*)"/i.exec(String((body as Readable & { headers?: Record<string, string> }).headers?.['content-disposition'] ?? ''))?.[1];
-    return judge(await blobs.put(body, { contentType: mediaType(ct) || 'application/octet-stream', filename }), declared);
+    const filename = /filename="([^"]*)"/i.exec(
+      String((body as Readable & { headers?: Record<string, string> }).headers?.['content-disposition'] ?? ''),
+    )?.[1];
+    return judge(
+      await blobs.put(body, { contentType: mediaType(ct) || 'application/octet-stream', filename }),
+      declared,
+    );
   },
   encode(value, _declared, blobs) {
-    if (!isBlobHandle(value)) throw new Error('the answer is not a blob: a blob codec sends the handle of a stored file');
-    return { body: blobs.open(value), contentType: value.contentType, length: value.size, ...(value.filename ? { headers: { 'content-disposition': `attachment; filename="${value.filename.replace(/["\\\r\n]/g, '_')}"` } } : {}) };
+    if (!isBlobHandle(value))
+      throw new Error('the answer is not a blob: a blob codec sends the handle of a stored file');
+    return {
+      body: blobs.open(value),
+      contentType: value.contentType,
+      length: value.size,
+      ...(value.filename
+        ? { headers: { 'content-disposition': `attachment; filename="${value.filename.replace(/["\\\r\n]/g, '_')}"` } }
+        : {}),
+    };
   },
 };
 
@@ -91,13 +120,20 @@ export const multipart: Codec = {
     // state: before the first boundary ('preamble'), reading a part's headers, or streaming a part's body
     let state: 'preamble' | 'headers' | 'body' = 'preamble';
     let window: Buffer = Buffer.alloc(0);
-    let name: string | undefined, sink: PassThrough | undefined, textChunks: Buffer[] = [];
+    let name: string | undefined,
+      sink: PassThrough | undefined,
+      textChunks: Buffer[] = [];
     const finishPart = () => {
       if (sink) sink.end();
       else if (name !== undefined) o[name] = Buffer.concat(textChunks).toString('utf8');
-      sink = undefined; name = undefined; textChunks = [];
+      sink = undefined;
+      name = undefined;
+      textChunks = [];
     };
-    const feed = (chunk: Buffer) => { if (sink) sink.write(chunk); else textChunks.push(chunk); };
+    const feed = (chunk: Buffer) => {
+      if (sink) sink.write(chunk);
+      else textChunks.push(chunk);
+    };
     const startPart = (head: string) => {
       name = /name="([^"]+)"/i.exec(head)?.[1];
       const filename = /filename="([^"]*)"/i.exec(head)?.[1];
@@ -105,7 +141,11 @@ export const multipart: Codec = {
       if (filename !== undefined && name !== undefined) {
         sink = new PassThrough();
         const field = name;
-        pending.push(blobs.put(sink, { contentType: partType ?? 'application/octet-stream', filename }).then(h => { o[field] = h; }));
+        pending.push(
+          blobs.put(sink, { contentType: partType ?? 'application/octet-stream', filename }).then(h => {
+            o[field] = h;
+          }),
+        );
       }
     };
     for await (const c of body) {
@@ -114,12 +154,18 @@ export const multipart: Codec = {
         if (state === 'preamble') {
           // the first boundary has no leading CRLF; the window starts with "--boundary"
           const first = window.indexOf(delimiter.subarray(2));
-          if (first < 0) { window = window.subarray(Math.max(0, window.length - delimiter.length)); break; }
+          if (first < 0) {
+            window = window.subarray(Math.max(0, window.length - delimiter.length));
+            break;
+          }
           window = window.subarray(first + delimiter.length - 2);
           state = 'headers';
         }
         if (state === 'headers') {
-          if (window.subarray(0, 2).toString() === '--') { window = Buffer.alloc(0); break; } // the closing boundary
+          if (window.subarray(0, 2).toString() === '--') {
+            window = Buffer.alloc(0);
+            break;
+          } // the closing boundary
           const end = window.indexOf(CRLF2);
           if (end < 0) break;
           startPart(window.subarray(0, end).toString('latin1'));
@@ -130,10 +176,14 @@ export const multipart: Codec = {
         const at = window.indexOf(delimiter);
         if (at < 0) {
           const safe = window.length - (delimiter.length - 1);
-          if (safe > 0) { feed(window.subarray(0, safe)); window = window.subarray(safe); }
+          if (safe > 0) {
+            feed(window.subarray(0, safe));
+            window = window.subarray(safe);
+          }
           break;
         }
-        feed(window.subarray(0, at)); finishPart();
+        feed(window.subarray(0, at));
+        finishPart();
         window = window.subarray(at + delimiter.length);
         state = 'headers';
       }
@@ -142,5 +192,7 @@ export const multipart: Codec = {
     await Promise.all(pending);
     return judge(coerceFields(o, declared), declared);
   },
-  encode() { throw new Error('encoding multipart answers is not supported'); },
+  encode() {
+    throw new Error('encoding multipart answers is not supported');
+  },
 };

@@ -3,62 +3,83 @@
  * aliases with feature visibility, addressing operations as path#operation, choosing a binding for a port
  * under a profile, classifying graphs as domain or data, and typing values with {{templates}}.
  */
-import {
-  splitOp, type BindingDoc, type Kind, type Loaded, type Operation, type PluginDoc, type PortDoc, type ProjectDoc,
-  type Registry, type TriggerKindDoc, type DocByKind,
+
+import { substitute } from './assign.js';
+import type {
+  BindingDoc,
+  DocByKind,
+  Field,
+  Kind,
+  Operation,
+  PluginDoc,
+  PortDoc,
+  ProjectDoc,
+  TriggerKindDoc,
 } from './model.js';
-import { TypeResolver, type Type, UNKNOWN, STRING, typeAt, typeOfValue, substitute, type Read } from './types.js';
-
-/** The {name} placeholders of a templated string setting, such as an http route. */
-export const PLACEHOLDER = /\{([A-Za-z0-9_]+)\}/g;
-
-/**
- * A read path: a root, then segments. A segment is `.name` for an identifier, or a quoted key in brackets
- * for a name that is not one: request.headers['user-agent']. Single or double quotes; single needs no
- * escaping inside a JSON string.
- */
-const ROOT = String.raw`[a-z][A-Za-z0-9_]*`;
-const SEGMENT = String.raw`(?:\.[A-Za-z0-9_]+|\[(?:'[^'\]]*'|"[^"\]]*")\])`;
-export const TEMPLATE = new RegExp(String.raw`\{\{\s*(${ROOT}${SEGMENT}*)\s*\}\}`, 'g');
-export const WHOLE_TEMPLATE = new RegExp(String.raw`^\{\{\s*(${ROOT}${SEGMENT}*)\s*\}\}$`);
-/** A bare read path, the way a resolver writes it. */
-export const READ_PATH = new RegExp(String.raw`^${ROOT}${SEGMENT}*$`);
-const SEGMENTS = new RegExp(String.raw`^(${ROOT})|\.([A-Za-z0-9_]+)|\[(?:'([^'\]]*)'|"([^"\]]*)")\]`, 'g');
-/** The root and segments of a read path, quotes stripped: request.headers['user-agent'] → ['request', 'headers', 'user-agent']. */
-export function splitPath(t: string): string[] {
-  const out: string[] = [];
-  for (const m of t.matchAll(SEGMENTS)) out.push(m[1] ?? m[2] ?? m[3] ?? m[4] ?? '');
-  return out;
-}
-/** Segments written back as a read path: an identifier as .name, anything else quoted in brackets. */
-export const joinPath = (segs: string[]) => segs.map((x, i) => (i === 0 ? x : /^[A-Za-z0-9_]+$/.test(x) ? `.${x}` : `['${x}']`)).join('');
+import { type Loaded, type Registry, splitOp } from './registry.js';
+import { PLACEHOLDER, splitPath, TEMPLATE, WHOLE_TEMPLATE } from './templates.js';
+import { type Read, STRING, type Type, TypeResolver, UNKNOWN } from './types.js';
+import { typeAt, typeOfValue } from './values.js';
 
 export type GraphRole = 'domain' | 'data';
 
-export interface OpHit { path: string; opName: string; op: Operation; port: Loaded<PortDoc> }
+/** An operation as addressed by path#operation: the canonical path, the name, the contract, and the port. */
+export interface OpHit {
+  path: string;
+  opName: string;
+  op: Operation;
+  port: Loaded<PortDoc>;
+}
+
+/**
+ * Types the root of a template read in the caller's context. A string answer is the reason it cannot be read;
+ * undefined means the reason was already reported.
+ */
+export type ResolveRoot = (root: string, path: string[]) => Read | string | undefined;
+
+const SCALARS = new Set(['string', 'number', 'boolean', 'unknown']);
+const OPEN_STRINGS: Type = { kind: 'object', fields: {}, open: STRING };
+const OPEN_UNKNOWN: Type = { kind: 'object', fields: {}, open: UNKNOWN };
+
+/** The object of required strings a templated string setting binds: one field per {name} placeholder. */
+function placeholderObject(value: string): Type {
+  const fields: Record<string, { type: Type; required: boolean }> = {};
+  for (const match of value.matchAll(PLACEHOLDER)) fields[match[1]] = { type: STRING, required: true };
+  return { kind: 'object', fields, open: false };
+}
 
 export class Scope {
   readonly types: TypeResolver;
   readonly project: ProjectDoc | undefined;
 
-  constructor(readonly registry: Registry, readonly canon: (ref: string) => string) {
+  constructor(
+    readonly registry: Registry,
+    readonly canon: (ref: string) => string,
+  ) {
     this.types = new TypeResolver(path => registry.get('shape', path)?.doc, canon);
     this.project = registry.project?.doc;
   }
 
   // ---- lookups -------------------------------------------------------------------------------
 
-  get<K extends Kind>(kind: K, ref: string): Loaded<DocByKind[K]> | undefined { return this.registry.get(kind, this.canon(ref)); }
-  any(ref: string): Loaded | undefined { return this.registry.any(this.canon(ref)); }
+  get<K extends Kind>(kind: K, ref: string): Loaded<DocByKind[K]> | undefined {
+    return this.registry.get(kind, this.canon(ref));
+  }
+
+  any(ref: string): Loaded | undefined {
+    return this.registry.any(this.canon(ref));
+  }
 
   /** Can `from` name `target`? Native and project-scope documents are visible everywhere; a feature's are exported or private. */
   visibility(from: Loaded, target: Loaded): string | null {
     if (target.native || !target.feature || target.feature === from.feature) return null;
-    const f = this.registry.get('feature', `@features/${from.feature}/feature.json`)?.doc;
-    const t = this.registry.get('feature', `@features/${target.feature}/feature.json`)?.doc;
-    if (!from.feature || !f?.dependsOn?.includes(target.feature)) return `feature '${from.feature ?? '(root)'}' does not declare dependsOn '${target.feature}'`;
-    if (!t?.exports?.map(e => this.canon(e)).includes(target.path)) return `feature '${target.feature}' does not export '${target.path}'`;
-    return null;
+    const ours = this.registry.get('feature', `@features/${from.feature}/feature.json`)?.doc;
+    const theirs = this.registry.get('feature', `@features/${target.feature}/feature.json`)?.doc;
+    if (!from.feature || !ours?.dependsOn?.includes(target.feature)) {
+      return `feature '${from.feature ?? '(root)'}' does not declare dependsOn '${target.feature}'`;
+    }
+    const exported = theirs?.exports?.map(ref => this.canon(ref)).includes(target.path);
+    return exported ? null : `feature '${target.feature}' does not export '${target.path}'`;
   }
 
   /** The operation a path#operation names. */
@@ -68,28 +89,34 @@ export class Scope {
     const port = this.get('port', path);
     if (!port) return `unknown port '${path}'`;
     const op = port.doc.operations[opName];
-    if (!op) return `port '${path}' has no operation '${opName}' (operations: ${Object.keys(port.doc.operations).join(', ')})`;
+    if (!op)
+      return `port '${path}' has no operation '${opName}' (operations: ${Object.keys(port.doc.operations).join(', ')})`;
     return { path: port.path, opName, op, port };
   }
 
   // ---- bindings and profiles ----------------------------------------------------------------
 
   bindingsFor(portPath: string): Loaded<BindingDoc>[] {
-    return this.registry.all('binding').filter(b => this.canon(b.doc.port) === portPath);
+    return this.registry.all('binding').filter(binding => this.canon(binding.doc.port) === portPath);
   }
 
   /** The binding for a domain port under a profile: the profile's choice, else the one and only binding. */
   bindingFor(portPath: string, profile?: string): Loaded<BindingDoc> | string {
-    const prof = profile ? this.project?.profiles?.[profile] : undefined;
-    const chosen = prof ? Object.entries(prof.bindings).find(([k]) => this.canon(k) === portPath)?.[1] : undefined;
-    if (chosen) { const b = this.get('binding', chosen); return b ?? `profile '${profile}' names unknown binding '${chosen}' for '${portPath}'`; }
+    const declared = profile ? this.project?.profiles?.[profile] : undefined;
+    const chosen = declared
+      ? Object.entries(declared.bindings).find(([ref]) => this.canon(ref) === portPath)?.[1]
+      : undefined;
+    if (chosen)
+      return this.get('binding', chosen) ?? `profile '${profile}' names unknown binding '${chosen}' for '${portPath}'`;
     const all = this.bindingsFor(portPath);
     if (all.length === 1) return all[0];
     if (all.length === 0) return `no binding implements port '${portPath}'`;
-    return `port '${portPath}' has ${all.length} bindings (${all.map(b => b.path).join(', ')}) -- choose one in a project profile`;
+    return `port '${portPath}' has ${all.length} bindings (${all.map(binding => binding.path).join(', ')}) -- choose one in a project profile`;
   }
 
-  profiles(): string[] { return Object.keys(this.project?.profiles ?? {}); }
+  profiles(): string[] {
+    return Object.keys(this.project?.profiles ?? {});
+  }
 
   // ---- graph roles --------------------------------------------------------------------------
 
@@ -102,7 +129,7 @@ export class Scope {
     return this.get('graph', graphPath)?.layer === 'data' ? 'data' : 'domain';
   }
 
-  // ---- types ---------------------------------------------------------------------------------
+  // ---- the request's type -------------------------------------------------------------------
 
   /**
    * A trigger kind's context type for one trigger. A `type` setting binds its variable to the type it names
@@ -113,94 +140,136 @@ export class Scope {
    */
   contextType(kind: TriggerKindDoc, settings: Record<string, unknown> = {}): Type {
     const subst: Record<string, Type> = {};
-    for (const [k, f] of Object.entries(kind.settings.fields)) {
-      if (!f.binds) continue;
-      const v = settings[k];
-      if (f.type === 'type') { if (typeof v === 'string') { try { subst[f.binds] = this.types.spec(v); } catch { /* R001 reported by the trigger check */ } } continue; }
-      if (f.type !== 'string') continue;
-      if (typeof v !== 'string') { subst[f.binds] = { kind: 'object', fields: {}, open: STRING }; continue; }
-      const fields: Record<string, { type: Type; required: boolean }> = {};
-      for (const m of v.matchAll(PLACEHOLDER)) fields[m[1]] = { type: STRING, required: true };
-      subst[f.binds] = { kind: 'object', fields, open: false };
+    for (const [name, field] of Object.entries(kind.settings.fields)) {
+      const bound = this.settingBinds(field, settings[name]);
+      if (bound && field.binds) subst[field.binds] = bound;
     }
     const fields = { ...kind.context.fields };
     const guard = this.guard();
     if (guard) {
-      Object.assign(fields, guard.doc.guard!.context.fields);
-      // a guard's context may name a variable its plugin's settings bind: session attributes are the shape the project names
-      const given = this.project?.plugins.find(x => x.use === guard.native)?.settings ?? {};
-      for (const [k, f] of Object.entries(guard.doc.settings?.fields ?? {})) {
-        if (!f.binds || f.type !== 'type') continue;
-        const v = given[k];
-        if (typeof v === 'string') { try { subst[f.binds] = this.types.spec(v); } catch { /* the plugin's check reports it */ } }
-        subst[f.binds] ??= { kind: 'object', fields: {}, open: UNKNOWN };
-      }
+      Object.assign(fields, guard.doc.guard?.context.fields);
+      this.guardBinds(guard, subst);
     }
     return substitute(this.types.inline({ fields, open: kind.context.open }), subst);
   }
 
+  /** What one setting binds its variable to, given the trigger's value for it; nothing when the field binds nothing. */
+  private settingBinds(field: Field, value: unknown): Type | undefined {
+    if (!field.binds) return undefined;
+    if (field.type === 'type') return typeof value === 'string' ? this.quietType(value) : undefined;
+    if (field.type !== 'string') return undefined;
+    return typeof value === 'string' ? placeholderObject(value) : OPEN_STRINGS;
+  }
+
+  /**
+   * A guard's context may name a variable its plugin's settings bind: session attributes are the shape the
+   * project names. A binding the settings do not make stays what the kind bound, else an open object.
+   */
+  private guardBinds(guard: Loaded<PluginDoc>, subst: Record<string, Type>): void {
+    const given = this.project?.plugins.find(use => use.use === guard.native)?.settings ?? {};
+    for (const [name, field] of Object.entries(guard.doc.settings?.fields ?? {})) {
+      if (!field.binds || field.type !== 'type') continue;
+      const value = given[name];
+      const named = typeof value === 'string' ? this.quietType(value) : undefined;
+      subst[field.binds] = named ?? subst[field.binds] ?? OPEN_UNKNOWN;
+    }
+  }
+
+  /** The type a reference names, or nothing: the refusal is made where the reference is judged (R001, or the plugin's check). */
+  private quietType(ref: string): Type | undefined {
+    try {
+      return this.types.spec(ref);
+    } catch {
+      return undefined;
+    }
+  }
+
   /** The plugin document that declares a guard, when the project names such a plugin. */
   guard(): Loaded<PluginDoc> | undefined {
-    return this.registry.all('plugin').find(p => p.doc.guard && this.project?.plugins.some(x => x.use === p.native));
+    return this.registry
+      .all('plugin')
+      .find(plugin => plugin.doc.guard && this.project?.plugins.some(use => use.use === plugin.native));
   }
 
   /** Every trigger kind's context that has `path`; used to type request.* reads in resolvers (kind unknown there). */
   requestRead(path: string[]): Read | string {
     const hits: Read[] = [];
-    for (const k of this.registry.all('trigger-kind')) {
-      const r = typeAt(this.contextType(k.doc as TriggerKindDoc), path);
-      if (typeof r !== 'string') hits.push(r);
+    for (const kind of this.registry.all('trigger-kind')) {
+      const read = typeAt(this.contextType(kind.doc as TriggerKindDoc), path);
+      if (typeof read !== 'string') hits.push(read);
     }
     if (!hits.length) return `no trigger kind hands request.${path.join('.')}`;
-    return { type: hits[0].type, optional: hits.some(h => h.optional) };
+    return { type: hits[0].type, optional: hits.some(hit => hit.optional) };
   }
+
+  // ---- values --------------------------------------------------------------------------------
 
   /**
    * Type a value: a literal by what it is, a template by `resolve` (root and path in the caller's context).
    * A string answer is the reason it cannot be typed; undefined means the reason was already reported.
    */
-  valueRead(value: unknown, resolve: (root: string, path: string[]) => Read | string | undefined): Read | string | undefined {
-    if (typeof value === 'string') {
-      const whole = WHOLE_TEMPLATE.exec(value);
-      if (whole) { const p = splitPath(whole[1]); return resolve(p[0], p.slice(1)); }
-      let optional = false;
-      for (const m of value.matchAll(TEMPLATE)) {
-        const p = splitPath(m[1]);
-        const r = resolve(p[0], p.slice(1));
-        if (typeof r !== 'object') return r;
-        if (!['string', 'number', 'boolean', 'unknown'].includes(r.type.kind)) return `{{${m[1]}}} is ${r.type.kind}; only scalars interpolate into text`;
-        optional ||= r.optional;
-      }
-      return { type: value.includes('{{') ? STRING : typeOfValue(value), optional };
-    }
-    if (Array.isArray(value)) {
-      if (!value.length) return { type: { kind: 'list', of: UNKNOWN }, optional: false };
-      const first = this.valueRead(value[0], resolve);
-      if (typeof first !== 'object') return first;
-      for (const v of value.slice(1)) { const r = this.valueRead(v, resolve); if (typeof r !== 'object') return r; }
-      return { type: { kind: 'list', of: first.type }, optional: false };
-    }
-    if (value && typeof value === 'object') {
-      const fields: Record<string, { type: Type; required: boolean }> = {};
-      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-        const r = this.valueRead(v, resolve);
-        if (r === undefined) return undefined;
-        if (typeof r === 'string') return `${k}: ${r}`;
-        fields[k] = { type: r.type, required: !r.optional };
-      }
-      return { type: { kind: 'object', fields, open: false }, optional: false };
-    }
+  valueRead(value: unknown, resolve: ResolveRoot): Read | string | undefined {
+    if (typeof value === 'string') return this.stringRead(value, resolve);
+    if (Array.isArray(value)) return this.listRead(value, resolve);
+    if (value && typeof value === 'object') return this.objectRead(value as Record<string, unknown>, resolve);
     return { type: typeOfValue(value), optional: false };
   }
 
+  /** A whole template takes the type of what it reads; text with templates is a string, optional when any read is. */
+  private stringRead(value: string, resolve: ResolveRoot): Read | string | undefined {
+    const whole = WHOLE_TEMPLATE.exec(value);
+    if (whole) {
+      const [root, ...path] = splitPath(whole[1]);
+      return resolve(root, path);
+    }
+    let optional = false;
+    for (const match of value.matchAll(TEMPLATE)) {
+      const [root, ...path] = splitPath(match[1]);
+      const read = resolve(root, path);
+      if (typeof read !== 'object') return read;
+      if (!SCALARS.has(read.type.kind))
+        return `{{${match[1]}}} is ${read.type.kind}; only scalars interpolate into text`;
+      optional ||= read.optional;
+    }
+    return { type: value.includes('{{') ? STRING : typeOfValue(value), optional };
+  }
+
+  /** A list types as a list of its first member; every member must type. */
+  private listRead(value: unknown[], resolve: ResolveRoot): Read | string | undefined {
+    if (!value.length) return { type: { kind: 'list', of: UNKNOWN }, optional: false };
+    const first = this.valueRead(value[0], resolve);
+    if (typeof first !== 'object') return first;
+    for (const item of value.slice(1)) {
+      const read = this.valueRead(item, resolve);
+      if (typeof read !== 'object') return read;
+    }
+    return { type: { kind: 'list', of: first.type }, optional: false };
+  }
+
+  /** An object types field by field; a member that may be missing is an optional field. */
+  private objectRead(value: Record<string, unknown>, resolve: ResolveRoot): Read | string | undefined {
+    const fields: Record<string, { type: Type; required: boolean }> = {};
+    for (const [name, item] of Object.entries(value)) {
+      const read = this.valueRead(item, resolve);
+      if (read === undefined) return undefined;
+      if (typeof read === 'string') return `${name}: ${read}`;
+      fields[name] = { type: read.type, required: !read.optional };
+    }
+    return { type: { kind: 'object', fields, open: false }, optional: false };
+  }
+
   /** Is the value a literal, free of templates? */
-  literal(value: unknown): boolean { return this.templateReads(value).length === 0; }
+  literal(value: unknown): boolean {
+    return this.templateReads(value).length === 0;
+  }
 
   /** All template roots+paths a value reads. */
   templateReads(value: unknown, out: string[][] = []): string[][] {
-    if (typeof value === 'string') for (const m of value.matchAll(TEMPLATE)) out.push(splitPath(m[1]));
-    else if (Array.isArray(value)) value.forEach(v => this.templateReads(v, out));
-    else if (value && typeof value === 'object') Object.values(value as Record<string, unknown>).forEach(v => this.templateReads(v, out));
+    if (typeof value === 'string') for (const match of value.matchAll(TEMPLATE)) out.push(splitPath(match[1]));
+    else if (Array.isArray(value)) for (const item of value) this.templateReads(item, out);
+    else if (value && typeof value === 'object') {
+      for (const item of Object.values(value as Record<string, unknown>)) this.templateReads(item, out);
+    }
     return out;
   }
 }

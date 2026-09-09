@@ -6,8 +6,9 @@
  * loaded on every request: a save in the editor shows on the next paint, and the server holds no state
  * that could go stale.
  */
-import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PluginModule } from '@wilanis/core';
@@ -22,7 +23,11 @@ export interface ServeViewOptions {
   log?: (s: string) => void;
 }
 
-export interface ViewServer { url: string; server: Server; close(): Promise<void> }
+export interface ViewServer {
+  url: string;
+  server: Server;
+  close(): Promise<void>;
+}
 
 const PAGE = fileURLToPath(new URL('../client/index.html', import.meta.url));
 
@@ -32,20 +37,30 @@ function schemaFile(rel: string): string | undefined {
   try {
     const file = fileURLToPath(import.meta.resolve(`@wilanis/core/schemas/${rel}`));
     return existsSync(file) ? file : undefined;
-  } catch { return undefined; }
+  } catch {
+    return undefined;
+  }
 }
 
 /** A fingerprint of every JSON file under root: paths and modification times. Changes when the tree does. */
 export function versionOf(root: string): string {
   let h = 2166136261;
-  const mix = (s: string) => { for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } };
+  const mix = (s: string) => {
+    for (const c of s) {
+      h ^= c.charCodeAt(0);
+      h = Math.imul(h, 16777619);
+    }
+  };
   const walk = (dir: string) => {
     for (const name of readdirSync(dir).sort()) {
       if (name.startsWith('.') || name === 'node_modules') continue;
       const p = join(dir, name);
       const st = statSync(p);
       if (st.isDirectory()) walk(p);
-      else if (name.endsWith('.json')) { mix(p); mix(String(st.mtimeMs)); }
+      else if (name.endsWith('.json')) {
+        mix(p);
+        mix(String(st.mtimeMs));
+      }
     }
   };
   walk(root);
@@ -89,9 +104,14 @@ export async function serveView(root: string, opts: ServeViewOptions = {}): Prom
       json(res, 500, { error: (e as Error).message });
     }
   };
-  const server = createServer((req, res) => { void handle(req, res); });
+  const server = createServer((req, res) => {
+    void handle(req, res);
+  });
   const host = opts.host ?? '127.0.0.1';
-  await new Promise<void>((ok, fail) => { server.once('error', fail); server.listen(opts.port ?? 4400, host, () => ok()); });
+  await new Promise<void>((ok, fail) => {
+    server.once('error', fail);
+    server.listen(opts.port ?? 4400, host, () => ok());
+  });
   const addr = server.address();
   const port = typeof addr === 'object' && addr ? addr.port : opts.port;
   const url = `http://${host}:${port}/`;

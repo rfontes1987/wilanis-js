@@ -1,25 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { check, evaluate, parse, ExprError } from '../src/expr.js';
+import { check, ExprError, evaluate, parse } from '../src/expr/index.js';
 import { BOOLEAN, STRING, type Type } from '../src/types.js';
 
-const principal: Type = { kind: 'object', fields: { realm: { type: STRING, required: true }, roles: { type: { kind: 'list', of: STRING }, required: true } }, open: false };
+const principal: Type = {
+  kind: 'object',
+  fields: { realm: { type: STRING, required: true }, roles: { type: { kind: 'list', of: STRING }, required: true } },
+  open: false,
+};
 
 describe('membership', () => {
   it('parses `x in list`, types it boolean, and evaluates it against the list', () => {
-    const e = parse("'admin' in p.roles");
-    expect(check(e, { p: { type: principal } })).toEqual(BOOLEAN);
-    expect(evaluate(e, { p: { roles: ['admin', 'x'] } })).toBe(true);
-    expect(evaluate(e, { p: { roles: ['x'] } })).toBe(false);
-    expect(evaluate(e, { p: {} })).toBe(false);
+    const parsed = parse("'admin' in p.roles");
+    expect(check(parsed, { p: { type: principal } })).toEqual(BOOLEAN);
+    expect(evaluate(parsed, { p: { roles: ['admin', 'x'] } })).toBe(true);
+    expect(evaluate(parsed, { p: { roles: ['x'] } })).toBe(false);
+    expect(evaluate(parsed, { p: {} })).toBe(false);
   });
   it('refuses a non-list on the right and a value that could never be in the list', () => {
     expect(() => check(parse("'a' in p.realm"), { p: { type: principal } })).toThrow(ExprError);
     expect(() => check(parse('1 in p.roles'), { p: { type: principal } })).toThrow(/never in/);
   });
   it('keeps `in` as an input name: in.x is a path, `in` after a value is the operator', () => {
-    const e = parse("'admin' in in.roles");
-    expect(check(e, { in: { type: principal } })).toEqual(BOOLEAN);
-    expect(evaluate(e, { in: { roles: ['admin'] } })).toBe(true);
+    const parsed = parse("'admin' in in.roles");
+    expect(check(parsed, { in: { type: principal } })).toEqual(BOOLEAN);
+    expect(evaluate(parsed, { in: { roles: ['admin'] } })).toBe(true);
   });
 });
 

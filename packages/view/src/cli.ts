@@ -1,8 +1,8 @@
 #!/usr/bin/env node
+import { spawn } from 'node:child_process';
 /** wilanis-view [root] [--port n] [--host h] [--open]: serve the viewer for a tree. */
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
 import { serveView } from './serve.js';
 
 const USAGE = `wilanis-view [root] [--port 4400] [--host 127.0.0.1] [--open]
@@ -28,14 +28,27 @@ function parse(argv: string[]) {
 
 async function main() {
   const { flags, positional } = parse(process.argv.slice(2));
-  if (flags.help) { console.log(USAGE); return; }
+  if (flags.help) {
+    console.log(USAGE);
+    return;
+  }
   const root = resolve(positional[0] ?? '.');
-  if (!existsSync(join(root, 'project.json'))) { console.error(`no project.json in ${root}`); process.exit(2); }
-  const { url } = await serveView(root, { port: flags.port ? Number(flags.port) : undefined, host: flags.host, log: s => console.log(s) });
+  if (!existsSync(join(root, 'project.json'))) {
+    console.error(`no project.json in ${root}`);
+    process.exit(2);
+  }
+  const { url } = await serveView(root, {
+    port: flags.port ? Number(flags.port) : undefined,
+    host: flags.host,
+    log: s => console.log(s),
+  });
   if (flags.open) {
     const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
     spawn(cmd, [url], { stdio: 'ignore', detached: true, shell: process.platform === 'win32' }).unref();
   }
 }
 
-main().catch(e => { console.error((e as Error).message); process.exit(1); });
+main().catch(e => {
+  console.error((e as Error).message);
+  process.exit(1);
+});

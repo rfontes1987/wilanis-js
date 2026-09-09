@@ -4,7 +4,7 @@
  * The plugin decides only *when* to reload. Loading the tree and judging it belong to the runtime, and reach
  * this handler as `serving.reload()` -- a plugin never imports the compiler or the runtime.
  */
-import { watch, type FSWatcher } from 'node:fs';
+import { type FSWatcher, watch } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Hold, PluginModule, Serving } from '@wilanis/core';
 import type { Handler } from '@wilanis/engine';
@@ -24,7 +24,10 @@ const IGNORED = /(^|[\\/])(node_modules|dist|\.git)([\\/]|$)/;
 const watchTree: Handler = async ({ in: input, ctx }) => {
   const env = ctx.env as { serving?: Serving; hold?: Hold; plugins?: Record<string, Record<string, unknown>> };
   const serving = env.serving;
-  if (!serving || !env.hold) throw new Error(`'${P('watch.port.json')}#watch' watches the tree while it is served, so it runs from a project's startup list -- not from a graph`);
+  if (!serving || !env.hold)
+    throw new Error(
+      `'${P('watch.port.json')}#watch' watches the tree while it is served, so it runs from a project's startup list -- not from a graph`,
+    );
   const settings = env.plugins?.[ROOT] ?? {};
   const wait = Number(input.debounceMs ?? settings.debounceMs ?? DEFAULT_DEBOUNCE);
   const { root, log } = serving;
@@ -34,7 +37,10 @@ const watchTree: Handler = async ({ in: input, ctx }) => {
   let again = false;
 
   const reload = async () => {
-    if (running) { again = true; return; } // an edit during a reload is answered by the next one
+    if (running) {
+      again = true;
+      return;
+    } // an edit during a reload is answered by the next one
     running = true;
     try {
       const r = await serving.reload();
@@ -44,20 +50,29 @@ const watchTree: Handler = async ({ in: input, ctx }) => {
       log(`reload failed, still serving the last good tree: ${(e as Error).message}`);
     } finally {
       running = false;
-      if (again) { again = false; void reload(); }
+      if (again) {
+        again = false;
+        void reload();
+      }
     }
   };
 
   const watcher: FSWatcher = watch(root, { recursive: true }, (_event, name) => {
     if (name && (IGNORED.test(name) || !name.endsWith('.json'))) return; // only documents matter
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => { timer = undefined; void reload(); }, wait);
+    timer = setTimeout(() => {
+      timer = undefined;
+      void reload();
+    }, wait);
   });
 
   log(`reload: watching ${root} -- an edit is served once it passes wilanis check`);
   env.hold({
     label: `reload ${root}`,
-    stop: async () => { if (timer) clearTimeout(timer); watcher.close(); },
+    stop: async () => {
+      if (timer) clearTimeout(timer);
+      watcher.close();
+    },
   });
   return { watching: root };
 };

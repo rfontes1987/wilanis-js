@@ -11,7 +11,8 @@
  */
 import type { Readable } from 'node:stream';
 import type { Handler, Report } from '@wilanis/engine';
-import type { Registry, TriggerDoc } from './model.js';
+import type { TriggerDoc } from './model.js';
+import type { Refusal, Registry } from './registry.js';
 import type { Scope } from './scope.js';
 import type { BlobHandle, Type } from './types.js';
 
@@ -31,7 +32,9 @@ export interface BlobStore {
   /** A scope of this store: what is put through it is dropped by `release`, so a run's blobs end with the run. */
   scope(): BlobScope;
 }
-export interface BlobScope extends BlobStore { release(): Promise<void> }
+export interface BlobScope extends BlobStore {
+  release(): Promise<void>;
+}
 
 /**
  * What a `holds` operation is given, as `env.hold`: it hands back the way to stop what it started, and the
@@ -51,14 +54,14 @@ export interface Serving {
   /** Run a trigger's operation and answer its report. */
   fire(args: FireArgs): Promise<Report>;
   /** The trigger's in/out types, resolved. */
-  types(t: TriggerDoc): { in?: Type; out?: Type };
+  types(trigger: TriggerDoc): { in?: Type; out?: Type };
   /** Build and judge the trigger's input from the context this kind assembled (body already decoded). */
-  inputFor(t: TriggerDoc, request: Record<string, unknown>): { input: unknown } | { error: string };
+  inputFor(trigger: TriggerDoc, request: Record<string, unknown>): { input: unknown } | { error: string };
   /** content type -> codec, from a plugin's settings table. */
   codecs(root: string): Codecs;
   /** The tree's blob registry; a listener opens a scope per request and releases it once it has answered. */
   blobs: BlobStore;
-  log(s: string): void;
+  log(line: string): void;
   /**
    * Load and judge the tree again, and serve it if it is clean. The runtime does the loading and the judging
    * -- a plugin never imports the compiler -- so a watcher only decides *when*. A tree that refuses is not
@@ -72,7 +75,7 @@ export interface Serving {
 /** The whole of a stream, for a codec that needs the body entire (JSON, text, a form). A blob codec never calls this. */
 export async function readAll(source: Readable): Promise<Buffer> {
   const chunks: Buffer[] = [];
-  for await (const c of source) chunks.push(typeof c === 'string' ? Buffer.from(c) : (c as Buffer));
+  for await (const chunk of source) chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer));
   return Buffer.concat(chunks);
 }
 
@@ -88,17 +91,23 @@ export interface FireArgs {
 
 export interface TriggerRuntime {
   /** Start every trigger of this kind; `fire` runs the graph and answers its report. Answers a stop function. */
-  start(triggers: TriggerDoc[], fire: (args: FireArgs) => Promise<Report>, opts: {
-    settings: Record<string, unknown>; registry: Registry; log: (s: string) => void;
-    /** The trigger's in/out types, resolved. */
-    types: (t: TriggerDoc) => { in?: Type; out?: Type };
-    /** Build and judge the trigger's input from the context this kind assembled (body already decoded). */
-    inputFor: (t: TriggerDoc, request: Record<string, unknown>) => { input: unknown } | { error: string };
-    /** content type -> codec, from this plugin's settings table. */
-    codecs: Codecs;
-    /** The tree's blob registry; a kind opens a scope per run and releases it once it has answered. */
-    blobs: BlobStore;
-  }): Promise<() => Promise<void>>;
+  start(
+    triggers: TriggerDoc[],
+    fire: (args: FireArgs) => Promise<Report>,
+    opts: {
+      settings: Record<string, unknown>;
+      registry: Registry;
+      log: (line: string) => void;
+      /** The trigger's in/out types, resolved. */
+      types: (trigger: TriggerDoc) => { in?: Type; out?: Type };
+      /** Build and judge the trigger's input from the context this kind assembled (body already decoded). */
+      inputFor: (trigger: TriggerDoc, request: Record<string, unknown>) => { input: unknown } | { error: string };
+      /** content type -> codec, from this plugin's settings table. */
+      codecs: Codecs;
+      /** The tree's blob registry; a kind opens a scope per run and releases it once it has answered. */
+      blobs: BlobStore;
+    },
+  ): Promise<() => Promise<void>>;
   /** Encode a report the way this kind would answer, for `wilanis run` and rehearsal. */
   encode?(trigger: TriggerDoc, report: Report): unknown;
 }
@@ -150,18 +159,25 @@ export interface Guard {
    * request.challenge. A credential that is there and does not verify is refused here with one of the plugin's
    * declared reasons; an absent one is not -- the caller is anonymous and the policies decide.
    */
-  identify(a: GuardArgs): Promise<{ context: Record<string, unknown> } | { refuse: { reason: string; message: string; detail?: Record<string, unknown> } }>;
+  identify(
+    args: GuardArgs,
+  ): Promise<
+    | { context: Record<string, unknown> }
+    | { refuse: { reason: string; message: string; detail?: Record<string, unknown> } }
+  >;
   /** Open a challenge a policy outcome asked for; answers what the caller is told, and the detail (its id, how to answer) that rides with the refusal. */
-  challenge(a: GuardArgs & { policy: string; reason: string; message: string; method?: string }): Promise<{ message: string; detail: Record<string, unknown> }>;
+  challenge(
+    args: GuardArgs & { policy: string; reason: string; message: string; method?: string },
+  ): Promise<{ message: string; detail: Record<string, unknown> }>;
   /** After the trigger's operation ran: consume what was single-use, stamp what was proven. */
-  settle?(a: GuardArgs & { report: Report }): Promise<void>;
+  settle?(args: GuardArgs & { report: Report }): Promise<void>;
 }
 
-/** What a plugin's `check` sees: the resolved tree, its own settings, and the way to refuse. */
+/** What a plugin's `check` sees: the resolved tree, its own settings, and the way to refuse (an X code, the file, the message, where, the fix). */
 export interface PluginCheckContext {
   scope: Scope;
   settings: Record<string, unknown>;
-  refuse: (code: string, file: string, message: string, at?: string, hint?: string) => void;
+  refuse: (refusal: Refusal) => void;
 }
 
 /** What a plugin's `postLoad` sees. */
@@ -174,7 +190,7 @@ export interface PostLoadContext {
   settings: Record<string, unknown>;
   /** The environment handlers see: connections, plugins, canon, resolveType. */
   env: Record<string, unknown>;
-  log: (s: string) => void;
+  log: (line: string) => void;
 }
 
 export interface PluginModule {

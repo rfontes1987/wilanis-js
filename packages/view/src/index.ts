@@ -3,5 +3,22 @@
  * (a graph's nodes, typed ports, edges and where each operation leads; every kind's references and
  * callers), `indexOf` lists the tree, `serveView` serves both and the page over HTTP.
  */
-export { viewOf, indexOf, labelOf, readable, schemaRelOf, schemaViewOf, type SchemaView, type DocView, type VNode, type VPort, type VEdge, type VRef, type VTarget, type VNodeKind, type TreeIndex, type IndexEntry } from './model.js';
-export { serveView, versionOf, type ServeViewOptions, type ViewServer } from './serve.js';
+export {
+  type DocView,
+  type IndexEntry,
+  indexOf,
+  labelOf,
+  readable,
+  type SchemaView,
+  schemaRelOf,
+  schemaViewOf,
+  type TreeIndex,
+  type VEdge,
+  type VNode,
+  type VNodeKind,
+  type VPort,
+  type VRef,
+  type VTarget,
+  viewOf,
+} from './model.js';
+export { type ServeViewOptions, serveView, type ViewServer, versionOf } from './serve.js';

@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { BLOB, TypeResolver, assignable, conforms, generate, isBlobHandle, rng, show, toJsonSchema, typeAt } from '../src/index.js';
+import {
+  assignable,
+  BLOB,
+  conforms,
+  generate,
+  isBlobHandle,
+  rng,
+  show,
+  TypeResolver,
+  toJsonSchema,
+  typeAt,
+} from '../src/index.js';
 
 const types = new TypeResolver(() => undefined);
 
@@ -10,7 +21,12 @@ describe('the blob type', () => {
     expect(assignable(BLOB, BLOB)).toBeNull();
     expect(assignable(BLOB, { kind: 'unknown' })).toBeNull();
     expect(assignable(BLOB, { kind: 'string' })).toBe('blob is not string');
-    expect(assignable(types.inline({ fields: { id: { type: 'string' }, contentType: { type: 'string' }, size: { type: 'number' } } }), BLOB)).toContain('is not blob');
+    expect(
+      assignable(
+        types.inline({ fields: { id: { type: 'string' }, contentType: { type: 'string' }, size: { type: 'number' } } }),
+        BLOB,
+      ),
+    ).toContain('is not blob');
   });
   it('a value of it is the handle -- id, contentType, size, an optional filename -- and nothing else passes', () => {
     expect(isBlobHandle({ id: 'x', contentType: 'text/csv', size: 3 })).toBe(true);

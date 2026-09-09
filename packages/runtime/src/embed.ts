@@ -3,34 +3,55 @@
  * and `request`, runs the kernel, then judges the answer against the trigger's out type and prunes keys
  * a closed shape does not declare -- the trigger is where the domain's value becomes the edge's.
  */
-import { Compiler, buildEnv, runGraph, type CompileOptions, type Compiled } from '@wilanis/compiler';
+import { buildEnv, type Compiled, type CompileOptions, Compiler, runGraph } from '@wilanis/compiler';
+import type { Codecs, Hold, PluginModule, Scope, Serving } from '@wilanis/core';
+import {
+  type BlobStore,
+  conforms,
+  type GuardArgs,
+  policyPath,
+  type StartupStep,
+  splitPath,
+  TEMPLATE,
+  type TriggerDoc,
+  type Type,
+  WHOLE_TEMPLATE,
+} from '@wilanis/core';
 import type { Report } from '@wilanis/engine';
-import { policyPath, type GuardArgs, type StartupStep, type TriggerDoc } from '@wilanis/core';
-import type { PluginModule, Codecs, Hold, Serving } from '@wilanis/core';
-import type { Scope } from '@wilanis/core';
-import { conforms, type BlobStore, type Type } from '@wilanis/core';
-import { TEMPLATE, WHOLE_TEMPLATE, splitPath } from '@wilanis/core';
-import { FileBlobStore } from './blobs.js';
 import { readPath, refusalOf } from '@wilanis/engine';
+import { FileBlobStore } from './blobs.js';
 
 /** Fill a templated literal from roots (request, ...). Whole templates take the value; embedded ones interpolate. */
 export function fillTemplates(value: unknown, roots: Record<string, unknown>): unknown {
-  const read = (t: string) => { const [root, ...path] = splitPath(t); return readPath(roots[root], path); };
+  const read = (t: string) => {
+    const [root, ...path] = splitPath(t);
+    return readPath(roots[root], path);
+  };
   if (typeof value === 'string') {
     const whole = WHOLE_TEMPLATE.exec(value);
     if (whole) return read(whole[1]);
-    return value.replace(TEMPLATE, (_, t: string) => { const v = read(t); return v === undefined ? '' : String(v); });
+    return value.replace(TEMPLATE, (_, t: string) => {
+      const v = read(t);
+      return v === undefined ? '' : String(v);
+    });
   }
   if (Array.isArray(value)) return value.map(v => fillTemplates(v, roots));
   if (value && typeof value === 'object') {
     const o: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) { const x = fillTemplates(v, roots); if (x !== undefined) o[k] = x; }
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      const x = fillTemplates(v, roots);
+      if (x !== undefined) o[k] = x;
+    }
     return o;
   }
   return value;
 }
 
-export interface FireOptions { stubs?: Record<string, unknown>; signal?: AbortSignal; /** The blob scope of this run; handlers see it as env.blobs. Absent: the tree's store itself. */ blobs?: BlobStore }
+export interface FireOptions {
+  stubs?: Record<string, unknown>;
+  signal?: AbortSignal /** The blob scope of this run; handlers see it as env.blobs. Absent: the tree's store itself. */;
+  blobs?: BlobStore;
+}
 
 export class Embedder {
   private compiler: Compiler;
@@ -48,14 +69,22 @@ export class Embedder {
   /** The one plugin that identifies callers, when the project names one. */
   private readonly guard: PluginModule | undefined;
 
-  constructor(readonly scope: Scope, readonly plugins: PluginModule[], opts: CompileOptions & { env?: NodeJS.ProcessEnv; blobs?: BlobStore; root?: string } = {}) {
+  constructor(
+    readonly scope: Scope,
+    readonly plugins: PluginModule[],
+    opts: CompileOptions & { env?: NodeJS.ProcessEnv; blobs?: BlobStore; root?: string } = {},
+  ) {
     this.compiler = new Compiler(scope, plugins, opts);
     const processEnv = opts.env ?? process.env;
     const built = buildEnv(scope, processEnv);
-    this.secrets = Object.fromEntries(Object.entries(scope.project?.secrets ?? {}).map(([k, v]) => [k, processEnv[v] ?? '']));
+    this.secrets = Object.fromEntries(
+      Object.entries(scope.project?.secrets ?? {}).map(([k, v]) => [k, processEnv[v] ?? '']),
+    );
     const root = opts.root ?? process.cwd();
     this.blobs = opts.blobs ?? new FileBlobStore(root, scope.project?.blobs?.dir);
-    const hold: Hold = what => { this.held.push(what); };
+    const hold: Hold = what => {
+      this.held.push(what);
+    };
     this.env = { ...built.env, blobs: this.blobs, hold, root };
     this.missingSecrets = built.missing;
     this.stubbed = Boolean(opts.stubEffects);
@@ -63,12 +92,17 @@ export class Embedder {
   }
 
   /** Give `holds` operations the tree being served, as env.serving. Only `start` calls this: a stubbed run holds nothing. */
-  serve(served: { serving(): Serving }) { (this.env as Record<string, unknown>).serving = served.serving(); }
+  serve(served: { serving(): Serving }) {
+    (this.env as Record<string, unknown>).serving = served.serving();
+  }
 
   graph(ref: string): Compiled {
     const path = this.scope.canon(ref);
     let c = this.compiled.get(path);
-    if (!c) { c = this.compiler.graph(path); this.compiled.set(path, c); }
+    if (!c) {
+      c = this.compiler.graph(path);
+      this.compiled.set(path, c);
+    }
     return c;
   }
 
@@ -76,7 +110,10 @@ export class Embedder {
   operation(opRef: string): Compiled {
     const key = `op:${this.scope.canon(opRef.split('#')[0])}#${opRef.split('#')[1] ?? ''}`;
     let c = this.compiled.get(key);
-    if (!c) { c = this.compiler.operation(opRef); this.compiled.set(key, c); }
+    if (!c) {
+      c = this.compiler.operation(opRef);
+      this.compiled.set(key, c);
+    }
     return c;
   }
 
@@ -88,7 +125,11 @@ export class Embedder {
   async startup(step: StartupStep, opts: FireOptions = {}): Promise<Report> {
     const compiled = this.operation(step.run);
     const input = fillTemplates(step.in ?? {}, { secrets: this.secrets }) as Record<string, unknown>;
-    return runGraph(compiled, { initial: { in: input }, signal: opts.signal, env: opts.blobs ? { ...this.env, blobs: opts.blobs } : this.env });
+    return runGraph(compiled, {
+      initial: { in: input },
+      signal: opts.signal,
+      env: opts.blobs ? { ...this.env, blobs: opts.blobs } : this.env,
+    });
   }
 
   /**
@@ -96,8 +137,16 @@ export class Embedder {
    * all the same; its input is then what the decision accepts.
    */
   types(trigger: TriggerDoc): { in?: Type; out?: Type } {
-    const accepts = () => { const o = this.scope.op(trigger.fire.run); return typeof o === 'string' || !Object.keys(o.op.accepts ?? {}).length ? undefined : this.scope.types.fields(o.op.accepts); };
-    return { in: trigger.in ? this.scope.types.ref(trigger.in) : trigger.fire.in !== undefined ? accepts() : undefined, out: trigger.out ? this.scope.types.ref(trigger.out) : undefined };
+    const accepts = () => {
+      const o = this.scope.op(trigger.fire.run);
+      return typeof o === 'string' || !Object.keys(o.op.accepts ?? {}).length
+        ? undefined
+        : this.scope.types.fields(o.op.accepts);
+    };
+    return {
+      in: trigger.in ? this.scope.types.ref(trigger.in) : trigger.fire.in !== undefined ? accepts() : undefined,
+      out: trigger.out ? this.scope.types.ref(trigger.out) : undefined,
+    };
   }
 
   /**
@@ -107,12 +156,17 @@ export class Embedder {
    * may fire. A stubbed run is never gated: its generated context already carries a principal, and the
    * policies are rehearsed as roots of their own.
    */
-  private async gate(trigger: TriggerDoc, request: Record<string, unknown>, opts: FireOptions): Promise<Report | undefined> {
+  private async gate(
+    trigger: TriggerDoc,
+    request: Record<string, unknown>,
+    opts: FireOptions,
+  ): Promise<Report | undefined> {
     if (this.stubbed || !trigger.policies?.length) return undefined;
     const args = this.guardArgs(trigger, request);
     if (this.guard) {
       const id = await this.guard.guard!.identify(args);
-      if ('refuse' in id) return refused(`${this.guard.root} guard`, 'identify', id.refuse.reason, id.refuse.message, id.refuse.detail);
+      if ('refuse' in id)
+        return refused(`${this.guard.root} guard`, 'identify', id.refuse.reason, id.refuse.message, id.refuse.detail);
       Object.assign(request, id.context);
     }
     for (const use of trigger.policies) {
@@ -121,14 +175,24 @@ export class Embedder {
       if (!p) throw new Error(`unknown policy '${ref}'`);
       const compiled = this.operation(p.doc.decide.run);
       const input = fillTemplates(p.doc.decide.in ?? {}, { request });
-      const report = await runGraph(compiled, { initial: { in: input, request }, signal: opts.signal, env: opts.blobs ? { ...this.env, blobs: opts.blobs } : this.env });
+      const report = await runGraph(compiled, {
+        initial: { in: input, request },
+        signal: opts.signal,
+        env: opts.blobs ? { ...this.env, blobs: opts.blobs } : this.env,
+      });
       if (report.status === 'done') continue;
       const decided: Report = { ...report, graph: p.path };
       const outcome = refusalOf(report);
       if (!outcome) return decided; // the decision broke: a fault, answered as one
       const effect = p.doc.outcomes[outcome.reason];
       if (effect?.effect === 'challenge' && this.guard) {
-        const ch = await this.guard.guard!.challenge({ ...args, policy: p.path, reason: outcome.reason, message: outcome.message, method: effect.method });
+        const ch = await this.guard.guard!.challenge({
+          ...args,
+          policy: p.path,
+          reason: outcome.reason,
+          message: outcome.message,
+          method: effect.method,
+        });
         const [id, node] = Object.entries(decided.nodes).find(([, n]) => n.status === 'failed')!;
         decided.nodes = { ...decided.nodes, [id]: { ...node, error: ch.message, detail: ch.detail } };
       }
@@ -143,9 +207,15 @@ export class Embedder {
    * written, so the guard can say where an answer goes.
    */
   private guardArgs(trigger: TriggerDoc, request: Record<string, unknown>): GuardArgs {
-    const settings = this.guard ? (this.env.plugins as Record<string, Record<string, unknown>>)[this.guard.root] ?? {} : {};
-    const credentials: Record<string, unknown> = {}, reads: Record<string, unknown> = {};
-    const present = (v: unknown): boolean => v !== undefined && v !== '' && !(v && typeof v === 'object' && !Array.isArray(v) && !Object.values(v as Record<string, unknown>).some(present));
+    const settings = this.guard
+      ? ((this.env.plugins as Record<string, Record<string, unknown>>)[this.guard.root] ?? {})
+      : {};
+    const credentials: Record<string, unknown> = {},
+      reads: Record<string, unknown> = {};
+    const present = (v: unknown): boolean =>
+      v !== undefined &&
+      v !== '' &&
+      !(v && typeof v === 'object' && !Array.isArray(v) && !Object.values(v as Record<string, unknown>).some(present));
     for (const use of trigger.policies ?? []) {
       if (typeof use === 'string') continue;
       for (const [name, raw] of Object.entries(use.in ?? {})) {
@@ -165,7 +235,10 @@ export class Embedder {
     const table = (settings.codecs ?? {}) as Record<string, string>;
     const out: Codecs = {};
     for (const [ct, path] of Object.entries(table)) {
-      for (const p of this.plugins) { const c = p.codecs?.[path]; if (c) out[ct.toLowerCase()] = c; }
+      for (const p of this.plugins) {
+        const c = p.codecs?.[path];
+        if (c) out[ct.toLowerCase()] = c;
+      }
     }
     return out;
   }
@@ -178,26 +251,52 @@ export class Embedder {
     const t = this.types(trigger).in;
     if (!t) return { input: undefined };
     const raw = trigger.fire.in !== undefined ? fillTemplates(trigger.fire.in, { request }) : request.body;
-    const input = t.kind === 'object' && raw && typeof raw === 'object' && !Array.isArray(raw)
-      ? Object.fromEntries(Object.entries(raw as Record<string, unknown>).map(([k, v]) => [k, t.fields[k] ? coerceWire(v, t.fields[k].type) : v]))
-      : raw;
+    const input =
+      t.kind === 'object' && raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? Object.fromEntries(
+            Object.entries(raw as Record<string, unknown>).map(([k, v]) => [
+              k,
+              t.fields[k] ? coerceWire(v, t.fields[k].type) : v,
+            ]),
+          )
+        : raw;
     const bad = conforms(input, t);
     return bad ? { error: bad } : { input };
   }
 
-  async fire(trigger: TriggerDoc, input: unknown, request: Record<string, unknown>, opts: FireOptions = {}): Promise<Report> {
+  async fire(
+    trigger: TriggerDoc,
+    input: unknown,
+    request: Record<string, unknown>,
+    opts: FireOptions = {},
+  ): Promise<Report> {
     const gated = await this.gate(trigger, request, opts);
     if (gated) return gated;
     const compiled = this.operation(trigger.fire.run);
     const initial: Record<string, unknown> = { request };
     if (input !== undefined) initial.in = input;
-    const report = await runGraph(compiled, { initial, stubs: opts.stubs, signal: opts.signal, env: opts.blobs ? { ...this.env, blobs: opts.blobs } : this.env });
-    if (this.guard?.guard!.settle && !this.stubbed && trigger.policies?.length) await this.guard.guard!.settle({ ...this.guardArgs(trigger, request), report });
+    const report = await runGraph(compiled, {
+      initial,
+      stubs: opts.stubs,
+      signal: opts.signal,
+      env: opts.blobs ? { ...this.env, blobs: opts.blobs } : this.env,
+    });
+    const guard = this.guard?.guard;
+    if (guard?.settle && !this.stubbed && trigger.policies?.length)
+      await guard.settle({ ...this.guardArgs(trigger, request), report });
     if (report.status === 'done' && trigger.out) {
       const t = this.types(trigger).out!;
       const output = prune(report.output, t); // a closed out shape keeps only what it declares
       const bad = conforms(output, t);
-      if (bad) return { ...report, status: 'failed', nodes: { ...report.nodes, out: { status: 'failed', error: `the answer does not conform to ${trigger.out}: ${bad}` } } };
+      if (bad)
+        return {
+          ...report,
+          status: 'failed',
+          nodes: {
+            ...report.nodes,
+            out: { status: 'failed', error: `the answer does not conform to ${trigger.out}: ${bad}` },
+          },
+        };
       return { ...report, output };
     }
     return report;
@@ -205,9 +304,21 @@ export class Embedder {
 }
 
 /** A report of a run that ended before any graph ran: the guard refused the credential. */
-function refused(graph: string, node: string, reason: string, message: string, detail?: Record<string, unknown>): Report {
+function refused(
+  graph: string,
+  node: string,
+  reason: string,
+  message: string,
+  detail?: Record<string, unknown>,
+): Report {
   const now = Date.now();
-  return { graph, status: 'failed', nodes: { [node]: { status: 'failed', handler: graph, reason, error: message, ...(detail ? { detail } : {}) } }, startedAt: now, endedAt: now };
+  return {
+    graph,
+    status: 'failed',
+    nodes: { [node]: { status: 'failed', handler: graph, reason, error: message, ...(detail ? { detail } : {}) } },
+    startedAt: now,
+    endedAt: now,
+  };
 }
 
 /** Drop keys a closed object type does not declare, recursively. Open objects and unknown pass through. */
