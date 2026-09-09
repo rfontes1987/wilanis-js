@@ -23,13 +23,13 @@ const INCLUDES: ResolvedInclude[] = [
 ];
 const PLUGINS = { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs, '@reload': reload, '@auth': auth };
 const tmp = () => mkdtempSync(join(tmpdir(), 'wilanis-tools-'));
-const read = (p: string) => JSON.parse(readFileSync(p, 'utf8'));
+const read = (path: string) => JSON.parse(readFileSync(path, 'utf8'));
 
 describe('wilanis new', () => {
   it('writes a project that loads, and refuses to overwrite', () => {
     const dir = tmp();
     expect(scaffold(dir, 'project', 'board', {})).toEqual(['package.json', 'project.json']);
-    expect(read(join(dir, 'project.json')).plugins.map((p: any) => p.use)).toEqual(['@std', '@cli', '@http']);
+    expect(read(join(dir, 'project.json')).plugins.map((plugin: any) => plugin.use)).toEqual(['@std', '@cli', '@http']);
     expect(() => scaffold(dir, 'project', 'board', {})).toThrow('package.json exists');
     rmSync(dir, { recursive: true, force: true });
   });
@@ -64,7 +64,7 @@ describe('wilanis new', () => {
     // the scaffolds fit together: the binding meets the port's example operation, nothing is misplaced, every
     // document is a valid instance of its schema. What is left is the one TODO a scaffold cannot decide for the
     // author: the trigger must declare what it answers.
-    expect(checkTree(loadTree(dir, PLUGINS)).items.map(r => r.code)).toEqual(['T002']);
+    expect(checkTree(loadTree(dir, PLUGINS)).items.map(refusal => refusal.code)).toEqual(['T002']);
     expect(() => scaffold(dir, 'nonsense', 'x', {})).toThrow("unknown kind 'nonsense'");
     rmSync(dir, { recursive: true, force: true });
   });
@@ -79,7 +79,7 @@ describe('wilanis init', () => {
     expect(readFileSync(join(dir, 'CLAUDE.md'), 'utf8')).toBe('# mine\n');
     expect(read(join(dir, '.claude', 'settings.json')).hooks.Stop).toBeDefined();
     // a second run changes nothing
-    expect(init(dir).every(l => l.startsWith('kept '))).toBe(true);
+    expect(init(dir).every(line => line.startsWith('kept '))).toBe(true);
     rmSync(dir, { recursive: true, force: true });
   });
 });
@@ -87,11 +87,11 @@ describe('wilanis init', () => {
 describe('wilanis fuzz and regress', () => {
   it('fuzz writes one scenario per trigger per seed, and regress replays every one as the same', async () => {
     const dir = tmp();
-    cpSync(EXAMPLE, dir, { recursive: true, filter: p => !p.includes('node_modules') });
+    cpSync(EXAMPLE, dir, { recursive: true, filter: path => !path.includes('node_modules') });
     const written = await fuzz(loadTree(dir, PLUGINS, INCLUDES), { runs: 2 });
     // seventeen triggers -- the example's and the included access tree's -- two seeds each
     expect(written).toHaveLength(34);
-    expect(readdirSync(join(dir, 'scenarios')).sort()).toEqual(written.map(w => w.split('/').pop()!).sort());
+    expect(readdirSync(join(dir, 'scenarios')).sort()).toEqual(written.map(one => one.split('/').pop()!).sort());
     const sc = read(join(dir, 'scenarios', 'get-entry.1.scenario.json'));
     expect(sc.trigger).toBe('@features/monitor/edge/get-entry.trigger.json');
     expect(['done', 'failed']).toContain(sc.expect.status);
@@ -99,20 +99,20 @@ describe('wilanis fuzz and regress', () => {
     const again = loadTree(dir, PLUGINS, INCLUDES);
     expect(again.registry.all('scenario')).toHaveLength(34);
     expect(checkTree(again).items).toEqual([]);
-    const r = await regress(again);
-    expect(r.ok, r.lines.join('\n')).toBe(true);
-    expect(r.lines).toHaveLength(34);
-    expect(r.lines.every(l => l.endsWith(': same'))).toBe(true);
+    const replayed = await regress(again);
+    expect(replayed.ok, replayed.lines.join('\n')).toBe(true);
+    expect(replayed.lines).toHaveLength(34);
+    expect(replayed.lines.every(line => line.endsWith(': same'))).toBe(true);
     // a graph that changes is caught: the answering node under a new name is a node the scenario never saw
-    const g = join(dir, 'features/monitor/data/get-row.graph.json');
-    const doc = read(g);
-    doc.nodes.find((n: any) => n.id === 'row').id = 'entry';
-    doc.nodes.find((n: any) => n.id === 'route').rules[1].to = 'entry';
+    const file = join(dir, 'features/monitor/data/get-row.graph.json');
+    const doc = read(file);
+    doc.nodes.find((node: any) => node.id === 'row').id = 'entry';
+    doc.nodes.find((node: any) => node.id === 'route').rules[1].to = 'entry';
     doc.out.from = ['entry', 'missing', 'failed'];
-    writeFileSync(g, JSON.stringify(doc));
+    writeFileSync(file, JSON.stringify(doc));
     const changed = await regress(loadTree(dir, PLUGINS, INCLUDES));
     expect(changed.ok).toBe(false);
-    expect(changed.lines.some(l => l.includes('get-entry') && !l.endsWith(': same'))).toBe(true);
+    expect(changed.lines.some(line => line.includes('get-entry') && !line.endsWith(': same'))).toBe(true);
     expect(existsSync(join(dir, 'scenarios'))).toBe(true);
     rmSync(dir, { recursive: true, force: true });
   });
@@ -122,25 +122,25 @@ describe('wilanis run with files', () => {
   /** A tree with no network in it: a cli trigger that reads the file --file hands in, and one that answers a file. */
   function filesTree(): string {
     const dir = tmp();
-    const S = (k: string) => schemaUrl(k as never);
+    const schemaOf = (kind: string) => schemaUrl(kind as never);
     const put = (rel: string, doc: unknown) => {
       mkdirSync(join(dir, rel, '..'), { recursive: true });
       writeFileSync(join(dir, rel), JSON.stringify(doc));
     };
     put('project.json', {
-      $schema: S('project'),
+      $schema: schemaOf('project'),
       name: 'files',
       description: 'd',
       plugins: [{ use: '@std' }, { use: '@cli' }, { use: '@blob' }],
     });
     put('features/files/feature.json', {
-      $schema: S('feature'),
+      $schema: schemaOf('feature'),
       description: 'd',
       exports: [],
       effects: ['@blob/text.port.json#read', '@blob/text.port.json#write'],
     });
     put('features/files/domain/files.port.json', {
-      $schema: S('port'),
+      $schema: schemaOf('port'),
       description: 'd',
       operations: {
         read: { description: 'the text of a file', accepts: { file: { type: 'blob' } }, returns: 'string' },
@@ -148,7 +148,7 @@ describe('wilanis run with files', () => {
       },
     });
     put('features/files/data/files.binding.json', {
-      $schema: S('binding'),
+      $schema: schemaOf('binding'),
       description: 'd',
       port: '@features/files/domain/files.port.json',
       operations: {
@@ -157,7 +157,7 @@ describe('wilanis run with files', () => {
       },
     });
     put('features/files/data/read-file.graph.json', {
-      $schema: S('graph'),
+      $schema: schemaOf('graph'),
       description: 'd',
       in: 'blob',
       out: { type: 'string', from: 'text' },
@@ -166,7 +166,7 @@ describe('wilanis run with files', () => {
       ],
     });
     put('features/files/data/write-hello.graph.json', {
-      $schema: S('graph'),
+      $schema: schemaOf('graph'),
       description: 'd',
       out: { type: 'blob', from: 'file' },
       nodes: [
@@ -179,13 +179,13 @@ describe('wilanis run with files', () => {
       ],
     });
     put('features/files/edge/Upload.shape.json', {
-      $schema: S('shape'),
+      $schema: schemaOf('shape'),
       description: 'd',
       layer: 'edge',
       fields: { file: { type: 'blob' } },
     });
     put('features/files/edge/read.trigger.json', {
-      $schema: S('trigger'),
+      $schema: schemaOf('trigger'),
       description: 'd',
       kind: '@cli/cli.trigger-kind.json',
       settings: {},
@@ -194,7 +194,7 @@ describe('wilanis run with files', () => {
       fire: { run: '@features/files/domain/files.port.json#read', in: { file: '{{request.file}}' } },
     });
     put('features/files/edge/hello.trigger.json', {
-      $schema: S('trigger'),
+      $schema: schemaOf('trigger'),
       description: 'd',
       kind: '@cli/cli.trigger-kind.json',
       settings: {},
@@ -208,15 +208,15 @@ describe('wilanis run with files', () => {
     const dir = filesTree();
     const load = loadTree(dir, PLUGINS);
     expect(checkTree(load).items).toEqual([]);
-    const r = await runTrigger(load, '@features/files/edge/read.trigger.json', {
+    const ran = await runTrigger(load, '@features/files/edge/read.trigger.json', {
       flags: { file: join(dir, 'in.csv') },
     });
-    expect(r.report.status).toBe('done');
+    expect(ran.report.status).toBe('done');
     // the node saw a handle, never the bytes
-    expect(r.report.nodes.op.sub?.nodes.text.in).toMatchObject({
+    expect(ran.report.nodes.op.sub?.nodes.text.in).toMatchObject({
       file: { contentType: 'text/csv', filename: 'in.csv', size: 34 },
     });
-    expect(r.answer).toBe('url,method\nhttps://a.example/,GET\n');
+    expect(ran.answer).toBe('url,method\nhttps://a.example/,GET\n');
     // without the flag the trigger's input cannot be built, and the run says so
     await expect(runTrigger(load, '@features/files/edge/read.trigger.json', {})).rejects.toThrow('input:');
     rmSync(dir, { recursive: true, force: true });
@@ -225,20 +225,20 @@ describe('wilanis run with files', () => {
     const dir = filesTree();
     const load = loadTree(dir, PLUGINS);
     const delivered: { handle: unknown; text: string }[] = [];
-    const r = await runTrigger(
+    const ran = await runTrigger(
       load,
       '@features/files/edge/hello.trigger.json',
       {},
       {
         deliver: async (body: Readable, handle) => {
-          let t = '';
-          for await (const c of body) t += c;
-          delivered.push({ handle, text: t });
+          let text = '';
+          for await (const chunk of body) text += chunk;
+          delivered.push({ handle, text });
         },
       },
     );
-    expect(r.report.status).toBe('done');
-    expect(isBlobHandle(r.answer)).toBe(true);
+    expect(ran.report.status).toBe('done');
+    expect(isBlobHandle(ran.answer)).toBe(true);
     expect(delivered).toEqual([
       {
         handle: expect.objectContaining({ contentType: 'text/plain; charset=utf-8', filename: 'hello.txt', size: 5 }),

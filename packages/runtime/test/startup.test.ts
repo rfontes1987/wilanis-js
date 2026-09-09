@@ -59,27 +59,27 @@ describe("the project's startup steps", () => {
     const dir = mkdtempSync(join(tmpdir(), 'wilanis-startup-'));
     mkdirSync(join(dir, 'features/boot/domain'), { recursive: true });
     mkdirSync(join(dir, 'features/boot/data'), { recursive: true });
-    const w = (p: string, doc: unknown) => writeFileSync(join(dir, p), JSON.stringify(doc));
-    w('project.json', {
+    const put = (rel: string, doc: unknown) => writeFileSync(join(dir, rel), JSON.stringify(doc));
+    put('project.json', {
       $schema: schemaUrl('project'),
       name: 'boot',
       description: 'a tree with startup steps',
       plugins: [{ use: '@std' }, { use: '@fake' }],
       startup,
     });
-    w('features/boot/feature.json', {
+    put('features/boot/feature.json', {
       $schema: schemaRef('feature'),
       description: 'the boot feature',
       effects: ['@fake/boot.port.json#open'],
     });
-    w('features/boot/domain/ready.port.json', {
+    put('features/boot/domain/ready.port.json', {
       $schema: schemaRef('port'),
       description: 'what the tree needs before it serves',
       operations: {
         warm: { description: 'warm the connection', accepts: { name: { type: 'string' } }, returns: 'string' },
       },
     });
-    w('features/boot/data/ready.binding.json', {
+    put('features/boot/data/ready.binding.json', {
       $schema: schemaRef('binding'),
       description: 'met by the fake connection',
       port: '@features/boot/domain/ready.port.json',
@@ -102,9 +102,9 @@ describe("the project's startup steps", () => {
       [step({ in: { name: 'db' } }), step({ in: { name: 'queue' } }), listen],
       () => 'ok',
     );
-    const l = loadTree(dir, plugins);
-    expect(checkTree(l).items).toEqual([]);
-    const { stop, held } = await start(l, { log: () => {} });
+    const loaded = loadTree(dir, plugins);
+    expect(checkTree(loaded).items).toEqual([]);
+    const { stop, held } = await start(loaded, { log: () => {} });
     expect(calls).toEqual(['postLoad', 'open:db', 'open:queue', 'listening']);
     expect(held).toBe(1);
     await stop();
@@ -114,8 +114,8 @@ describe("the project's startup steps", () => {
 
   it('a tree whose startup names no listener holds nothing: it serves nothing at all', async () => {
     const { dir, calls, plugins } = tree([step()], () => 'ok');
-    const l = loadTree(dir, plugins);
-    const { stop, held } = await start(l, { log: () => {} });
+    const loaded = loadTree(dir, plugins);
+    const { stop, held } = await start(loaded, { log: () => {} });
     expect(calls).toEqual(['postLoad', 'open:db']);
     expect(calls).not.toContain('listening');
     expect(held).toBe(0);
@@ -125,8 +125,8 @@ describe("the project's startup steps", () => {
 
   it('a tree with no startup at all starts nothing', async () => {
     const { dir, calls, plugins } = tree([], () => 'ok');
-    const l = loadTree(dir, plugins);
-    const { held } = await start(l, { log: () => {} });
+    const loaded = loadTree(dir, plugins);
+    const { held } = await start(loaded, { log: () => {} });
     expect(calls).toEqual(['postLoad']);
     expect(held).toBe(0);
     rmSync(dir, { recursive: true, force: true });
@@ -136,8 +136,8 @@ describe("the project's startup steps", () => {
     const { dir, calls, plugins } = tree([step(), listen], () => {
       throw new Error('the database is unreachable');
     });
-    const l = loadTree(dir, plugins);
-    await expect(start(l, { log: () => {} })).rejects.toThrow(/the database is unreachable/);
+    const loaded = loadTree(dir, plugins);
+    await expect(start(loaded, { log: () => {} })).rejects.toThrow(/the database is unreachable/);
     expect(calls).not.toContain('listening');
     rmSync(dir, { recursive: true, force: true });
   });
@@ -146,9 +146,9 @@ describe("the project's startup steps", () => {
     const { dir, calls, plugins } = tree([step({ required: false }), listen], () => {
       throw new Error('the cache is cold');
     });
-    const l = loadTree(dir, plugins);
+    const loaded = loadTree(dir, plugins);
     const logs: string[] = [];
-    const { stop } = await start(l, { log: s => logs.push(s) });
+    const { stop } = await start(loaded, { log: line => logs.push(line) });
     expect(calls).toContain('listening');
     expect(logs.join('\n')).toMatch(/the cache is cold/);
     await stop();
@@ -157,9 +157,9 @@ describe("the project's startup steps", () => {
 
   it('L008 a graph may not run what outlives the run', () => {
     expect(
-      sabotage('features/monitor/data/get-row.graph.json', d => {
-        d.nodes[0].run = '@http/server.port.json#listen';
-        d.nodes[0].in = {};
+      sabotage('features/monitor/data/get-row.graph.json', graph => {
+        graph.nodes[0].run = '@http/server.port.json#listen';
+        graph.nodes[0].in = {};
       }),
     ).toContain('L008');
   });

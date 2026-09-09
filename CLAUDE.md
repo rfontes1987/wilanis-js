@@ -46,7 +46,6 @@ npm install                 # links the workspace
 npm run build               # tsc -b, project references, dependency order
 npm run lint                # biome: formatting and the house rules (biome.jsonc)
 npm run lint:fix            # the same, applying every safe fix
-npm run lint:debt           # what the directories that predate the linter still owe
 npm test                    # lint, build, then vitest
 npx wilanis check example   # the CLI from the built runtime
 npx wilanis check libraries/access   # the access tree on its own, with its development binding
@@ -68,10 +67,10 @@ A rule that bites is a design signal, not an obstacle: split the function along 
 each, or the file along the rule families it holds. The engine and the compiler are the reference: one class
 or module per concern, a one-line doc comment on every public function saying what it answers.
 
-Directories that predate the linter are listed as debt at the end of `biome.jsonc`; there the house rules are
-warnings, so `npm run lint` stays green while `npm run lint:debt` says what is left. When you touch a file in
-one of them, bring the file to the rules and remove the directory from the list once it is clean. Never add to
-the list.
+Every directory meets the rules, so `npm run lint` is the whole story: it fails on a violation rather than
+warning about one. The two overrides in `biome.jsonc` are not exemptions from the design but facts about the
+code -- a test body is one long function and its `describe`/`it` nest, and the view model names a rule's
+branches `then` and `otherwise`. Neither is a place to put new debt.
 
 ## Principles, and what they mean here
 

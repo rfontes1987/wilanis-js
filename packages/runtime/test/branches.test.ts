@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { type Branch, branchesOf, satisfy } from '../src/branches.js';
 
 /** The demands of one case, by the node it routes to. */
-const to = (bs: Branch[], target: string) => bs.find(b => b.to === target)!;
+const to = (branches: Branch[], target: string) => branches.find(one => one.to === target)!;
 
 describe('solving a switch to its branches', () => {
   it('gives one case per rule and one for the else', () => {
@@ -13,8 +13,8 @@ describe('solving a switch to its branches', () => {
       ],
       'z',
     );
-    expect(bs.map(b => b.to)).toEqual(['x', 'y', 'z']);
-    expect(bs.map(b => b.rule)).toEqual([0, 1, -1]);
+    expect(bs.map(one => one.to)).toEqual(['x', 'y', 'z']);
+    expect(bs.map(one => one.rule)).toEqual([0, 1, -1]);
   });
 
   it('solves the example rule: an equality and a presence together', () => {

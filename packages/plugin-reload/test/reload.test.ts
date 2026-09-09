@@ -43,10 +43,6 @@ const until = async (ok: () => boolean, ms = 2000) => {
   return ok();
 };
 
-/** Waits until some line the tree logged matches, so a test never nests a predicate inside a wait. */
-const logged = (watcher: { logs: string[] }, pattern: RegExp) =>
-  until(() => watcher.logs.some(line => pattern.test(line)));
-
 /**
  * Touch a document until the watcher notices it. `fs.watch` registers asynchronously, so a write that lands before
  * the watch is live is simply missed -- the test would then wait for a reload nothing asked for.

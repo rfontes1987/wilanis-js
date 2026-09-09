@@ -10,57 +10,57 @@ import { codes, EXAMPLE, INCLUDES, PLUGINS, sabotage } from './example-harness.j
 describe('sabotage: access, as the example attaches the included policies', () => {
   it('A004 a credential the guard does not verify, one read where the kind hands nothing, and one no policy of the trigger reads', () => {
     expect(
-      sabotage('features/monitor/edge/record-entry.trigger.json', t => {
-        t.policies[0].in = { badge: '{{request.headers.authorization}}' };
+      sabotage('features/monitor/edge/record-entry.trigger.json', trigger => {
+        trigger.policies[0].in = { badge: '{{request.headers.authorization}}' };
       }),
     ).toContain('A004');
     expect(
-      sabotage('features/monitor/edge/record-entry.trigger.json', t => {
-        t.policies[0].in = { token: '{{request.flags.token}}' };
+      sabotage('features/monitor/edge/record-entry.trigger.json', trigger => {
+        trigger.policies[0].in = { token: '{{request.flags.token}}' };
       }),
     ).toContain('A004');
     expect(
-      sabotage('features/monitor/edge/record-entry.trigger.json', t => {
-        t.policies[0].in.challenge = { id: '{{request.query.cid}}', code: '{{request.query.code}}' };
+      sabotage('features/monitor/edge/record-entry.trigger.json', trigger => {
+        trigger.policies[0].in.challenge = { id: '{{request.query.cid}}', code: '{{request.query.code}}' };
       }),
     ).toEqual(['A004']);
   });
   it('A005 a policy reading the caller on a trigger that gives the guard nothing', () => {
     expect(
-      sabotage('features/monitor/edge/record-entry.trigger.json', t => {
-        t.policies = ['@access/edge/employees-only.policy.json', '@access/edge/can-record.policy.json'];
-        delete t.settings.response.refusals.invalid_credential;
+      sabotage('features/monitor/edge/record-entry.trigger.json', trigger => {
+        trigger.policies = ['@access/edge/employees-only.policy.json', '@access/edge/can-record.policy.json'];
+        delete trigger.settings.response.refusals.invalid_credential;
       }),
     ).toEqual(['A005', 'A005']);
   });
   it("T005 a policy's reason the trigger does not map; T006 a mapped reason no policy reaches once the policy is gone", () => {
     expect(
-      sabotage('features/monitor/edge/record-entry.trigger.json', t => {
-        delete t.settings.response.refusals.forbidden;
+      sabotage('features/monitor/edge/record-entry.trigger.json', trigger => {
+        delete trigger.settings.response.refusals.forbidden;
       }),
     ).toEqual(['T005']);
     expect(
-      sabotage('features/monitor/edge/record-entry.trigger.json', t => {
-        t.policies.pop();
+      sabotage('features/monitor/edge/record-entry.trigger.json', trigger => {
+        trigger.policies.pop();
       }),
     ).toEqual([]);
     expect(
-      sabotage('features/monitor/edge/record-entry.trigger.json', t => {
-        delete t.policies;
-        delete t.settings.response.refusals.invalid_credential;
+      sabotage('features/monitor/edge/record-entry.trigger.json', trigger => {
+        delete trigger.policies;
+        delete trigger.settings.response.refusals.invalid_credential;
       }),
     ).toEqual(['T006', 'T006']);
   });
   it('R001 a trigger naming a policy that is not there', () => {
     expect(
-      sabotage('features/hello/edge/hello-gated.trigger.json', t => {
-        t.policies = ['@access/edge/nope.policy.json'];
+      sabotage('features/hello/edge/hello-gated.trigger.json', trigger => {
+        trigger.policies = ['@access/edge/nope.policy.json'];
       }),
     ).toContain('R001');
   });
   it('D009 a local feature the include also ships; D010 an include that is not a tree, or one asking a feature it does not ship or a plugin the project lacks', () => {
     const dir = mkdtempSync(join(tmpdir(), 'wilanis-'));
-    cpSync(EXAMPLE, dir, { recursive: true, filter: p => !p.includes('node_modules') });
+    cpSync(EXAMPLE, dir, { recursive: true, filter: path => !path.includes('node_modules') });
     mkdirSync(join(dir, 'features/access'), { recursive: true });
     writeFileSync(
       join(dir, 'features/access/feature.json'),
@@ -69,13 +69,17 @@ describe('sabotage: access, as the example attaches the included policies', () =
     expect(codes(dir)).toContain('D009');
     rmSync(dir, { recursive: true, force: true });
     const lib = INCLUDES[0];
-    expect(checkTree(loadTree(EXAMPLE, PLUGINS, [{ ...lib, dir: tmpdir() }])).items.map(r => r.code)).toContain('D010');
     expect(
-      checkTree(loadTree(EXAMPLE, PLUGINS, [{ ...lib, features: ['access', 'nope'] }])).items.map(r => r.code),
+      checkTree(loadTree(EXAMPLE, PLUGINS, [{ ...lib, dir: tmpdir() }])).items.map(refusal => refusal.code),
     ).toContain('D010');
     expect(
-      sabotage('project.json', p => {
-        p.plugins = p.plugins.filter((x: any) => x.use !== '@cli');
+      checkTree(loadTree(EXAMPLE, PLUGINS, [{ ...lib, features: ['access', 'nope'] }])).items.map(
+        refusal => refusal.code,
+      ),
+    ).toContain('D010');
+    expect(
+      sabotage('project.json', project => {
+        project.plugins = project.plugins.filter((plugin: any) => plugin.use !== '@cli');
       }),
     ).toContain('D010');
   });
@@ -91,7 +95,7 @@ describe('sabotage: access, as the example attaches the included policies', () =
     expect(
       load.registry
         .all('connection')
-        .map(c => c.path)
+        .map(caller => caller.path)
         .sort(),
     ).toEqual([
       '@connections/customers.connection.json',
@@ -101,11 +105,13 @@ describe('sabotage: access, as the example attaches the included policies', () =
   });
   it('the `in` operator: a role check in a switch rule, and a branch the rehearsal can steer both ways', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'wilanis-'));
-    cpSync(EXAMPLE, dir, { recursive: true, filter: p => !p.includes('node_modules') });
-    const r = await rehearse(loadTree(dir, PLUGINS, INCLUDES), { seed: 5 });
+    cpSync(EXAMPLE, dir, { recursive: true, filter: path => !path.includes('node_modules') });
+    const run = await rehearse(loadTree(dir, PLUGINS, INCLUDES), { seed: 5 });
     rmSync(dir, { recursive: true, force: true });
-    const lines = r.lines.filter(l => l.includes("'recorder' in principal.roles") || l.includes('require-recorder'));
-    expect(lines.some(l => l.includes("answered from 'granted'"))).toBe(true);
-    expect(r.ok).toBe(true);
+    const lines = run.lines.filter(
+      line => line.includes("'recorder' in principal.roles") || line.includes('require-recorder'),
+    );
+    expect(lines.some(line => line.includes("answered from 'granted'"))).toBe(true);
+    expect(run.ok).toBe(true);
   });
 });

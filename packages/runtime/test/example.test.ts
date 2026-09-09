@@ -14,14 +14,14 @@ describe('the example tree', () => {
   it('rehearses every branch of every switch, whatever the seed', async () => {
     // solved from the rules, so no seed can leave a branch untried
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-      const r = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed });
-      expect(r.ok, `seed ${seed}: ${r.lines.join('\n')}`).toBe(true);
-      expect(r.lines.join('\n')).not.toMatch(/NEVER RUN|BROKE|BLOCKED|WRONG ROUTE/);
+      const run = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed });
+      expect(run.ok, `seed ${seed}: ${run.lines.join('\n')}`).toBe(true);
+      expect(run.lines.join('\n')).not.toMatch(/NEVER RUN|BROKE|BLOCKED|WRONG ROUTE/);
     }
   });
   it('reports each decision once, under the graph that declares it', async () => {
-    const r = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed: 1 });
-    const text = r.lines.join('\n');
+    const run = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed: 1 });
+    const text = run.lines.join('\n');
     // list-rows is reached from two triggers (the listing and the digest), and is one decision even so
     expect(text.match(/list-rows {2}switch 'route'/g)).toHaveLength(1);
     // delete-row is reached directly by the single delete and once per element by the batch delete's map
@@ -29,8 +29,8 @@ describe('the example tree', () => {
     expect(text).toMatch(/every branch settled -- 37 branch\(es\), 15 decision\(s\), 15 graph\(s\)/);
   });
   it('reaches both the answer and the declared failure of every data graph', async () => {
-    const r = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed: 1 });
-    const text = r.lines.join('\n');
+    const run = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed: 1 });
+    const text = run.lines.join('\n');
     // the six data graphs each answer on one branch and refuse on purpose on the others
     expect(text.match(/refused on purpose at 'failed' as upstream/g)).toHaveLength(6);
     // the three graphs behind an id declare what a missing id means, and say so in one word the trigger maps
@@ -44,16 +44,23 @@ describe('the example tree', () => {
   });
   it('rehearses a switch inside a mapped operation through the first element, whatever the seed', async () => {
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-      const r = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed, verbose: true });
-      const text = r.lines.join('\n');
+      const run = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed, verbose: true });
+      const text = run.lines.join('\n');
       // the batch delete reaches the delete-row decision through its map, and every branch of it settles
       expect(text).toMatch(/delete-row {2}switch 'route' {2}3\/3 branches {2}\[via delete-entries, delete-entry\]/);
     }
   });
   it('loads its plugin packages through project.json → plugins[].from', async () => {
-    const l = await loadProject(EXAMPLE);
-    expect(l.refusals.items).toEqual([]);
-    expect(l.plugins.map(p => p.root).sort()).toEqual(['@auth', '@blob', '@cli', '@http', '@reload', '@std']);
+    const loaded = await loadProject(EXAMPLE);
+    expect(loaded.refusals.items).toEqual([]);
+    expect(loaded.plugins.map(plugin => plugin.root).sort()).toEqual([
+      '@auth',
+      '@blob',
+      '@cli',
+      '@http',
+      '@reload',
+      '@std',
+    ]);
   });
 });
 
@@ -68,28 +75,28 @@ describe('plugin packages and hooks', () => {
   };
   it('D006 when from is not a package name, or names a package that is not installed', async () => {
     const codesOf = async (from: string) =>
-      (await loadProject(project([{ use: '@std' }, { use: '@x', from }]))).refusals.items.map(r => r.code);
+      (await loadProject(project([{ use: '@std' }, { use: '@x', from }]))).refusals.items.map(refusal => refusal.code);
     expect(await codesOf('../evil.js')).toContain('D006');
     expect(await codesOf('@wilanis/no-such-plugin')).toContain('D006');
   });
   it('every document a plugin ships is a file a reader can open, and describe says where', () => {
-    const l = loadTree(EXAMPLE, PLUGINS, INCLUDES);
-    for (const f of l.registry.files.filter(f => f.native)) {
-      expect(f.file, f.path).toBeDefined();
-      expect(existsSync(f.file!), f.path).toBe(true);
-      expect(JSON.parse(readFileSync(f.file!, 'utf8'))).toEqual(f.doc);
+    const loaded = loadTree(EXAMPLE, PLUGINS, INCLUDES);
+    for (const file of loaded.registry.files.filter(one => one.native)) {
+      expect(file.file, file.path).toBeDefined();
+      expect(existsSync(file.file!), file.path).toBe(true);
+      expect(JSON.parse(readFileSync(file.file!, 'utf8'))).toEqual(file.doc);
     }
-    expect(describeDoc(l, '@http/http.port.json')).toContain(
-      `file  ${l.registry.get('port', '@http/http.port.json')?.file}`,
+    expect(describeDoc(loaded, '@http/http.port.json')).toContain(
+      `file  ${loaded.registry.get('port', '@http/http.port.json')?.file}`,
     );
     // a native document says whose it is: who implements it must not be a code detail
-    expect(describeDoc(l, '@http/server.port.json')).toContain('granted by  @http  (@wilanis/plugin-http)');
-    expect(describeDoc(l, '@reload/watch.port.json')).toContain('granted by  @reload  (@wilanis/plugin-reload)');
-    expect(describeDoc(l, '@std/list.port.json')).toContain('granted by  @std  (built into the runtime)');
-    expect(describeDoc(l, '@monitor/domain/monitor.port.json')).not.toContain('granted by');
+    expect(describeDoc(loaded, '@http/server.port.json')).toContain('granted by  @http  (@wilanis/plugin-http)');
+    expect(describeDoc(loaded, '@reload/watch.port.json')).toContain('granted by  @reload  (@wilanis/plugin-reload)');
+    expect(describeDoc(loaded, '@std/list.port.json')).toContain('granted by  @std  (built into the runtime)');
+    expect(describeDoc(loaded, '@monitor/domain/monitor.port.json')).not.toContain('granted by');
     // and a holds operation says that it holds
-    expect(describeDoc(l, '@http/server.port.json')).toContain('#listen  (holds until stopped)');
-    expect(l.registry.get('graph', '@features/monitor/data/get-row.graph.json')?.file).toBe(
+    expect(describeDoc(loaded, '@http/server.port.json')).toContain('#listen  (holds until stopped)');
+    expect(loaded.registry.get('graph', '@features/monitor/data/get-row.graph.json')?.file).toBe(
       join(EXAMPLE, 'features/monitor/data/get-row.graph.json'),
     );
   });
@@ -106,7 +113,9 @@ describe('plugin packages and hooks', () => {
       handlers: {},
     };
     const dir = project([{ use: '@std' }, { use: '@fake' }]);
-    expect(loadTree(dir, { ...BUILTIN_PLUGINS, '@fake': fake }).refusals.items.map(r => r.code)).toContain('D006');
+    expect(loadTree(dir, { ...BUILTIN_PLUGINS, '@fake': fake }).refusals.items.map(refusal => refusal.code)).toContain(
+      'D006',
+    );
     rmSync(dir, { recursive: true, force: true });
   });
   it('postLoad runs once after load with the plugin settings; its teardown runs on stop', async () => {
@@ -130,9 +139,9 @@ describe('plugin packages and hooks', () => {
       },
     };
     const dir = project([{ use: '@std' }, { use: '@fake', settings: { greeting: 'hi' } }]);
-    const l = loadTree(dir, { ...BUILTIN_PLUGINS, '@fake': fake });
-    expect(checkTree(l).items).toEqual([]);
-    const { stop } = await start(l, { log: () => {} });
+    const loaded = loadTree(dir, { ...BUILTIN_PLUGINS, '@fake': fake });
+    expect(checkTree(loaded).items).toEqual([]);
+    const { stop } = await start(loaded, { log: () => {} });
     expect(calls).toEqual(['up:hi:string']);
     await stop();
     expect(calls).toEqual(['up:hi:string', 'down']);
@@ -144,19 +153,19 @@ describe('branch rehearsal', () => {
   /** Copy the example, edit one document, and rehearse every branch of it. */
   async function withEdit(file: string, edit: (doc: any) => void): Promise<string[]> {
     const dir = mkdtempSync(join(tmpdir(), 'wilanis-'));
-    cpSync(EXAMPLE, dir, { recursive: true, filter: p => !p.includes('node_modules') });
-    const p = join(dir, file);
-    const doc = JSON.parse(readFileSync(p, 'utf8'));
+    cpSync(EXAMPLE, dir, { recursive: true, filter: path => !path.includes('node_modules') });
+    const at = join(dir, file);
+    const doc = JSON.parse(readFileSync(at, 'utf8'));
     edit(doc);
-    writeFileSync(p, JSON.stringify(doc));
-    const r = await rehearse(loadTree(dir, PLUGINS), { seed: 1 });
+    writeFileSync(at, JSON.stringify(doc));
+    const run = await rehearse(loadTree(dir, PLUGINS), { seed: 1 });
     rmSync(dir, { recursive: true, force: true });
-    return r.lines;
+    return run.lines;
   }
 
   it('reports a rule an earlier rule already covers', async () => {
-    const lines = await withEdit('features/monitor/data/list-rows.graph.json', d => {
-      const route = d.nodes.find((n: any) => n.id === 'route');
+    const lines = await withEdit('features/monitor/data/list-rows.graph.json', graph => {
+      const route = graph.nodes.find((node: any) => node.id === 'route');
       route.rules = [
         { when: 'status >= 200', to: 'rows' },
         { when: 'status == 200 && has(body)', to: 'rows' },
@@ -166,8 +175,8 @@ describe('branch rehearsal', () => {
   });
 
   it('reports a rule that contradicts itself', async () => {
-    const lines = await withEdit('features/monitor/data/list-rows.graph.json', d => {
-      const route = d.nodes.find((n: any) => n.id === 'route');
+    const lines = await withEdit('features/monitor/data/list-rows.graph.json', graph => {
+      const route = graph.nodes.find((node: any) => node.id === 'route');
       route.rules = [{ when: 'status > 500 && status < 200', to: 'rows' }];
     });
     expect(lines.join('\n')).toMatch(/NEVER RUN/);
