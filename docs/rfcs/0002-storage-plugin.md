@@ -318,12 +318,26 @@ reference, and binds the variable to that type. The path may name another static
 call (`collection`), so one expression covers every collection of a store. Where a type variable comes
 from is thereby always written in the port document -- `describe` prints it, and no caller repeats it.
 
-This is a core change, and the smallest one that removes the repetition: `resolves` lives beside
-`binds` in the operation input contract in `packages/core/src/plugin.ts`, the compiler resolves it in
-`Judge` (so every family that types a call site sees `$T` bound, as it does today), and the stubs read
-the bound type as they already do. It is deliberately not a general expression language: a document
-path, one optional input substitution, and a value that must be a type reference or the port document
-is refused when the plugin loads.
+This is a core change, and the smallest one that removes the repetition. `resolves` is a new optional
+key on `Field` in `packages/core/src/model.ts`, beside `binds` and `static`. Two sites bind variables
+today and both assume a variable comes from a literal at the call site -- `checkTypeField` in
+`packages/compiler/src/check/inputs.ts`, which ends `if (field.binds) this.subst[field.binds] = type`,
+and `bindings()` in `packages/compiler/src/documents.ts`, which skips any field that is not
+`field.binds && field.type === 'type'`. Each gains the second channel: where a static field carries
+`resolves`, read its literal, open that document through the registry, read the path, and put the
+type in the same `subst`. `documents.ts` is shared by the checker and the compiler precisely so the
+two cannot disagree about what a call site binds, and that is why the channel is added there rather
+than in the storage plugin.
+
+Everything downstream is untouched: once `subst['$T']` holds a type, `substitute` and `unify` in
+`packages/core/src/assign.ts` behave exactly as they do for `@std/object.port.json#make`, and
+`checkValueField` already substitutes before holding a value to its contract, so `record: $T` on `put`
+is held to the collection's shape by machinery that exists.
+
+It is deliberately not a general expression language: a path of field names with one optional
+substitution of another static input of the same call (`collections[collection].of`), resolving to a
+value that must be a type reference. A port document whose `resolves` names a path that is not one is
+refused when the plugin loads, not when a graph runs.
 
 | Operation | Accepts, beyond store/collection | Returns | Answers |
 |---|---|---|---|
@@ -505,7 +519,7 @@ hint that lists the kinds gains a name; no existing document changes meaning. Th
 documents and a profile and keeps the REST binding.
 
 The one change to an existing contract is `resolves` on a native operation's input
-(`packages/core/src/plugin.ts`): a new optional key, so every plugin that does not use it is
+(`resolves` on `Field`, `packages/core/src/model.ts`): a new optional key, so every plugin that does not use it is
 unaffected, and a port document that does not carry it behaves exactly as today. IR v1 stays v1: a
 resolved `$T` is the same lowered type it would have been had the call site spelled it, so nothing
 about the intermediate representation changes shape.
@@ -548,8 +562,9 @@ the `store` baseline. The compiler's new rows are exercised through sabotaged co
 
 1. **The `store` kind in core.** Schema, `StoreDoc`, `KINDS`, `HOME`, the validate baseline, the row in
    `templates/CLAUDE.md`, the `wilanis new store` scaffold. `good first issue` for the scaffold and the row.
-2. **`resolves` in core and the compiler.** The key on the operation input contract in
-   `packages/core/src/plugin.ts`, its resolution in `Judge` so every family sees `$T` and `$K` bound,
+2. **`resolves` in core and the compiler.** The key on `Field` in `packages/core/src/model.ts`, its
+   resolution in `checkTypeField` (`check/inputs.ts`) and `bindings()` (`documents.ts`) so the checker
+   and the compiler bind `$T` and `$K` alike,
    the stubs reading the bound type, `describe` printing where a variable comes from, and the refusal
    when a port document's `resolves` names a path that is not a type reference. Its own tests in
    `packages/core/test` and `packages/runtime/test`; nothing storage-specific is added to core.
@@ -614,11 +629,17 @@ question this RFC leaves ajar.
 
 Before `accepted`:
 
-1. `resolves` is the one core addition here, and it is worth one more look: is a document path with an
-   input substitution the right shape for it, or should a native operation instead declare *which
-   input names the document* and let the plugin's own code answer the type (a `resolveType` hook on
-   the plugin contract)? The first keeps the fact in the port document, where `describe` can print it;
-   the second keeps core free of a path language. This RFC proposes the first.
+1. `resolves` is the one core addition here, and it is worth one more look. It buys two things and
+   costs one. It buys the removal of the repetition, and it keeps *where a type comes from* readable
+   in the port document, which is the principle the rest of the toolchain keeps (`describe` prints it;
+   what the DSL names, a reader can open). It costs core a path expression, however small, and it
+   breaks the invariant both binding sites encode today -- that a variable comes from a field of type
+   `type` at the call site. The alternative is a `resolveType` hook on the plugin contract: the
+   operation declares which input names a document and the plugin's own code answers the type. Core
+   stays free of path syntax, the checker and the compiler still agree because both call the hook, and
+   the loss is that the port document no longer says where the type comes from -- only that a plugin
+   decides. This RFC proposes the path, and the hook is the fallback if the path grows a second
+   feature.
 2. Does an engine plugin register through `postLoad` and a `WeakMap` (as above), or should the plugin
    contract gain a first-class way for one plugin to grant a capability another consumes? `postLoad`
    needs no core change and is how `@http` already keeps per-connection state; a declared capability
