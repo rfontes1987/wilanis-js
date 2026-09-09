@@ -235,6 +235,44 @@ nested refusal is the calling node's failure, so a separate transaction would ha
 The compiler learns that a graph is atomic, the way it learns that an operation `holds`
 (`Compiler.holdsSpec`). It learns nothing about connections, drivers or SQL: it opens a scope and settles it.
 
+**Where the transaction begins and ends.**
+
+![The sequence one atomic graph's run follows](../atomic-sequence.png)
+
+A connection is a pool, not a session: RFC 0002's postgres kind carries `pool: { max: 10 }`, and a
+transaction cannot span a pool. So the span is not the run's: the scope is created when the run starts, but
+nothing is opened until the *first* transactional node calls `join`, which checks one session out of the pool
+and issues `BEGIN` on it. Every later node on the same connection gets that same session back. `settle`
+issues `COMMIT` or `ROLLBACK` at quiescence and the session returns to the pool. A graph that reaches no
+transactional node checks nothing out at all.
+
+Two mechanisms meet here and they are not the same one. **Exclusivity is the pool's**: a checked-out session
+is removed from the set the pool hands to anyone else, so a concurrent run gets a different session and
+ordinary isolation keeps it from seeing uncommitted rows -- wilanis writes no locking for this. **Reuse is
+the scope's**: `join` memoises the *promise* of `open()`, so the second of two nodes the engine started in
+the same tick awaits the first's checkout instead of opening a second transaction. Memoising the resolved
+participant rather than the promise would silently open two.
+
+Concurrent runs are independent because the scope is a new object per run: `nestedRunner`'s closure holds no
+per-run state, and every value it uses comes from that call's `ctx`. Nothing is keyed by an id, and there is
+no registry to collide in.
+
+Three consequences follow, and an operator needs all three. An atomic graph **holds a pool session for its
+whole run**, including the pure nodes and nested domain calls between its writes, so a long atomic graph
+starves the pool. Concurrent atomic graphs on one connection are therefore capped at `pool.max`; the
+eleventh waits for a checkout, not for a lock. And a `map` of N writes is serial at the store -- one session,
+N statements -- while the graph still fans out.
+
+**Nothing aborts a transaction; not aborting it is what rolls it back.** `settle` runs on every ending, and
+commits only on `done`. A declared refusal, a fault, a nested graph's failure and an `AbortSignal` all leave
+the report non-`done`, so the rollback needs no operation, no node and no port -- there is nothing an author
+can forget to call. An author who wants to abandon the work deliberately refuses, which is a business
+statement the checker already enumerates; a native `abort` operation would duplicate `refuses`, would be
+cancellable by the very failure that should trigger it (`Run.execute` starts nothing pending once a node
+breaks), and would have no defined position against writes still in flight. A `commit` that itself throws is
+the one case wilanis cannot resolve: the calling node fails and the report says so, but whether the store
+committed is then unknown, as it is for any client of a database.
+
 **Who joins.** A handler of a `transactional` operation reads `ctx.env.atomic`; when present, it runs its
 statement on `await scope.join(connection, () => this.begin(connection))`, where `connection` is the
 canonical path the handler resolved the way it resolves everything else: through the `store` document
