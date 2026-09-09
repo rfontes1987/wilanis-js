@@ -1,6 +1,6 @@
 # RFC 0004: Atomic graphs: transactions as a property of a data graph
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:core`, `area:compiler`, `area:runtime`, `area:plugin-storage`
 - **Tracking issue:** #6
 - **Depends on:** RFC 0002 (the storage plugin: the first effects that can take part in a transaction)
@@ -119,6 +119,26 @@ the store document does, and the connection too.
 This RFC needs only that they declare `transactional` and that their static `store` leads the checker to
 one connection.
 
+**Effects that cannot roll back.** A transaction undoes rows, not the world: a sent mail, a charged card and a
+written file stay done. L0n1 therefore keeps them out of an atomic graph, and the shape that follows needs no
+feature at all -- put the irreversible effect in the caller, *after* the atomic graph, reached by a data
+dependency on its answer:
+
+```json
+{
+  "nodes": [
+    { "type": "@wilanis/node/run.schema.json", "id": "recorded",
+      "run": "@monitor/domain/monitor.port.json#recordAll", "in": { "drafts": "{{in}}" } },
+    { "type": "@wilanis/node/run.schema.json", "id": "notified",
+      "run": "@mail/mail.port.json#send", "in": { "to": "{{in.who}}", "count": "{{recorded.length}}" } }
+  ]
+}
+```
+
+`notified` reads `recorded`, so it cannot start until the transaction has committed; and when the atomic graph
+refuses, `Run.execute` starts nothing still pending, so the mail is never sent and there is nothing to
+compensate. Ordering the effect after the commit is what replaces a rollback handler.
+
 Mark the wrong graph atomic and the checker says why it cannot be:
 
 ```
@@ -154,8 +174,9 @@ transactional.
 
 ### Checker rules
 
-Numbers are placeholders; the implementing pull request takes the next free code of each family (today
-A006 B008 C002 D010 G013 L008 P003 R001 S001 T006). "Reaches" means: an effect node of the graph itself,
+Numbers are written `C0n1`, `L0n1` and so on because they are placeholders: the implementing pull request
+takes the next free code of each family as the tree stands when it lands, and no number here should be read
+as reserved. "Reaches" means: an effect node of the graph itself,
 or, for a domain graph, an effect node of the graph its operations are bound to under the profile being
 judged, followed through nested domain operations. The walk is the one `judgeTree` already does per profile
 for B002.
@@ -165,8 +186,9 @@ the compiler resolves both without plugin knowledge: `connection` is a connectio
 `store` is the path of a `store` document, a core kind since RFC 0002, whose `connection` field names one.
 One method of `Judge` answers it, `Judge.connectionOf(hit, given)`: the canonical connection path, or
 nothing when the field is absent or names no document. It reads the store through
-`scope.get('store', path)`, the same read RFC 0003's `check/stores.ts` makes, and relies on that module's
-R001 (a store whose `connection` names nothing) so it never refuses the same thing twice. The storage
+`scope.get('store', path)`, the same read RFC 0003 makes of a store document, and leans on the rule RFC 0003
+lands for a store whose `connection` names nothing, so the same fault is never refused twice. Which module
+and which code that rule ends up as is RFC 0003's to say, not this one's. The storage
 plugin's X rules judge what a call means to the store; the compiler judges only where it goes.
 
 | Code | Where it lives | Refuses when | Hint |
@@ -190,6 +212,14 @@ nested run, so a value put in `env` at a graph's boundary reaches every handler 
 exist already: `env.blobs`, the per-run scope of the blob store the embedder substitutes in `Embedder.fire`,
 and `env.hold`, the callback a `holds` operation calls (`Hold` in `packages/core/src/plugin.ts`, pushed onto
 `Embedder.held`). The transaction is the third, and follows both precedents.
+
+The three are one shape, and it is worth having the name: a **run scope** is a value the runtime puts on `env`
+at a boundary, reads by no one but the handlers that care, and settles when the boundary closes --
+`env.blobs` releases what was put through it, `env.hold` stops what was held, in reverse, and `env.atomic`
+commits or rolls back. `BlobScope` in `packages/core/src/plugin.ts` is already a one-sided transaction over
+files; `Atomic` is the first with two sides, which is the whole of what is new. This is a convention the
+compiler and the embedder keep, not a hook: `PluginModule` gains no member for it, and nothing in the DSL
+names it. Were a fourth to appear, the reply is to make `env` a typed contract rather than to grow a registry.
 
 **The scope.** `packages/core/src/plugin.ts` gains one type beside `Hold`:
 
@@ -436,6 +466,30 @@ resolve which plugin owns a connection's kind before the run, which today no par
 handlers read `env.connections` themselves. Letting the first participant open the transaction keeps that
 knowledge where it is.
 
+**An explicit list of participants, `"atomic": ["stored", "latest"]`.** It reads as the more honest form --
+the document names what takes part instead of leaving it to a walk -- and it looks like the way to let one
+graph hold a transaction and a file read at once, which L0n1 otherwise refuses. It is worse on three counts.
+An unlisted effect is not sequenced against the listed ones: `Run.execute` fires every ready node at once, so
+it runs *beside* the transaction and its result survives the rollback, which is the half-committed state this
+RFC exists to prevent. An unlisted `@storage` call on the *same* connection is worse still: it takes a second
+session from the pool and blocks on rows the transaction has locked, a deadlock the boolean cannot produce.
+And in a domain graph the names are the wrong things -- a node names `monitor.submit`, while the writes live
+under whichever binding the profile chooses, so the checker must walk per profile anyway and the list tells it
+nothing it did not derive. Nesting has no answer either: when an atomic graph reaches another, it is undefined
+whose list governs the inner one. Node ids are referable elsewhere (`out.from`, a switch's `to`), so a rename
+would be refused rather than silently wrong; that is not the objection.
+
+**Compensation on rollback, `"onRollback": "undo.graph.json"`.** What a transaction can undo it undoes with
+no author code; what it cannot undo is the sent mail, the charged card, the written file -- and those are
+exactly what L0n1 keeps out of an atomic graph. So compensation is only interesting as the thing that would
+let L0n1 relax, and that is the saga this RFC sends to RFC 0011. It is also unbuildable as stated: it is a
+catch, and `nestedFailure` throws with nothing to catch it, which is the same reason savepoints are deferred
+below; its input would be the partial report, which no graph has a type for; `rehearse` would need a root per
+declared reason crossed with the compensation, changing the branch counts. Most of all it is business logic on
+the path nobody foresaw, and a write the checker cannot relate to what it undoes -- the objection RFC 0003
+settled when it refused cascading removes. The pattern that needs no feature is to put the irreversible effect
+*after* the atomic graph in the caller: see *Effects that cannot roll back*.
+
 **Savepoints (nested atomicity).** A nested graph's refusal is its caller's failure; the language has no
 way to route on a nested failure, so a partial rollback could never be observed. Savepoints wait for a
 construct that can catch, which does not exist and is not proposed here.
@@ -445,18 +499,8 @@ one transaction of N statements. That is the price of atomicity everywhere, not 
 atomic graph holds a connection for its whole run, and a connection pool sized for concurrency is RFC
 0002's concern.
 
-## Open questions
+## Decided during implementation
 
-Before `accepted`:
-
-- The word: `atomic` (proposed) or `transactional` on the graph as well. `atomic` says what the author
-  wants; `transactional` says how. One word for the graph and another for the operation keeps them apart.
-- Whether a domain graph may be atomic (proposed: yes, judged per profile). The alternative restricts the
-  flag to data graphs and forces CreateOrder-style compositions into the data layer.
-- Isolation level: a setting of the storage connection (RFC 0002), or a field beside `atomic`. Proposed: the
-  connection's, since it is the store's vocabulary.
-
-During implementation:
-
-- Whether the rehearsal line should also list the reasons that roll back, or leave that to `describe`.
-- Whether the viewer marks participating nodes individually or only the graph.
+- The rehearsal line does not list the reasons that roll back; `describe` says them.
+- The viewer marks the participating nodes individually, not only the graph. The set is derived from the
+  per-profile walk L0n2 already makes, never written by an author.
