@@ -50,5 +50,7 @@ Commit in plain imperative sentences (no trailers). Push and open the pull reque
 gh pr create -R wilanis/wilanis-js --fill --body "Closes #N"
 ```
 
-If this step was the last of its RFC, edit the RFC's status to `implemented` and the row in
-`docs/rfcs/README.md` in the same pull request, and say so in the tracking issue.
+Tick the step in the tracking issue's checklist once merged. If it was the last of its RFC, edit the
+RFC's status to `implemented` and the row in `docs/rfcs/README.md` in the same pull request, and close
+the tracking issue when that merges. The state of an RFC is its `status:*` label and its header, kept
+equal; the board shows them and adds nothing.
