@@ -80,7 +80,7 @@ are in:
   "description": "The entry and the latest-call record of its method move together.",
   "atomic": true,
   "in": "@monitor/domain/Entry.shape.json",
-  "out": { "type": "@monitor/domain/Entry.shape.json", "from": "stored" },
+  "out": { "type": "@monitor/domain/Entry.shape.json", "from": "answer" },
   "nodes": [
     {
       "type": "@wilanis/node/run.schema.json",
@@ -89,7 +89,6 @@ are in:
       "in": {
         "store": "@monitor/data/entries.store.json",
         "collection": "entries",
-        "type": "@monitor/domain/Entry.shape.json",
         "record": "{{in}}"
       }
     },
@@ -100,17 +99,23 @@ are in:
       "in": {
         "store": "@monitor/data/entries.store.json",
         "collection": "latest",
-        "type": "@monitor/domain/Latest.shape.json",
         "key": "{{in.method}}",
         "changes": { "url": "{{in.url}}", "entry": "{{in.id}}" }
       }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "answer",
+      "run": "@std/object.port.json#make",
+      "in": { "value": "{{stored.record}}", "type": "@monitor/domain/Entry.shape.json" }
     }
   ]
 }
 ```
 
-The operations are RFC 0002's: `put { store, collection, type, record }` and
-`patch { store, collection, type, key, changes }`. Neither names a connection; the `store` document does.
+The operations are RFC 0002's: `put { store, collection, record, replace? }` answering
+`{ record, conflict }`, and `patch { store, collection, key, changes }`. Neither names a record type --
+the store document does, and the connection too.
 This RFC needs only that they declare `transactional` and that their static `store` leads the checker to
 one connection.
 
@@ -234,10 +239,14 @@ The compiler learns that a graph is atomic, the way it learns that an operation 
 statement on `await scope.join(connection, () => this.begin(connection))`, where `connection` is the
 canonical path the handler resolved the way it resolves everything else: through the `store` document
 `env.canon` and the registry hand it, then `env.connections[canonical]` (RFC 0002, *Handlers*). When the
-scope is absent, it runs as it does today, in its own implicit transaction. The storage plugin's `postgres` engine begins a Kysely transaction
+scope is absent, it runs as it does today, in its own implicit transaction. Beginning a transaction is
+part of the `Engine` interface `@wilanis/plugin-storage` exports (RFC 0002), so `@storage`'s handlers
+join a scope without knowing which engine answers, and an engine that cannot begin one says so through
+its capabilities (RFC 0022) rather than failing at run time.
+`@wilanis/plugin-storage-postgres` begins a Kysely transaction
 and answers a participant whose `commit` and `rollback` are Kysely's; the statements of concurrent nodes are
 queued on the one connection the transaction holds, which is what makes a map inside an atomic graph serial
-at the store while it stays concurrent in the graph. The `memory` engine (RFC 0002) begins by taking a
+at the store while it stays concurrent in the graph. `@wilanis/plugin-storage-memory` begins by taking a
 copy-on-write view of its collections and commits by swapping it in, so the plugin's tests and the example's
 tests exercise rollback without a database.
 
@@ -295,7 +304,7 @@ a storage-backed profile (names as RFC 0002 settles them):
 - L0n3: `"atomic": true` on `list-entries.graph.json`, which reaches no write.
 - G0n1: `"onItemFailure": "collect"` on the map in `record-all.graph.json`.
 
-End to end, in `packages/plugin-storage/test` against the `memory` engine, and in `packages/runtime/test`
+End to end, in `packages/plugin-storage/test` against `@wilanis/plugin-storage-memory`, and in `packages/runtime/test`
 through the example's storage profile:
 
 - an atomic graph whose second node refuses leaves the store as it was; the report carries the refusal.
@@ -303,7 +312,7 @@ through the example's storage profile:
 - an atomic graph that answers leaves both writes in.
 - a map of five drafts where the fourth refuses records none.
 - two atomic graphs fired concurrently do not see each other's uncommitted rows (memory engine: isolation
-  of the copy-on-write view; postgres, in `packages/plugin-storage/test` behind an environment variable
+  of the copy-on-write view; postgres, in `packages/plugin-storage-postgres/test` behind an environment variable
   naming a database, skipped when absent).
 - a commit that fails (memory engine told to fail on commit) fails the calling node and the report says so.
 - `rehearse example` prints `(atomic)` and `rolled back` for the new graphs; the branch count is unchanged.
@@ -320,8 +329,9 @@ through the example's storage profile:
    per-profile walk; G0n1 in `graph-nodes.ts`. Sabotage tests for each.
 4. Compiler: `nestedRunner` wraps atomic graphs with the scope; a test with a fake transactional handler
    in `packages/runtime/test` proving open, join once, commit on done, rollback on refusal and on fault.
-5. Storage plugin: `transactional: true` on its operations, `join` in its handlers, transactions in the
-   `memory` and `postgres` engines. Lands with or after RFC 0002's implementation.
+5. Storage: `transactional: true` on the operations and `join` in `@storage`'s handlers, `begin` on the
+   `Engine` interface, and its implementation in `@wilanis/plugin-storage-memory` and
+   `@wilanis/plugin-storage-postgres`. Lands with or after RFC 0002's implementation.
 6. Rehearsal report: `(atomic)` and `rolled back`. `good first issue`.
 7. `describe`, `map`, the view model and the viewer page. `good first issue` for the viewer badge.
 8. The example: `record-all.graph.json` behind `import`, `store-and-latest.graph.json` behind `record`

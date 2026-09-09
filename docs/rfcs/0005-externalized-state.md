@@ -115,18 +115,18 @@ collection and the collection's shape as `type`, the way RFC 0002's example bind
   "description": "Sessions and challenges as records of auth.store.json: every instance of the tree sees the same ones.",
   "port": "@auth/state.port.json",
   "operations": {
-    "getSession":           { "run": "@storage/store.port.json#get",    "in": { "store": "@features/state/data/auth.store.json", "collection": "sessions",   "type": "@auth/SessionRecord.shape.json" } },
-    "putSession":           { "run": "@storage/store.port.json#put",    "in": { "store": "@features/state/data/auth.store.json", "collection": "sessions",   "type": "@auth/SessionRecord.shape.json" } },
-    "endSession":           { "run": "@storage/store.port.json#remove", "in": { "store": "@features/state/data/auth.store.json", "collection": "sessions",   "type": "@auth/SessionRecord.shape.json" } },
-    "findSessionByRefresh": { "run": "@storage/store.port.json#find",   "in": { "store": "@features/state/data/auth.store.json", "collection": "sessions",   "type": "@auth/SessionRecord.shape.json", "where": { "refreshHash": "{{in.refreshHash}}" }, "limit": 1 } },
-    "getChallenge":         { "run": "@storage/store.port.json#get",    "in": { "store": "@features/state/data/auth.store.json", "collection": "challenges", "type": "@auth/ChallengeRecord.shape.json" } },
-    "putChallenge":         { "run": "@storage/store.port.json#put",    "in": { "store": "@features/state/data/auth.store.json", "collection": "challenges", "type": "@auth/ChallengeRecord.shape.json" } },
-    "removeChallenge":      { "run": "@storage/store.port.json#remove", "in": { "store": "@features/state/data/auth.store.json", "collection": "challenges", "type": "@auth/ChallengeRecord.shape.json" } }
+    "getSession":           { "run": "@storage/store.port.json#get",    "in": { "store": "@features/state/data/auth.store.json", "collection": "sessions" } },
+    "putSession":           { "run": "@storage/store.port.json#put",    "in": { "store": "@features/state/data/auth.store.json", "collection": "sessions" } },
+    "endSession":           { "run": "@storage/store.port.json#remove", "in": { "store": "@features/state/data/auth.store.json", "collection": "sessions" } },
+    "findSessionByRefresh": { "run": "@storage/store.port.json#find",   "in": { "store": "@features/state/data/auth.store.json", "collection": "sessions", "where": { "refreshHash": "{{in.refreshHash}}" }, "limit": 1 } },
+    "getChallenge":         { "run": "@storage/store.port.json#get",    "in": { "store": "@features/state/data/auth.store.json", "collection": "challenges" } },
+    "putChallenge":         { "run": "@storage/store.port.json#put",    "in": { "store": "@features/state/data/auth.store.json", "collection": "challenges" } },
+    "removeChallenge":      { "run": "@storage/store.port.json#remove", "in": { "store": "@features/state/data/auth.store.json", "collection": "challenges" } }
   }
 }
 ```
 
-`key` and `record` pass through by name; `put` answers the stored record, which the port ignores since
+`key` and `record` pass through by name; `put` answers `{ record, conflict }`, which the port ignores since
 `putSession` returns nothing. The feature lists the seven `@storage/store.port.json` operations under
 `feature.json → effects` (L003). A collection's `of` here names a shape a plugin grants rather than a core
 shape of a feature: this RFC widens RFC 0002's X201 to accept either, since a granted shape is visible to
