@@ -11,46 +11,58 @@ import {
   type GuardArgs,
   policyPath,
   type StartupStep,
-  splitPath,
-  TEMPLATE,
   type TriggerDoc,
   type Type,
-  WHOLE_TEMPLATE,
 } from '@wilanis/core';
 import type { Report } from '@wilanis/engine';
-import { readPath, refusalOf } from '@wilanis/engine';
+import { refusalOf } from '@wilanis/engine';
 import { FileBlobStore } from './blobs.js';
+import { coerceWire, fillTemplates, prune, refused } from './values.js';
 
-/** Fill a templated literal from roots (request, ...). Whole templates take the value; embedded ones interpolate. */
-export function fillTemplates(value: unknown, roots: Record<string, unknown>): unknown {
-  const read = (t: string) => {
-    const [root, ...path] = splitPath(t);
-    return readPath(roots[root], path);
-  };
-  if (typeof value === 'string') {
-    const whole = WHOLE_TEMPLATE.exec(value);
-    if (whole) return read(whole[1]);
-    return value.replace(TEMPLATE, (_, t: string) => {
-      const v = read(t);
-      return v === undefined ? '' : String(v);
-    });
-  }
-  if (Array.isArray(value)) return value.map(v => fillTemplates(v, roots));
-  if (value && typeof value === 'object') {
-    const o: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      const x = fillTemplates(v, roots);
-      if (x !== undefined) o[k] = x;
-    }
-    return o;
-  }
-  return value;
-}
+export { coerceWire, fillTemplates, prune } from './values.js';
 
 export interface FireOptions {
   stubs?: Record<string, unknown>;
   signal?: AbortSignal /** The blob scope of this run; handlers see it as env.blobs. Absent: the tree's store itself. */;
   blobs?: BlobStore;
+}
+
+/** Whether a value is a credential at all: a value with nothing in it is none. */
+function present(value: unknown): boolean {
+  if (value === undefined || value === '') return false;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return true;
+  return Object.values(value as Record<string, unknown>).some(present);
+}
+
+/**
+ * The credential one read gives: a list is the places it may sit, the first present wins; anything else is the value
+ * where it is present, and undefined where it is not.
+ */
+function credentialFrom(written: unknown, request: Record<string, unknown>): unknown {
+  const filled = fillTemplates(written, { request });
+  const value = Array.isArray(written) ? (filled as unknown[]).find(present) : filled;
+  return present(value) ? value : undefined;
+}
+
+/** The credentials every attachment of a trigger gives, and the reads as written; the first attachment to give one wins. */
+function gathered(trigger: TriggerDoc, request: Record<string, unknown>) {
+  const found = { credentials: {} as Record<string, unknown>, reads: {} as Record<string, unknown> };
+  for (const use of trigger.policies ?? []) if (typeof use !== 'string') take(use.in ?? {}, request, found);
+  return found;
+}
+
+/** What one attachment gives, added to what earlier attachments already gave. */
+function take(
+  given: Record<string, unknown>,
+  request: Record<string, unknown>,
+  found: { credentials: Record<string, unknown>; reads: Record<string, unknown> },
+) {
+  for (const [name, written] of Object.entries(given)) {
+    found.reads[name] ??= written;
+    if (found.credentials[name] !== undefined) continue;
+    const value = credentialFrom(written, request);
+    if (value !== undefined) found.credentials[name] = value;
+  }
 }
 
 export class Embedder {
@@ -143,10 +155,11 @@ export class Embedder {
         ? undefined
         : this.scope.types.fields(o.op.accepts);
     };
-    return {
-      in: trigger.in ? this.scope.types.ref(trigger.in) : trigger.fire.in !== undefined ? accepts() : undefined,
-      out: trigger.out ? this.scope.types.ref(trigger.out) : undefined,
+    const inType = () => {
+      if (trigger.in) return this.scope.types.ref(trigger.in);
+      return trigger.fire.in !== undefined ? accepts() : undefined;
     };
+    return { in: inType(), out: trigger.out ? this.scope.types.ref(trigger.out) : undefined };
   }
 
   /**
@@ -165,40 +178,59 @@ export class Embedder {
     const args = this.guardArgs(trigger, request);
     if (this.guard) {
       const id = await this.guard.guard!.identify(args);
-      if ('refuse' in id)
-        return refused(`${this.guard.root} guard`, 'identify', id.refuse.reason, id.refuse.message, id.refuse.detail);
+      if ('refuse' in id) return refused(`${this.guard.root} guard`, 'identify', id.refuse);
       Object.assign(request, id.context);
     }
     for (const use of trigger.policies) {
-      const ref = policyPath(use);
-      const p = this.scope.get('policy', ref);
-      if (!p) throw new Error(`unknown policy '${ref}'`);
-      const compiled = this.operation(p.doc.decide.run);
-      const input = fillTemplates(p.doc.decide.in ?? {}, { request });
-      const report = await runGraph(compiled, {
-        initial: { in: input, request },
-        signal: opts.signal,
-        env: opts.blobs ? { ...this.env, blobs: opts.blobs } : this.env,
-      });
-      if (report.status === 'done') continue;
-      const decided: Report = { ...report, graph: p.path };
-      const outcome = refusalOf(report);
-      if (!outcome) return decided; // the decision broke: a fault, answered as one
-      const effect = p.doc.outcomes[outcome.reason];
-      if (effect?.effect === 'challenge' && this.guard) {
-        const ch = await this.guard.guard!.challenge({
-          ...args,
-          policy: p.path,
-          reason: outcome.reason,
-          message: outcome.message,
-          method: effect.method,
-        });
-        const [id, node] = Object.entries(decided.nodes).find(([, n]) => n.status === 'failed')!;
-        decided.nodes = { ...decided.nodes, [id]: { ...node, error: ch.message, detail: ch.detail } };
-      }
-      return decided;
+      const decided = await this.decide(policyPath(use), request, opts, args);
+      if (decided) return decided;
     }
     return undefined;
+  }
+
+  /** One policy's decision: nothing when it allows, else the report that ends the run. */
+  private async decide(
+    ref: string,
+    request: Record<string, unknown>,
+    opts: FireOptions,
+    args: GuardArgs,
+  ): Promise<Report | undefined> {
+    const policy = this.scope.get('policy', ref);
+    if (!policy) throw new Error(`unknown policy '${ref}'`);
+    const report = await runGraph(this.operation(policy.doc.decide.run), {
+      initial: { in: fillTemplates(policy.doc.decide.in ?? {}, { request }), request },
+      signal: opts.signal,
+      env: opts.blobs ? { ...this.env, blobs: opts.blobs } : this.env,
+    });
+    if (report.status === 'done') return undefined;
+    const decided: Report = { ...report, graph: policy.path };
+    const outcome = refusalOf(report);
+    if (!outcome) return decided; // the decision broke: a fault, answered as one
+    const effect = policy.doc.outcomes[outcome.reason];
+    if (effect?.effect !== 'challenge' || !this.guard) return decided;
+    return this.challenged(decided, args, { policy: policy.path, outcome, method: effect.method });
+  }
+
+  /** A denial the guard turns into a challenge: the same report, carrying how to answer it. */
+  private async challenged(
+    decided: Report,
+    args: GuardArgs,
+    what: { policy: string; outcome: { reason: string; message: string }; method?: string },
+  ): Promise<Report> {
+    const challenge = await this.guard?.guard?.challenge({
+      ...args,
+      policy: what.policy,
+      reason: what.outcome.reason,
+      message: what.outcome.message,
+      method: what.method,
+    });
+    const failed = Object.entries(decided.nodes).find(([, node]) => node.status === 'failed');
+    if (!challenge || !failed) return decided;
+    const [id, node] = failed;
+    return {
+      ...decided,
+      nodes: { ...decided.nodes, [id]: { ...node, error: challenge.message, detail: challenge.detail } },
+    };
   }
 
   /**
@@ -210,22 +242,7 @@ export class Embedder {
     const settings = this.guard
       ? ((this.env.plugins as Record<string, Record<string, unknown>>)[this.guard.root] ?? {})
       : {};
-    const credentials: Record<string, unknown> = {},
-      reads: Record<string, unknown> = {};
-    const present = (v: unknown): boolean =>
-      v !== undefined &&
-      v !== '' &&
-      !(v && typeof v === 'object' && !Array.isArray(v) && !Object.values(v as Record<string, unknown>).some(present));
-    for (const use of trigger.policies ?? []) {
-      if (typeof use === 'string') continue;
-      for (const [name, raw] of Object.entries(use.in ?? {})) {
-        reads[name] ??= raw;
-        if (credentials[name] !== undefined) continue;
-        const filled = fillTemplates(raw, { request });
-        const value = Array.isArray(raw) ? (filled as unknown[]).find(present) : filled;
-        if (present(value)) credentials[name] = value;
-      }
-    }
+    const { credentials, reads } = gathered(trigger, request);
     return { trigger, kind: this.scope.canon(trigger.kind), request, credentials, reads, settings, env: this.env };
   }
 
@@ -301,46 +318,4 @@ export class Embedder {
     }
     return report;
   }
-}
-
-/** A report of a run that ended before any graph ran: the guard refused the credential. */
-function refused(
-  graph: string,
-  node: string,
-  reason: string,
-  message: string,
-  detail?: Record<string, unknown>,
-): Report {
-  const now = Date.now();
-  return {
-    graph,
-    status: 'failed',
-    nodes: { [node]: { status: 'failed', handler: graph, reason, error: message, ...(detail ? { detail } : {}) } },
-    startedAt: now,
-    endedAt: now,
-  };
-}
-
-/** Drop keys a closed object type does not declare, recursively. Open objects and unknown pass through. */
-export function prune(v: unknown, t: Type): unknown {
-  if (t.kind === 'list' && Array.isArray(v)) return v.map(x => prune(x, t.of));
-  if (t.kind === 'object' && v && typeof v === 'object' && !Array.isArray(v)) {
-    const o = v as Record<string, unknown>;
-    const out: Record<string, unknown> = {};
-    for (const [k, x] of Object.entries(o)) {
-      const f = t.fields[k];
-      if (f) out[k] = prune(x, f.type);
-      else if (t.open) out[k] = x;
-    }
-    return out;
-  }
-  return v;
-}
-
-/** Coerce wire strings (query, path, headers, form fields) toward the declared field types. */
-export function coerceWire(v: unknown, t: Type): unknown {
-  if (typeof v !== 'string') return v;
-  if (t.kind === 'number' && v.trim() !== '' && !Number.isNaN(Number(v))) return Number(v);
-  if (t.kind === 'boolean' && (v === 'true' || v === 'false')) return v === 'true';
-  return v;
 }
