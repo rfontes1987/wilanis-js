@@ -1,7 +1,6 @@
 # RFC 0001: The RFC process
 
 - **Status:** draft
-- **Milestone:** none (the process itself)
 - **Areas:** area:process
 - **Tracking issue:** #1
 - **Depends on:** none
@@ -10,8 +9,9 @@
 
 Every change that adds a document kind, a checker rule family, a plugin hook, a port a plugin grants,
 or a promise the runtime makes is specified in a file under `docs/rfcs/` and accepted before any code
-is written. The roadmap is the set of RFCs, tracked as GitHub issues, grouped by milestone, and shown
-on the Roadmap project board. Small fixes and refactors that change no rule need no RFC.
+is written. The roadmap, `docs/roadmap.md`, is a list of demos; each names the RFCs it draws on, and the
+GitHub milestones mirror it. An RFC is tracked as an issue, under the milestone that first shows it, on
+the Roadmap project board. Small fixes and refactors that change no rule need no RFC.
 
 ## Motivation
 
@@ -31,10 +31,11 @@ discussed, accepted and turned into work.
 **An RFC** is one markdown file, `docs/rfcs/NNNN-short-title.md`, written from `0000-template.md`. It
 says what a tree can say or do afterwards that it cannot today, shows the documents an author writes,
 states every checker rule with its code and hint, and lists the tasks that implement it. Its header
-says its status, its milestone and its tracking issue.
+says its status and its tracking issue; which milestone shows it is the roadmap's to say, and the
+tracking issue carries it as GitHub's own milestone field, so it is written once.
 
 **A tracking issue** is one GitHub issue per RFC, opened with the "RFC" issue form, labelled `rfc` and
-`status:draft`, assigned to the RFC's milestone. It links the RFC file. When the RFC is accepted the
+`status:draft`, assigned to the milestone `docs/roadmap.md` names for it. It links the RFC file. When the RFC is accepted the
 label becomes `status:accepted`; its implementation plan becomes sub-issues labelled `task`; a task
 that is unblocked and unclaimed is labelled `status:ready`, and `help wanted` when we want someone
 outside to take it.
@@ -86,8 +87,10 @@ None.
 
 ### Discoverability
 
-- `docs/rfcs/README.md` is the index: every RFC, its status and milestone, kept in the same pull
-  request that changes a status.
+- `docs/roadmap.md` is the roadmap: the demos, and the RFCs each draws on. The GitHub milestones
+  mirror it and say so.
+- `docs/rfcs/README.md` is the index: every RFC and its status, kept in the same pull request that
+  changes a status.
 - `CONTRIBUTING.md` says how work flows and points here.
 - `.github/ISSUE_TEMPLATE/rfc.yml`, `task.yml`, `bug.yml` are the issue forms; blank issues are off.
 - `.github/PULL_REQUEST_TEMPLATE.md` asks which RFC or issue a pull request serves.
@@ -110,8 +113,8 @@ None. The process is checked by reading.
 
 1. This file, the template, the index, `CONTRIBUTING.md`, the issue and pull request templates, the
    two skills (this pull request).
-2. The labels `rfc`, `task`, `status:draft`, `status:accepted`, `status:ready`, `area:*`, and the five
-   milestones on `wilanis/wilanis-js` (done by hand; recorded here).
+2. The labels `rfc`, `task`, `status:draft`, `status:accepted`, `status:ready`, `area:*`, and the
+   milestones of `docs/roadmap.md` on `wilanis/wilanis-js` (done by hand; recorded here).
 3. The Roadmap project board with a Status field mirroring the labels (needs the `project` token scope).
 4. The first batch of RFCs, 0002 to 0026, as one pull request, with a tracking issue each.
 

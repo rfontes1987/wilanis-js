@@ -1,5 +1,5 @@
 name: RFC tracking issue
-description: One issue per RFC under docs/rfcs. Opened with the pull request that proposes the RFC.
+description: One issue per RFC under docs/rfcs. Opened with the pull request that proposes the RFC; set its milestone to the demo docs/roadmap.md names for it.
 title: "RFC NNNN: "
 labels: ["rfc", "status:draft"]
 body:
@@ -16,18 +16,6 @@ body:
     attributes:
       label: Summary
       description: The RFC's Summary paragraph, copied.
-    validations:
-      required: true
-  - type: dropdown
-    id: milestone
-    attributes:
-      label: Milestone
-      options:
-        - A credible backend
-        - "1.0: published"
-        - Production grade
-        - The AI advantage
-        - Ecosystem
     validations:
       required: true
   - type: textarea

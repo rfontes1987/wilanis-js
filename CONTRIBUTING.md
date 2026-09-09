@@ -5,8 +5,10 @@ RFC 0001, `docs/rfcs/0001-the-rfc-process.md`; this page is the short form.
 
 ## How work flows
 
-1. **A roadmap item is an RFC**, one file under `docs/rfcs/`, proposed in a pull request and tracked
-   by one issue labelled `rfc`. Nothing is implemented while it is `status:draft`.
+1. **The roadmap is `docs/roadmap.md`**: demos, each naming the RFCs it draws on; the GitHub milestones
+   mirror it. **An RFC** is one file under `docs/rfcs/`, proposed in a pull request and tracked by one
+   issue labelled `rfc` under the milestone that first shows it. Nothing is implemented while it is
+   `status:draft`.
 2. **An accepted RFC becomes tasks**: its Implementation plan, one sub-issue each, labelled `task`.
    A task that is unblocked and unclaimed is `status:ready`; `help wanted` means we would like someone
    outside to take it; `good first issue` means it needs no prior knowledge of the code.
@@ -21,7 +23,7 @@ gh issue list -R wilanis/wilanis-js --label status:ready --no-assignee
 gh issue list -R wilanis/wilanis-js --label "help wanted"
 ```
 
-Pick one, assign yourself, read its RFC, then work. If you use Claude Code, `/roadmap` does exactly
+Prefer the lowest milestone. Pick one, assign yourself, read its RFC, then work. If you use Claude Code, `/roadmap` does exactly
 this, and `/rfc` walks through proposing a new RFC. Both skills live in `.claude/skills/`.
 
 ## Branches

@@ -372,8 +372,9 @@ in `graph.schema.json`.
 It is an npm workspace. `npm run build` builds every package through TypeScript project references,
 `npm test` builds and runs the tests, `npm run release` publishes every package in dependency order.
 `CLAUDE.md` describes the layout and the rules for changing it.
-`CONTRIBUTING.md` says how work flows: the roadmap is the set of RFCs under `docs/rfcs/`, each
-specified and accepted before it is built, and tracked as issues on GitHub.
+`CONTRIBUTING.md` says how work flows: `docs/roadmap.md` is the list of demos we are building towards,
+each drawing on RFCs under `docs/rfcs/` that are specified and accepted before they are built, and
+tracked as issues on GitHub.
 
 ## License
 
