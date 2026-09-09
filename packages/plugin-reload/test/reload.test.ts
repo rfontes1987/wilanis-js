@@ -47,6 +47,18 @@ const until = async (ok: () => boolean, ms = 2000) => {
 const logged = (watcher: { logs: string[] }, pattern: RegExp) =>
   until(() => watcher.logs.some(line => pattern.test(line)));
 
+/**
+ * Touch a document until the watcher notices it. `fs.watch` registers asynchronously, so a write that lands before
+ * the watch is live is simply missed -- the test would then wait for a reload nothing asked for.
+ */
+async function touchUntilSeen(watcher: { dir: string; logs: string[] }, pattern: RegExp, name = 'thing.json') {
+  for (let tries = 0; tries < 40; tries++) {
+    writeFileSync(join(watcher.dir, name), `{"n":${tries}}`);
+    if (await until(() => watcher.logs.some(line => pattern.test(line)), 100)) return true;
+  }
+  return false;
+}
+
 describe('watching a tree', () => {
   it('holds the watcher, answers what it watches, and closes it on stop', async () => {
     const watcher = serving(() => ({ ok: true, documents: 3 }));
@@ -61,17 +73,15 @@ describe('watching a tree', () => {
   it('serves the tree again when a document changes', async () => {
     const watcher = serving(() => ({ ok: true, documents: 42 }));
     await watch(watcher.env, { debounceMs: 10 });
-    writeFileSync(join(watcher.dir, 'thing.json'), '{}');
-    expect(await until(() => watcher.reloads() > 0)).toBe(true);
-    expect(await logged(watcher, /42 documents/)).toBe(true);
+    expect(await touchUntilSeen(watcher, /42 documents/)).toBe(true);
+    expect(watcher.reloads()).toBeGreaterThan(0);
     await watcher.held[0].stop();
   });
 
   it('keeps the last good tree when the change does not pass the check', async () => {
     const watcher = serving(() => ({ ok: false, refusals: 'G003  broken.graph.json' }));
     await watch(watcher.env, { debounceMs: 10 });
-    writeFileSync(join(watcher.dir, 'thing.json'), '{}');
-    expect(await logged(watcher, /refused/)).toBe(true);
+    expect(await touchUntilSeen(watcher, /refused/)).toBe(true);
     expect(watcher.logs.join('\n')).toMatch(/still serving the last good tree/);
     expect(watcher.logs.join('\n')).toMatch(/G003/);
     await watcher.held[0].stop();
