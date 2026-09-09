@@ -1,7 +1,6 @@
 # RFC 0009: Queue messages as triggers, and workers
 
 - **Status:** draft (stub)
-- **Milestone:** Production grade
 - **Areas:** `area:runtime`, a new plugin (`@wilanis/plugin-queue`)
 - **Tracking issue:** #11
 - **Depends on:** RFC 0002 (storage), RFC 0011 (retry, idempotency, timeout)

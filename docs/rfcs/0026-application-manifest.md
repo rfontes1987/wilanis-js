@@ -1,7 +1,6 @@
 # RFC 0026: The application manifest
 
 - **Status:** draft (stub)
-- **Milestone:** The AI advantage
 - **Areas:** `area:runtime`
 - **Tracking issue:** #28
 - **Depends on:** RFC 0016 (capability-aware compilation)

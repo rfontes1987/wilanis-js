@@ -1,7 +1,6 @@
 # RFC 0011: Retry, idempotency and timeout as declared properties of an operation
 
 - **Status:** draft (stub)
-- **Milestone:** Production grade
 - **Areas:** `area:core`, `area:compiler`, `area:runtime`
 - **Tracking issue:** #13
 - **Depends on:** none

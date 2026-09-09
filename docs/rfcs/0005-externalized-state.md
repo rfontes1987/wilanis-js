@@ -1,7 +1,6 @@
 # RFC 0005: Externalized state: every store behind a port the project binds
 
 - **Status:** draft
-- **Milestone:** A credible backend
 - **Areas:** `area:plugin-auth`, `area:plugin-blob`, `area:runtime`, `area:plugin-storage`
 - **Tracking issue:** #7
 - **Depends on:** RFC 0002 (the `@storage` plugin: records of a declared shape behind a connection)

@@ -1,7 +1,6 @@
 # RFC 0012: Resource limits, timeouts and cancellation of a run
 
 - **Status:** draft (stub)
-- **Milestone:** Production grade
 - **Areas:** `area:engine`, `area:runtime`
 - **Tracking issue:** #14
 - **Depends on:** RFC 0011 (retry, idempotency, timeout)

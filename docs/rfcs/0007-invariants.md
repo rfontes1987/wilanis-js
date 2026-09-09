@@ -1,7 +1,6 @@
 # RFC 0007: Invariants: what must hold, declared once and judged by the checker
 
 - **Status:** draft
-- **Milestone:** A credible backend
 - **Areas:** `area:core`, `area:compiler`, `area:runtime`, `area:view`
 - **Tracking issue:** #9
 - **Depends on:** none for access invariants (class 1); RFC 0002 (storage) for the examples of field

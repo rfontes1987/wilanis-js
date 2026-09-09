@@ -1,7 +1,6 @@
 # RFC 0018: Scenario generation from the branch solver
 
 - **Status:** draft (stub)
-- **Milestone:** The AI advantage
 - **Areas:** `area:runtime`
 - **Tracking issue:** #20
 - **Depends on:** none

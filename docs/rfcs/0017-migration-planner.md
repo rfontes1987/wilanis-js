@@ -1,7 +1,6 @@
 # RFC 0017: Migrations derived from store declarations
 
 - **Status:** draft (stub)
-- **Milestone:** The AI advantage
 - **Areas:** `area:plugin-storage`
 - **Tracking issue:** #19
 - **Depends on:** RFC 0003 (store declarations)

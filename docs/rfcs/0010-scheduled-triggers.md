@@ -1,7 +1,6 @@
 # RFC 0010: Scheduled triggers
 
 - **Status:** draft (stub)
-- **Milestone:** Production grade
 - **Areas:** `area:runtime`
 - **Tracking issue:** #12
 - **Depends on:** none

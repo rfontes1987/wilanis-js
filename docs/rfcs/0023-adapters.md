@@ -1,7 +1,6 @@
 # RFC 0023: Adapters: search, cache, email, payment
 
 - **Status:** draft (stub)
-- **Milestone:** Ecosystem
 - **Areas:** a new plugin each (`@wilanis/plugin-search`, `-cache`, `-email`, `-payment`)
 - **Tracking issue:** #25
 - **Depends on:** RFC 0011 (retry, idempotency, timeout)

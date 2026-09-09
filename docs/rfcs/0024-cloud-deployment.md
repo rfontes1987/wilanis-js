@@ -1,7 +1,6 @@
 # RFC 0024: Kubernetes deployment: a Helm chart and a local cluster
 
 - **Status:** draft (stub)
-- **Milestone:** Ecosystem
 - **Areas:** `area:runtime`
 - **Tracking issue:** #26
 - **Depends on:** RFC 0013 (deployment and profiles), RFC 0026 (manifest)
