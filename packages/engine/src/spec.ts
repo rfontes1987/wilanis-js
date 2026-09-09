@@ -13,7 +13,10 @@ export type KSource =
   | { concat: (string | KSource)[] };
 
 /** Paths (relative to the node's in / out) whose values are secret and never appear in a report. */
-export interface Redact { in?: string[][]; out?: string[][] }
+export interface Redact {
+  in?: string[][];
+  out?: string[][];
+}
 
 export interface KCall {
   kind: 'call';
@@ -55,7 +58,14 @@ export type NodeStatus = 'pending' | 'running' | 'done' | 'failed' | 'cancelled'
  */
 export class Refusal extends Error {
   /** `detail`: what the caller needs beside the words -- a challenge's id and how to answer it. Answered with the reason and message, never read by a graph. */
-  constructor(readonly reason: string, message: string, readonly detail?: Record<string, unknown>) { super(message); this.name = 'Refusal'; }
+  constructor(
+    readonly reason: string,
+    message: string,
+    readonly detail?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = 'Refusal';
+  }
 }
 
 export interface NodeReport {
@@ -108,7 +118,10 @@ export interface RunContext {
   env: Record<string, unknown>;
 }
 
-export interface HandlerArgs { in: Record<string, unknown>; ctx: RunContext }
+export interface HandlerArgs {
+  in: Record<string, unknown>;
+  ctx: RunContext;
+}
 export type Handler = (args: HandlerArgs) => Promise<unknown>;
 export type Handlers = Record<string, Handler>;
 
