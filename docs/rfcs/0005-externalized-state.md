@@ -1,6 +1,6 @@
 # RFC 0005: Externalized state: every store behind a port the project binds
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:plugin-auth`, `area:plugin-blob`, `area:runtime`, `area:plugin-storage`
 - **Tracking issue:** #7
 - **Depends on:** RFC 0002 (the `@storage` plugin: records of a declared shape behind a connection)
@@ -56,7 +56,6 @@ open port. `@auth` requires one such port, its memory:
     "getSession":          { "accepts": { "key": { "type": "string" } }, "returns": { "fields": { "record": { "type": "@auth/SessionRecord.shape.json", "required": false } } } },
     "putSession":          { "accepts": { "record": { "type": "@auth/SessionRecord.shape.json" } } },
     "endSession":          { "accepts": { "key": { "type": "string" } }, "returns": { "fields": { "record": { "type": "@auth/SessionRecord.shape.json", "required": false } } } },
-    "findSessionByRefresh":{ "accepts": { "refreshHash": { "type": "string" } }, "returns": "@auth/SessionRecord.shape.json[]" },
     "getChallenge":        { "accepts": { "key": { "type": "string" } }, "returns": { "fields": { "record": { "type": "@auth/ChallengeRecord.shape.json", "required": false } } } },
     "putChallenge":        { "accepts": { "record": { "type": "@auth/ChallengeRecord.shape.json" } } },
     "removeChallenge":     { "accepts": { "key": { "type": "string" } } }
@@ -65,8 +64,8 @@ open port. `@auth` requires one such port, its memory:
 ```
 
 (Descriptions elided; every operation carries one.) The operations answer the way `@storage/store.port.json`
-answers -- `{ record? }` for a read or a removal, a list for a find, the stored record for a put -- so a
-delegation to it fits without a graph in between (B005). The host binds it in a feature of its own, one
+answers -- `{ record? }` for a read or a removal, the stored record for a put -- so a
+delegation to it fits without a graph in between (B005). Every read is by key: see *Every read is by key*. The host binds it in a feature of its own, one
 delegation per operation, the way `example/features/directories/data/identity.binding.json` binds identity.
 In development, to the file store the plugin still ships, now as a native port (`key` and `record` pass
 from the operation's `accepts` by name, as a delegation lets them):
@@ -81,7 +80,6 @@ from the operation's `accepts` by name, as a delegation lets them):
     "getSession":           { "run": "@auth/files.port.json#get",    "in": { "collection": "sessions",   "type": "@auth/SessionRecord.shape.json" } },
     "putSession":           { "run": "@auth/files.port.json#put",    "in": { "collection": "sessions",   "type": "@auth/SessionRecord.shape.json" } },
     "endSession":           { "run": "@auth/files.port.json#remove", "in": { "collection": "sessions",   "type": "@auth/SessionRecord.shape.json" } },
-    "findSessionByRefresh": { "run": "@auth/files.port.json#find",   "in": { "collection": "sessions",   "type": "@auth/SessionRecord.shape.json", "field": "refreshHash", "equals": "{{in.refreshHash}}" } },
     "getChallenge":         { "run": "@auth/files.port.json#get",    "in": { "collection": "challenges", "type": "@auth/ChallengeRecord.shape.json" } },
     "putChallenge":         { "run": "@auth/files.port.json#put",    "in": { "collection": "challenges", "type": "@auth/ChallengeRecord.shape.json" } },
     "removeChallenge":      { "run": "@auth/files.port.json#remove", "in": { "collection": "challenges", "type": "@auth/ChallengeRecord.shape.json" } }
@@ -105,7 +103,7 @@ feature, its two collections `of` the shapes `@auth` grants:
 }
 ```
 
-and binds the same seven operations to `@storage/store.port.json`, every delegation naming the store, the
+and binds the same six operations to `@storage/store.port.json`, every delegation naming the store, the
 collection and the collection's shape as `type`, the way RFC 0002's example binds the monitor's entries:
 
 ```json
@@ -118,7 +116,6 @@ collection and the collection's shape as `type`, the way RFC 0002's example bind
     "getSession":           { "run": "@storage/store.port.json#get",    "in": { "store": "@features/state/data/auth.store.json", "collection": "sessions" } },
     "putSession":           { "run": "@storage/store.port.json#put",    "in": { "store": "@features/state/data/auth.store.json", "collection": "sessions" } },
     "endSession":           { "run": "@storage/store.port.json#remove", "in": { "store": "@features/state/data/auth.store.json", "collection": "sessions" } },
-    "findSessionByRefresh": { "run": "@storage/store.port.json#find",   "in": { "store": "@features/state/data/auth.store.json", "collection": "sessions", "where": { "refreshHash": "{{in.refreshHash}}" }, "limit": 1 } },
     "getChallenge":         { "run": "@storage/store.port.json#get",    "in": { "store": "@features/state/data/auth.store.json", "collection": "challenges" } },
     "putChallenge":         { "run": "@storage/store.port.json#put",    "in": { "store": "@features/state/data/auth.store.json", "collection": "challenges" } },
     "removeChallenge":      { "run": "@storage/store.port.json#remove", "in": { "store": "@features/state/data/auth.store.json", "collection": "challenges" } }
@@ -126,8 +123,17 @@ collection and the collection's shape as `type`, the way RFC 0002's example bind
 }
 ```
 
+The binding and the store live in a feature of their own, `features/state/`, and not beside identity in
+`features/directories/`. A feature is a coherent unit of a tree, and these two documents are about where the
+process keeps its memory, which is not what a directory of people is about: a host may bind identity to an
+OIDC issuer it does not run while keeping sessions in its own database, and the two change for unrelated
+reasons. Putting them together would also make the one feature mean two things to a reader of the tree, which
+is the thing the layout exists to prevent. `features/state/` is where a later cache, queue or lock binding
+belongs too, so the tree gains one place for "where this deployment keeps things" rather than a store
+scattered through whichever feature first needed it.
+
 `key` and `record` pass through by name; `put` answers `{ record, conflict }`, which the port ignores since
-`putSession` returns nothing. The feature lists the seven `@storage/store.port.json` operations under
+`putSession` returns nothing. The feature lists the six `@storage/store.port.json` operations under
 `feature.json → effects` (L003). A collection's `of` here names a shape a plugin grants rather than a core
 shape of a feature: this RFC widens RFC 0002's X201 to accept either, since a granted shape is visible to
 every feature and is already legal as a type in any contract. The alternative, the host copying the two
@@ -191,7 +197,7 @@ provider. Any store speaking the same API works, but no paid service is part of 
 
 `@auth`:
 
-- `@auth/state.port.json`, **required**: the seven operations above. None `pure`. `SessionRecord` is `id`,
+- `@auth/state.port.json`, **required**: the six operations above. None `pure`. `SessionRecord` is `id`,
   `subject`, `realm`, `roles`, `createdAt`, `refreshHash?`, `refreshExpiresAt?`, `attributes` (an open object;
   the session shape judges it in the plugin, as `judged()` does today). `ChallengeRecord` is `id`, `method`,
   `policy`, `trigger`, `subject?`, `createdAt`, `expiresAt`, `attempts`, `codeHash?`, `codeExpiresAt?`.
@@ -233,13 +239,22 @@ P003 R001 S001 T006, X103).
   thrown error in the handler, which the guard turns into `invalid_credential` for a missing session and into a
   failed run for an unreachable store, as an unreachable directory does today.
 - **The auth plugin.** `storeOf(env)` in `settings.ts` disappears. `tokens.ts` and `guard.ts` call
-  `env.ports('@auth/state.port.json#getSession', { key })` and the six others. `refresh` calls
-  `findSessionByRefresh(sha(refreshToken))` and takes the first record instead of listing every session;
+  `env.ports('@auth/state.port.json#getSession', { key })` and the five others. `refresh` reads the `sid` its
+  refresh token carries and calls `getSession(sid)`, then checks the presented token against the record's
+  `refreshHash`; a token naming no session, or one whose hash does not match, is `invalid_credential`. The port
+  therefore has no read that is not by key -- see *Every read is by key* below;
   `sessionEnd` answers `ended` as whether `endSession` answered a record. Lifetimes stay the plugin's:
   a session ends when `refreshExpiresAt` has passed (checked on read, then `endSession`), a challenge when
   `expiresAt` has passed or `attempts` reaches the limit (`removeChallenge`), and `settle` removes an answered
   challenge as today. A store may purge expired records on its own; the plugin never relies on it.
-- **The guard's ordering.** `Embedder.gate` runs `identify` before any policy. The state binding therefore runs
+- **Every read is by key.** The port has no `find`. The refresh token carries the `sid` of the session it
+  refreshes, so the one read that used to be a query over `refreshHash` is a `getSession` like the others. This
+  is the smaller contract in every direction: a host binding the port needs a keyed store and nothing more, so
+  a plugin whose store cannot query is still a legal binding; `@storage`'s `find` and its `where` never enter
+  the guard's requirements, which keeps this RFC independent of how RFC 0002 words a query; and a store cannot
+  answer a refresh with the wrong session, since it is asked for one key rather than for whatever matches. The
+  `refreshHash` field stays on `SessionRecord` and stays the thing compared -- a `sid` says which session,
+  never that the caller holds its token.
   with no `request.*` in scope, which the B0nn rule above guarantees statically.
 - **The blob registry.** `Embedder`'s constructor builds `this.blobs` from `blobs.connection` when present: it
   finds the plugin whose `PluginModule.blobStores` maps the connection's kind to a factory, and calls it with the
@@ -250,8 +265,17 @@ P003 R001 S001 T006, X103).
   which keeps the invariant `blobs.ts` states.
 - **Handles across instances.** `FileBlobStore.open` refuses a handle its `held` map has not seen. An external
   store cannot: a handle written on instance A is opened on instance B. The S3 store keys objects
-  `<prefix>/<run id>/<uuid>` and `open` refuses a handle whose `id` is not of that form; whether a handle also
-  carries an HMAC over `id`, `contentType` and `size` so that a forged handle opens nothing is an open question.
+  `<prefix>/<run id>/<uuid>` and `open` refuses a handle whose `id` is not of that form.
+
+  Whether that is enough is the store's judgement, not the runtime's. A `BlobHandle` already carries `id`,
+  `contentType` and `size`, which is what an integrity check would be taken over, and a store may keep a
+  signature of its own beside the object or in the key it chooses; nothing here forces one, and no store is
+  refused for wanting one. Signing in the runtime would put a secret and a scheme in `blobs.ts` for the sake
+  of one store's threat model, and every other store would pay for it -- the opposite of the placement this
+  RFC argues for everywhere else. What the runtime owes a store is the data to decide with: it hands the
+  handle whole to `open`, and `<run id>` in the key says which run issued it. Should a store need something a
+  handle does not carry, that is a change to the handle or a new kind, asked for in its own right, and not a
+  scheme the runtime imposes in advance.
 - **`wilanis start`.** A tree wants its store reached before it listens. The example's startup gains a step
   `{ "label": "Reach the guard's memory", "run": "@auth/state.port.json#getSession", "in": { "id": "startup" } }`:
   an absent session answers `{}`, an unreachable store fails the step, and `runStartup` in `serve.ts` refuses
@@ -323,7 +347,8 @@ End to end:
    D0nn, B002's message; `wilanis describe` lines. (`area:core`, `area:compiler`, `area:runtime`)
 2. `env.ports` in the embedder, limited to required ports; B0nn on bindings of required ports. (`area:runtime`, `area:compiler`)
 3. `@auth/state.port.json`, the two record shapes, `@auth/files.port.json`; `tokens.ts` and `guard.ts` over
-   `env.ports`; `settings.store` removed; X10n. (`area:plugin-auth`)
+   `env.ports`; the refresh token carrying its session's `sid` so `refresh` reads by key; `settings.store`
+   removed; X10n. (`area:plugin-auth`)
 4. The example's `features/state/`, the access tree's `-dev` binding, the runtime templates, the startup step;
    the sabotage tests. (`area:runtime`, `good first issue` for the templates and CLAUDE.md row)
 5. `project.json → blobs.connection`, `PluginModule.blobStores`, C0nn, `Embedder` choosing the store. (`area:core`, `area:runtime`)
@@ -335,7 +360,7 @@ Steps 1 to 4 need nothing from RFC 0002 and can land first.
 
 ## Drawbacks and alternatives
 
-- **Seven operations instead of a generic store port.** Requiring `@storage/store.port.json` itself would
+- **Six concrete operations instead of a generic store port.** Requiring `@storage/store.port.json` itself would
   be shorter, but a binding binds every operation once, so the host could not choose per collection, and the
   checker could not type the records. Concrete operations cost lines and buy B005 on every one.
 - **A plugin calling a host-bound port** adds a second direction to the plugin contract: the runtime not only
@@ -350,18 +375,7 @@ Steps 1 to 4 need nothing from RFC 0002 and can land first.
 - **A TTL in the store** (`expiresAt` respected by `@storage`) would purge dead sessions without the plugin's
   help. It is left to RFC 0002 to offer and to this plugin to ignore: correctness never depends on the purge.
 
-## Open questions
-
-Before `accepted`:
-
-- Does a handle carry an HMAC so that a forged handle opens nothing on an external store, or is the
-  `<prefix>/<run id>/<uuid>` key shape enough given that a graph can only hold handles the runtime issued?
-- Does `findSessionByRefresh` stay, or does `refresh` look the session up by `sid` carried in the refresh
-  token, removing the only non-key read from the port? The second is simpler for every store and changes the
-  refresh token's shape.
-- Is the state binding in its own feature (`features/state/`) or beside identity in `features/directories/`?
-
-During implementation:
+## Decided during implementation
 
 - The exact shape of `env.ports`' error when the binding refuses, and what `wilanis run` prints for it.
 - Whether `@s3`'s `postLoad` probe is a `HeadBucket` or a `put`/`drop` of one byte under the prefix.
