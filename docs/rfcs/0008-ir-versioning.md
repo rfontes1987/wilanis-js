@@ -1,6 +1,6 @@
 # RFC 0008: Versioning the intermediate representation
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** area:core area:runtime area:process
 - **Tracking issue:** #10
 - **Depends on:** none
@@ -81,6 +81,24 @@ Numbers are assigned when the implementing pull request lands (current highest: 
 
 - `wilanis check` and `wilanis describe project` print `IR v1, runtime reads v1`.
 - The loader refuses a version it does not read before any other rule runs.
+
+**A runtime reads one IR version, and that is deliberate.** A build of `@wilanis/runtime` reads exactly one
+version; it does not read a v1 tree and a v2 tree side by side, and `runtime reads v1` is the whole of what
+that line can say. Reading two would mean every rule in the checker, every lowering in the compiler and every
+document kind carrying two meanings at once, judged by which tree it came from -- the checker's rules span
+kinds, and a rule that must ask which version it is judging is a rule written twice. That is the cost the
+per-kind alternative was rejected for in Drawbacks, and it is the same cost here, paid by the reader as well
+as the code: a refusal would have to say which version it was refusing under.
+
+A tree moves with `wilanis migrate`, which rewrites its documents from one version to the next and is the
+only supported path between them. A fleet that cannot move every tree at once pins the runtime it has --
+versions are npm versions, and an old runtime keeps reading the trees it always read.
+
+**An npm major of `@wilanis/runtime` may drop an IR version**, with the notice the ecosystem already
+expects rather than a rule of our own invention: the version is deprecated in a minor release, which warns
+on load and names `wilanis migrate` and the version that will drop it, and it is removed no sooner than the
+next major. A tree that has not migrated keeps working on the runtime it is pinned to; nothing stops
+serving because a newer runtime was published.
 - Refusal codes and `at` paths are part of the promise: a code keeps its meaning within a version
   (RFC 0019 makes the full statement).
 
@@ -110,16 +128,15 @@ rules that cannot fire on any v1 tree today.
 1. Write the compatible/breaking definitions into `README.md → Schemas` (good first issue).
 2. Print the IR version in `wilanis check` and `describe project`.
 3. The two loader rules and their sabotage tests.
-4. At 1.0: tag `schemas-v1` as frozen in the README and in this RFC's status.
+4. `wilanis migrate`, when there is a second version to migrate to: it rewrites a tree's documents from one
+   version to the next, in place, and says what it changed. Not written before v2 exists, since there is
+   nothing for it to do.
+5. The deprecation warning on load, when a version is first deprecated: it names `wilanis migrate` and the
+   major that will drop the version.
+6. At 1.0: tag `schemas-v1` as frozen in the README and in this RFC's status.
 
 ## Drawbacks and alternatives
 
 Freezing means a bad early decision lives in v1 for as long as v1 is read. The alternative, versioning
 per kind, would let a graph be v2 while a shape is v1; it was rejected because the checker's rules
 span kinds, so a version is a property of the tree.
-
-## Open questions
-
-- Whether the runtime reads two IR versions at once (v1 and v2 trees side by side) or one, and a
-  `wilanis migrate` command rewrites a tree. The first is safer for a fleet; the second is simpler.
-- Whether an npm major of `@wilanis/runtime` may drop an IR version, and with how much notice.
