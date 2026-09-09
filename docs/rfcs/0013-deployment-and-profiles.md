@@ -3,7 +3,7 @@
 - **Status:** draft (stub)
 - **Milestone:** Production grade
 - **Areas:** `area:runtime`, `area:core`
-- **Tracking issue:** #NNN
+- **Tracking issue:** #15
 - **Depends on:** RFC 0005 (externalized state), RFC 0016 (capabilities), RFC 0026 (manifest)
 
 ## Summary

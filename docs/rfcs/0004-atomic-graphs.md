@@ -3,7 +3,7 @@
 - **Status:** draft
 - **Milestone:** A credible backend
 - **Areas:** `area:core`, `area:compiler`, `area:runtime`, `area:plugin-storage`
-- **Tracking issue:** #NNN (opened when the RFC is proposed)
+- **Tracking issue:** #6
 - **Depends on:** RFC 0002 (the storage plugin: the first effects that can take part in a transaction)
 
 ## Summary

@@ -3,7 +3,7 @@
 - **Status:** draft (stub)
 - **Milestone:** 1.0: published
 - **Areas:** `area:process`, `area:compiler`, `area:runtime`
-- **Tracking issue:** #NNN
+- **Tracking issue:** #22
 - **Depends on:** RFC 0007 (invariants), RFC 0016 (capabilities)
 
 ## Summary

@@ -3,7 +3,7 @@
 - **Status:** draft
 - **Milestone:** A credible backend
 - **Areas:** `area:engine`, `area:runtime`, `area:plugin-http`, `area:core` (one field on a trigger kind, one member on `Serving`)
-- **Tracking issue:** #NNN (opened when the RFC is proposed)
+- **Tracking issue:** #8
 - **Depends on:** none
 
 ## Summary
