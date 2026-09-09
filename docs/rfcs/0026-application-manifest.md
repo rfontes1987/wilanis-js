@@ -3,7 +3,7 @@
 - **Status:** draft (stub)
 - **Milestone:** The AI advantage
 - **Areas:** `area:runtime`
-- **Tracking issue:** #NNN
+- **Tracking issue:** #28
 - **Depends on:** RFC 0016 (capability-aware compilation)
 
 ## Summary

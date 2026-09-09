@@ -3,7 +3,7 @@
 - **Status:** draft (stub)
 - **Milestone:** The AI advantage
 - **Areas:** `area:plugin-storage`
-- **Tracking issue:** #NNN
+- **Tracking issue:** #19
 - **Depends on:** RFC 0003 (store declarations)
 
 ## Summary

@@ -3,7 +3,7 @@
 - **Status:** draft (stub)
 - **Milestone:** Ecosystem
 - **Areas:** a new plugin (`@wilanis/plugin-model`)
-- **Tracking issue:** #NNN
+- **Tracking issue:** #27
 - **Depends on:** RFC 0011 (retry, idempotency, timeout)
 
 ## Summary

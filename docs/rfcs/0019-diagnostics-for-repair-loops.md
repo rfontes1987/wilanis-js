@@ -3,7 +3,7 @@
 - **Status:** draft (stub)
 - **Milestone:** The AI advantage
 - **Areas:** `area:compiler`, `area:runtime`
-- **Tracking issue:** #NNN
+- **Tracking issue:** #21
 - **Depends on:** none
 
 ## Summary

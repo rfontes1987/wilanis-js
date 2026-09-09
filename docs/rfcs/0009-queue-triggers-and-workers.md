@@ -3,7 +3,7 @@
 - **Status:** draft (stub)
 - **Milestone:** Production grade
 - **Areas:** `area:runtime`, a new plugin (`@wilanis/plugin-queue`)
-- **Tracking issue:** #NNN
+- **Tracking issue:** #11
 - **Depends on:** RFC 0002 (storage), RFC 0011 (retry, idempotency, timeout)
 
 ## Summary
