@@ -63,6 +63,31 @@ export async function fuzz(
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
+/** How one node differs from what the scenario recorded. */
+function nodeDiffs(
+  id: string,
+  was: ScenarioDoc['expect']['nodes'][string],
+  now: ScenarioDoc['expect']['nodes'][string] | undefined,
+): string[] {
+  if (!now) return [`${id}: gone`];
+  const out: string[] = [];
+  if (now.status !== was.status) out.push(`${id}: ${was.status} → ${now.status}`);
+  if (was.selected && now.selected !== was.selected) out.push(`${id}: routed ${was.selected} → ${now.selected}`);
+  if ('out' in was && !same(now.out, was.out)) out.push(`${id}: out changed`);
+  return out;
+}
+
+/** How this run differs from what the scenario recorded: its status, its output, and every node. */
+function diffOf(report: Report, expect: ScenarioDoc['expect']): string[] {
+  const diffs: string[] = [];
+  if (report.status !== expect.status) diffs.push(`status ${expect.status} → ${report.status}`);
+  if (expect.status === 'done' && !same(report.output, expect.output)) diffs.push('output changed');
+  const got = pick(report);
+  for (const [id, was] of Object.entries(expect.nodes)) diffs.push(...nodeDiffs(id, was, got[id]));
+  for (const id of Object.keys(got)) if (!(id in expect.nodes)) diffs.push(`${id}: new`);
+  return diffs;
+}
+
 /** Replay every scenario with its recorded stubs and diff the report node by node. */
 export async function regress(
   load: LoadResult,
@@ -80,21 +105,7 @@ export async function regress(
       continue;
     }
     const report: Report = await emb.fire(trigger.doc, sc.doc.in, sc.doc.request ?? {}, { stubs: sc.doc.stubs });
-    const diffs: string[] = [];
-    if (report.status !== sc.doc.expect.status) diffs.push(`status ${sc.doc.expect.status} → ${report.status}`);
-    if (sc.doc.expect.status === 'done' && !same(report.output, sc.doc.expect.output)) diffs.push('output changed');
-    const got = pick(report);
-    for (const [id, e] of Object.entries(sc.doc.expect.nodes)) {
-      const n = got[id];
-      if (!n) {
-        diffs.push(`${id}: gone`);
-        continue;
-      }
-      if (n.status !== e.status) diffs.push(`${id}: ${e.status} → ${n.status}`);
-      if (e.selected && n.selected !== e.selected) diffs.push(`${id}: routed ${e.selected} → ${n.selected}`);
-      if ('out' in e && !same(n.out, e.out)) diffs.push(`${id}: out changed`);
-    }
-    for (const id of Object.keys(got)) if (!(id in sc.doc.expect.nodes)) diffs.push(`${id}: new`);
+    const diffs = diffOf(report, sc.doc.expect);
     if (diffs.length) ok = false;
     lines.push(`${sc.path}: ${diffs.length ? `DIFF ${diffs.join('; ')}` : 'same'}`);
   }

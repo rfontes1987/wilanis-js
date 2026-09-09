@@ -26,17 +26,13 @@ function into(target: string, layer: 'edge' | 'domain' | 'data', kind: string): 
   return `${layer}/${target}${suffix}`;
 }
 
-export function scaffold(
-  root: string,
-  kind: string,
-  target: string,
-  opts: Record<string, string | undefined>,
-): string[] {
-  const files: [string, unknown][] = [];
-  const S = (k: Kind) => schemaUrl(k);
-  switch (kind) {
-    case 'project':
-      files.push([
+/** What `wilanis new <kind>` writes: one builder per kind, each answering the files it creates. */
+const S = (k: Kind) => schemaUrl(k);
+
+const SCAFFOLDS: Record<string, (target: string, opts: Record<string, string | undefined>) => [string, unknown][]> = {
+  project: (target, _opts) => {
+    return [
+      [
         'package.json',
         {
           name: target,
@@ -45,8 +41,8 @@ export function scaffold(
           scripts: { check: 'wilanis check .', rehearse: 'wilanis rehearse .', start: 'wilanis start .' },
           dependencies: { '@wilanis/plugin-http': '^0.1.0', '@wilanis/runtime': '^0.1.0' },
         },
-      ]);
-      files.push([
+      ],
+      [
         'project.json',
         {
           $schema: S('project'),
@@ -64,34 +60,36 @@ export function scaffold(
           ],
           secrets: {},
         },
-      ]);
-      break;
-    case 'feature':
-      files.push([
-        `features/${target}/feature.json`,
-        { $schema: S('feature'), description: 'TODO', exports: [], effects: [] },
-      ]);
-      break;
-    case 'shape': {
-      // a shape is the world's (edge) or ours (domain); `layer: core` is the domain's word for it. The directory
-      // is where a shape's layer is read from, so a path that names the layer decides it, and --layer the rest.
-      const placed = into(target, opts.layer === 'edge' ? 'edge' : 'domain', 'shape');
-      const layer = placed.split('/')[2] === 'edge' ? 'edge' : 'core';
-      files.push([placed, { $schema: S('shape'), layer, description: 'TODO', fields: {} }]);
-      break;
-    }
-    case 'port':
-      files.push([
+      ],
+    ];
+  },
+  feature: (target, _opts) => {
+    return [
+      [`features/${target}/feature.json`, { $schema: S('feature'), description: 'TODO', exports: [], effects: [] }],
+    ];
+  },
+  shape: (target, opts) => {
+    // a shape is the world's (edge) or ours (domain); `layer: core` is the domain's word for it. The directory
+    // is where a shape's layer is read from, so a path that names the layer decides it, and --layer the rest.
+    const placed = into(target, opts.layer === 'edge' ? 'edge' : 'domain', 'shape');
+    const layer = placed.split('/')[2] === 'edge' ? 'edge' : 'core';
+    return [[placed, { $schema: S('shape'), layer, description: 'TODO', fields: {} }]];
+  },
+  port: (target, _opts) => {
+    return [
+      [
         into(target, 'domain', 'port'),
         {
           $schema: S('port'),
           description: 'TODO',
           operations: { example: { description: 'TODO', accepts: {}, returns: 'string' } },
         },
-      ]);
-      break;
-    case 'graph':
-      files.push([
+      ],
+    ];
+  },
+  graph: (target, opts) => {
+    return [
+      [
         into(target, opts.layer === 'data' ? 'data' : 'domain', 'graph'),
         {
           $schema: S('graph'),
@@ -106,11 +104,13 @@ export function scaffold(
           ],
           out: { type: 'string', from: 'first' },
         },
-      ]);
-      break;
-    case 'binding':
-      // meets the `example` operation a scaffolded port declares, by delegation; a real port's operations are B001s that name themselves
-      files.push([
+      ],
+    ];
+  },
+  binding: (target, opts) => {
+    // meets the `example` operation a scaffolded port declares, by delegation; a real port's operations are B001s that name themselves
+    return [
+      [
         into(target, 'data', 'binding'),
         {
           $schema: S('binding'),
@@ -120,20 +120,24 @@ export function scaffold(
             example: { description: 'TODO', run: '@std/text.port.json#fill', in: { values: {}, template: 'TODO' } },
           },
         },
-      ]);
-      break;
-    case 'resolvers':
-      files.push([
+      ],
+    ];
+  },
+  resolvers: (target, _opts) => {
+    return [
+      [
         into(target, 'edge', 'resolvers'),
         {
           $schema: S('resolvers'),
           description: 'TODO',
           resolvers: { caller: { read: "request.headers['user-agent']", description: 'TODO' } },
         },
-      ]);
-      break;
-    case 'trigger':
-      files.push([
+      ],
+    ];
+  },
+  trigger: (target, opts) => {
+    return [
+      [
         into(target, 'edge', 'trigger'),
         {
           $schema: S('trigger'),
@@ -142,11 +146,13 @@ export function scaffold(
           settings: { route: '/todo', method: 'GET', produces: 'application/json' },
           fire: { run: opts.run ?? '@features/TODO/domain/TODO.port.json#todo' },
         },
-      ]);
-      break;
-    case 'policy':
-      // a gate: decides through a domain operation over what the guard hands, and says what each reason means
-      files.push([
+      ],
+    ];
+  },
+  policy: (target, opts) => {
+    // a gate: decides through a domain operation over what the guard hands, and says what each reason means
+    return [
+      [
         into(target, 'edge', 'policy'),
         {
           $schema: S('policy'),
@@ -157,13 +163,24 @@ export function scaffold(
           },
           outcomes: { anonymous: { effect: 'deny' } },
         },
-      ]);
-      break;
-    default:
-      throw new Error(
-        `unknown kind '${kind}'; one of project, feature, shape, port, graph, binding, trigger, policy, resolvers`,
-      );
-  }
+      ],
+    ];
+  },
+};
+
+/** The documents `wilanis new <kind> <target>` writes, in the places placement says they live. */
+export function scaffold(
+  root: string,
+  kind: string,
+  target: string,
+  opts: Record<string, string | undefined>,
+): string[] {
+  const build = SCAFFOLDS[kind];
+  if (!build)
+    throw new Error(
+      `unknown kind '${kind}'; one of project, feature, shape, port, graph, binding, trigger, policy, resolvers`,
+    );
+  const files = build(target, opts);
   const written: string[] = [];
   for (const [rel, doc] of files) {
     const abs = join(root, rel);

@@ -32,23 +32,36 @@ const hash = (s: string) => {
 };
 
 /** Every effectful native operation answers a generated value of its declared type, deterministic per seed and node path. */
+/** The type variables this call binds, read from the `type` inputs the operation declares. */
+function boundHere(info: EffectInfo, given: Record<string, unknown>, resolve: (ref: string) => Type) {
+  const subst: Record<string, Type> = {};
+  for (const [name, field] of Object.entries(info.op.accepts ?? {})) {
+    if (!field.binds || field.type !== 'type' || typeof given[name] !== 'string') continue;
+    try {
+      subst[field.binds] = resolve(given[name] as string);
+    } catch {
+      /* unknown */
+    }
+  }
+  return subst;
+}
+
+/** What an effect answers at this call site: its return type with the variables this call binds filled in. */
+function answerType(
+  info: EffectInfo,
+  given: Record<string, unknown>,
+  resolve: ((ref: string) => Type) | undefined,
+): Type | undefined {
+  const returns = info.returns;
+  if (!returns || !hasVars(returns) || !resolve) return returns;
+  return substitute(returns, boundHere(info, given, resolve));
+}
+
 export function stubEffects(seed: number, record?: Record<string, unknown>, types?: Record<string, Type>) {
   return (info: EffectInfo): Handler =>
     async ({ in: i, ctx }) => {
       const resolve = ctx.env.resolveType as ((ref: string) => Type) | undefined;
-      let t = info.returns;
-      if (t && hasVars(t) && resolve) {
-        const subst: Record<string, Type> = {};
-        for (const [k, f] of Object.entries(info.op.accepts ?? {}))
-          if (f.binds && f.type === 'type' && typeof i[k] === 'string') {
-            try {
-              subst[f.binds] = resolve(i[k] as string);
-            } catch {
-              /* unknown */
-            }
-          }
-        t = substitute(t, subst);
-      }
+      const t = answerType(info, i, resolve);
       const key = ctx.nodePath.join('.');
       const value = t ? generate(t, rng(seed ^ hash(key))) : undefined;
       if (record) record[key] = value;

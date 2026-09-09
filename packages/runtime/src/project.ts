@@ -17,6 +17,16 @@ export interface PluginResolution {
   refusals: Refusal[];
 }
 
+/** The array project.json holds under one key, or none when the file or the key is not there. loadTree reports D000 / D005. */
+function listedIn(root: string, key: 'plugins' | 'includes'): unknown[] {
+  try {
+    const found = JSON.parse(readFileSync(join(root, 'project.json'), 'utf8'))[key];
+    return Array.isArray(found) ? found : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Import every plugin project.json names with `from`, on top of the builtins and `extra`. */
 export async function resolvePlugins(
   root: string,
@@ -24,47 +34,68 @@ export async function resolvePlugins(
 ): Promise<PluginResolution> {
   const available: Record<string, PluginModule> = { ...BUILTIN_PLUGINS, ...extra };
   const refusals: Refusal[] = [];
-  let entries: unknown;
-  try {
-    entries = JSON.parse(readFileSync(join(root, 'project.json'), 'utf8')).plugins;
-  } catch {
-    return { available, refusals };
-  } // loadTree reports D000 / D005
-  if (!Array.isArray(entries)) return { available, refusals };
   const require = createRequire(join(root, 'package.json'));
-  const refuse = (at: string, message: string, hint: string) => {
-    refusals.push({ code: 'D006', file: 'project.json', at, message, hint });
-  };
-  for (const [i, p] of (entries as { use?: unknown; from?: unknown }[]).entries()) {
-    if (!p || typeof p !== 'object' || typeof p.from !== 'string' || typeof p.use !== 'string') continue;
-    const at = `plugins/${i}/from`;
-    if (!PACKAGE_NAME.test(p.from)) {
-      refuse(at, `'${p.from}' is not an npm package name`, 'from names a published package, never a file path');
+  for (const [at, entry] of listedIn(root, 'plugins').entries()) {
+    const named = entry as { use?: unknown; from?: unknown };
+    if (!named || typeof named !== 'object' || typeof named.from !== 'string' || typeof named.use !== 'string')
       continue;
-    }
-    let mod: Record<string, unknown>;
-    try {
-      mod = (await import(pathToFileURL(require.resolve(p.from)).href)) as Record<string, unknown>;
-    } catch (e) {
-      refuse(at, `cannot load plugin package '${p.from}': ${(e as Error).message}`, `npm install ${p.from}`);
-      continue;
-    }
-    const plugin = (mod.default ?? mod.plugin) as PluginModule | undefined;
-    if (!plugin || typeof plugin !== 'object' || typeof plugin.root !== 'string' || !plugin.docs) {
-      refuse(
-        at,
-        `'${p.from}' does not export a wilanis plugin`,
-        'a plugin package exports its PluginModule as default',
-      );
-      continue;
-    }
-    if (plugin.root !== p.use) {
-      refuse(at, `'${p.from}' is the plugin '${plugin.root}', not '${p.use}'`, `"use": "${plugin.root}"`);
-      continue;
-    }
-    available[p.use] = plugin;
+    const found = await pluginFrom(require, named.from, named.use, `plugins/${at}/from`);
+    if ('refusal' in found) refusals.push(found.refusal);
+    else available[named.use] = found.plugin;
   }
   return { available, refusals };
+}
+
+/** One D006: what a plugin entry got wrong. */
+const badPlugin = (at: string, message: string, hint: string): Refusal => ({
+  code: 'D006',
+  file: 'project.json',
+  at,
+  message,
+  hint,
+});
+
+/** The plugin one entry names, imported and checked to be the plugin it says it is. */
+async function pluginFrom(
+  require: NodeJS.Require,
+  from: string,
+  use: string,
+  at: string,
+): Promise<{ plugin: PluginModule } | { refusal: Refusal }> {
+  if (!PACKAGE_NAME.test(from))
+    return {
+      refusal: badPlugin(
+        at,
+        `'${from}' is not an npm package name`,
+        'from names a published package, never a file path',
+      ),
+    };
+  let mod: Record<string, unknown>;
+  try {
+    mod = (await import(pathToFileURL(require.resolve(from)).href)) as Record<string, unknown>;
+  } catch (error) {
+    return {
+      refusal: badPlugin(
+        at,
+        `cannot load plugin package '${from}': ${(error as Error).message}`,
+        `npm install ${from}`,
+      ),
+    };
+  }
+  const plugin = (mod.default ?? mod.plugin) as PluginModule | undefined;
+  if (!plugin || typeof plugin !== 'object' || typeof plugin.root !== 'string' || !plugin.docs)
+    return {
+      refusal: badPlugin(
+        at,
+        `'${from}' does not export a wilanis plugin`,
+        'a plugin package exports its PluginModule as default',
+      ),
+    };
+  if (plugin.root !== use)
+    return {
+      refusal: badPlugin(at, `'${from}' is the plugin '${plugin.root}', not '${use}'`, `"use": "${plugin.root}"`),
+    };
+  return { plugin };
 }
 
 /**
@@ -74,47 +105,57 @@ export async function resolvePlugins(
 export function resolveIncludes(root: string): { includes: ResolvedInclude[]; refusals: Refusal[] } {
   const includes: ResolvedInclude[] = [];
   const refusals: Refusal[] = [];
-  let entries: unknown;
-  try {
-    entries = JSON.parse(readFileSync(join(root, 'project.json'), 'utf8')).includes;
-  } catch {
-    return { includes, refusals };
-  }
-  if (!Array.isArray(entries)) return { includes, refusals };
   const require = createRequire(join(root, 'package.json'));
-  for (const [i, inc] of (entries as { from?: unknown; features?: unknown }[]).entries()) {
-    if (!inc || typeof inc !== 'object' || typeof inc.from !== 'string') continue;
-    const at = `includes/${i}/from`;
-    if (!PACKAGE_NAME.test(inc.from)) {
-      refusals.push({
-        code: 'D010',
-        file: 'project.json',
-        at,
-        message: `'${inc.from}' is not an npm package name`,
-        hint: 'from names a published package, never a file path',
-      });
-      continue;
-    }
-    let dir: string;
-    try {
-      dir = dirname(require.resolve(`${inc.from}/package.json`));
-    } catch (e) {
-      refusals.push({
-        code: 'D010',
-        file: 'project.json',
-        at,
-        message: `cannot find the included package '${inc.from}': ${(e as Error).message}`,
-        hint: `npm install ${inc.from}`,
-      });
-      continue;
-    }
-    includes.push({
-      from: inc.from,
-      dir,
-      ...(Array.isArray(inc.features) ? { features: inc.features.map(String) } : {}),
-    });
+  for (const [at, entry] of listedIn(root, 'includes').entries()) {
+    const named = entry as { from?: unknown; features?: unknown };
+    if (!named || typeof named !== 'object' || typeof named.from !== 'string') continue;
+    const found = includeFrom(require, { ...named, from: named.from }, `includes/${at}/from`);
+    if ('refusal' in found) refusals.push(found.refusal);
+    else includes.push(found.include);
   }
   return { includes, refusals };
+}
+
+/** One D010: what an include entry got wrong. */
+const badInclude = (at: string, message: string, hint: string): Refusal => ({
+  code: 'D010',
+  file: 'project.json',
+  at,
+  message,
+  hint,
+});
+
+/** Where the tree one entry includes sits, resolved from the project's own node_modules. */
+function includeFrom(
+  require: NodeJS.Require,
+  named: { from: string; features?: unknown },
+  at: string,
+): { include: ResolvedInclude } | { refusal: Refusal } {
+  if (!PACKAGE_NAME.test(named.from))
+    return {
+      refusal: badInclude(
+        at,
+        `'${named.from}' is not an npm package name`,
+        'from names a published package, never a file path',
+      ),
+    };
+  try {
+    return {
+      include: {
+        from: named.from,
+        dir: dirname(require.resolve(`${named.from}/package.json`)),
+        ...(Array.isArray(named.features) ? { features: named.features.map(String) } : {}),
+      },
+    };
+  } catch (error) {
+    return {
+      refusal: badInclude(
+        at,
+        `cannot find the included package '${named.from}': ${(error as Error).message}`,
+        `npm install ${named.from}`,
+      ),
+    };
+  }
 }
 
 /** Load the tree at root with its plugins and includes resolved: builtins, `extra`, and the packages project.json names. */
