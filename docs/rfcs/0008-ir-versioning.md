@@ -34,7 +34,8 @@ Until 1.0, `main` is the address and `packages/core/schemas/` there is what the 
 tag `schemas-v1` is cut, every URL moves to it, and it never moves again: a tag cannot go stale the way
 a branch does.
 
-**Before 1.0.** v1 is the working draft. A schema may change in place, a kind may be renamed, a rule
+**Before 1.0.** v1 is the working draft, and 1.0 waits for it: it is published only when no accepted RFC
+still changes a schema, so what is frozen is final (`docs/roadmap.md` puts it last for that reason). A schema may change in place, a kind may be renamed, a rule
 may tighten. Documents in this repository (`example/`, `libraries/`, every plugin's `docs/`) are updated
 in the same commit, so `npm test` is the compatibility check.
 
