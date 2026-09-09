@@ -1,7 +1,6 @@
 # RFC 0019: Diagnostics designed for an agent's repair loop
 
 - **Status:** draft (stub)
-- **Milestone:** The AI advantage
 - **Areas:** `area:compiler`, `area:runtime`
 - **Tracking issue:** #21
 - **Depends on:** none

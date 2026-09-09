@@ -1,7 +1,6 @@
 # RFC 0020: The security model: what is guaranteed, what is enforced, what is the application's
 
 - **Status:** draft (stub)
-- **Milestone:** 1.0: published
 - **Areas:** `area:process`, `area:compiler`, `area:runtime`
 - **Tracking issue:** #22
 - **Depends on:** RFC 0007 (invariants), RFC 0016 (capabilities)

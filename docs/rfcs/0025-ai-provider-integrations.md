@@ -1,7 +1,6 @@
 # RFC 0025: AI model calls as an effect
 
 - **Status:** draft (stub)
-- **Milestone:** Ecosystem
 - **Areas:** a new plugin (`@wilanis/plugin-model`)
 - **Tracking issue:** #27
 - **Depends on:** RFC 0011 (retry, idempotency, timeout)

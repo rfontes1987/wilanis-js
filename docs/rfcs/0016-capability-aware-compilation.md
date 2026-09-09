@@ -1,7 +1,6 @@
 # RFC 0016: Capability-aware compilation: what a tree requires against what an environment permits
 
 - **Status:** draft (stub)
-- **Milestone:** The AI advantage
 - **Areas:** `area:compiler`, `area:runtime`
 - **Tracking issue:** #18
 - **Depends on:** RFC 0013 (deployment and profiles)

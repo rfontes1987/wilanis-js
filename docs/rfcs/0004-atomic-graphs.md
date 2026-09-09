@@ -1,7 +1,6 @@
 # RFC 0004: Atomic graphs: transactions as a property of a data graph
 
 - **Status:** draft
-- **Milestone:** A credible backend
 - **Areas:** `area:core`, `area:compiler`, `area:runtime`, `area:plugin-storage`
 - **Tracking issue:** #6
 - **Depends on:** RFC 0002 (the storage plugin: the first effects that can take part in a transaction)

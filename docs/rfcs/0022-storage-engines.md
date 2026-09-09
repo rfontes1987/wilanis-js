@@ -1,7 +1,6 @@
 # RFC 0022: More storage engines: SQLite, MySQL, and declared capabilities
 
 - **Status:** draft (stub)
-- **Milestone:** Ecosystem
 - **Areas:** `area:plugin-storage`
 - **Tracking issue:** #24
 - **Depends on:** RFC 0002 (storage)

@@ -1,7 +1,6 @@
 # RFC 0015: Tenant and resource scoping as a provenance rule
 
 - **Status:** draft (stub)
-- **Milestone:** The AI advantage
 - **Areas:** `area:compiler`, `area:plugin-storage`
 - **Tracking issue:** #17
 - **Depends on:** RFC 0002 (storage), RFC 0003 (store declarations), RFC 0007 (invariants)
