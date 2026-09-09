@@ -1,7 +1,6 @@
 # RFC 0021: Higher-level constructs: state machines and resources
 
 - **Status:** draft (stub)
-- **Milestone:** Ecosystem
 - **Areas:** `area:core`, `area:compiler`, `area:runtime`, `area:view`
 - **Tracking issue:** #23
 - **Depends on:** RFC 0002 (storage), RFC 0007 (invariants)

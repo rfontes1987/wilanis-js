@@ -1,7 +1,6 @@
 # RFC 0002: The `@storage` plugin: records of a shape behind a generic port
 
 - **Status:** draft
-- **Milestone:** A credible backend
 - **Areas:** `area:plugin-storage`, `area:core`, `area:runtime`
 - **Tracking issue:** #4
 - **Depends on:** none

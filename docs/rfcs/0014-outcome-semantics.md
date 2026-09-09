@@ -1,7 +1,6 @@
 # RFC 0014: Outcome semantics: refusals, failures and faults, end to end
 
 - **Status:** draft (stub)
-- **Milestone:** Production grade
 - **Areas:** `area:engine`, `area:compiler`, `area:runtime`, `area:plugin-http`
 - **Tracking issue:** #16
 - **Depends on:** none

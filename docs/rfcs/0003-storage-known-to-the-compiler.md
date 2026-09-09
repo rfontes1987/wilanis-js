@@ -1,7 +1,6 @@
 # RFC 0003: Storage declarations the compiler judges
 
 - **Status:** draft
-- **Milestone:** A credible backend
 - **Areas:** `area:compiler`, `area:core`, `area:plugin-storage`
 - **Tracking issue:** #5
 - **Depends on:** RFC 0002 (the `@wilanis/plugin-storage` plugin, the `store` document, `@storage/store.port.json`, `@storage/storage.port.json#ensure`)
