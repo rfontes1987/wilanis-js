@@ -1,6 +1,6 @@
 # RFC 0003: Storage declarations the compiler judges
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:compiler`, `area:core`, `area:plugin-storage`
 - **Tracking issue:** #5
 - **Depends on:** RFC 0002 (the `@wilanis/plugin-storage` plugin, the `store` document, `@storage/store.port.json`, `@storage/storage.port.json#ensure`)
@@ -8,8 +8,8 @@
 ## Summary
 
 A `store` document says more than which shape a collection holds and which field is its key: what is
-unique, which field refers to which other collection, what an existing row receives when a column is added,
-which fields are indexed. The compiler judges the declaration against the shapes it names, and the storage
+unique, which field refers to which other collection, and what an existing row receives when a column is
+added. The compiler judges the declaration against the shapes it names, and the storage
 plugin judges every filter and every `patch` against the declaration, so a misspelled field, a filter
 comparing a number with a string, or a `patch` that rewrites the key is a refusal of `wilanis check`, not
 an error from PostgreSQL at run time. The declaration reaches the database through RFC 0002's `ensure`,
@@ -19,7 +19,7 @@ widened here to add what is missing to a table that exists and to refuse what wo
 
 RFC 0002 gives a tree records of a shape behind a connection, keyed by one required string field. What it
 leaves to run time is what a database knows of its own tables beyond the key: which combination may not
-repeat, which field points at another collection, which field is worth an index. And it leaves to the
+repeat, which field points at another collection, what an existing row receives. And it leaves to the
 handler what the checker could say first: RFC 0002 declares `where` and `changes` as `unknown` so that the
 grammar can nest, and fails the node on an unknown field or operator when the graph runs. An author -- an
 agent above all -- writes `"where": { "methd": "GET" }` and finds out when the query answers nothing, or
@@ -49,8 +49,7 @@ is the monitor's store, once the REST API is replaced by a table:
       "of": "@monitor/domain/Entry.shape.json",
       "key": "id",
       "unique": [["url", "method"]],
-      "defaults": { "ua": "unknown" },
-      "indexes": [["method"]]
+      "defaults": { "ua": "unknown" }
     },
     "notes": {
       "of": "@monitor/domain/Note.shape.json",
@@ -63,8 +62,7 @@ is the monitor's store, once the REST API is replaced by a table:
 
 Read it top to bottom. `entries` holds `Entry` records, identified by `id`, which the graph asks
 `@storage/store.port.json#newKey` for before it `put`s (RFC 0002: no field is filled in silently). No two
-records share a `url` and a `method`. There is an index on `method`, because the listing filters by it.
-`notes` holds `Note` records whose `entryId` is the `id` of an entry; a note whose entry does not exist
+records share a `url` and a `method`. `notes` holds `Note` records whose `entryId` is the `id` of an entry; a note whose entry does not exist
 is refused by the database, and so is removing an entry that still has notes.
 
 `defaults` is about existing rows, not about what a graph writes. When `ensure` adds the column `ua` to a
@@ -114,7 +112,7 @@ operation, and the profile's binding delegates it to `@storage/storage.port.json
 ```
 
 RFC 0002's `ensure` creates a collection that does not exist and leaves one that does alone. This RFC widens
-it: a column, unique, reference or index the declaration has and the table lacks is added, and `ensure`
+it: a column, unique or reference the declaration has and the table lacks is added, and `ensure`
 refuses, with reason `drift`, when the database holds something the declaration would destroy: a column of
 another type or nullability, a unique or a reference existing rows violate, a required column with no
 default that existing rows would have to receive. The start stops there, as it does for any required step.
@@ -136,24 +134,23 @@ export interface StoreCollection {
   unique?: string[][];                // each inner list is one constraint over those fields together
   refs?: Record<string, StoreRef>;    // field → the collection whose key it holds
   defaults?: Record<string, unknown>; // field → the literal ensure writes into existing rows when it adds the column
-  indexes?: string[][];               // each inner list is one index over those fields, in that order
   description?: string;
 }
 export interface StoreRef {
   collection: string;                 // a collection of this store
-  onRemove?: 'refuse';                // what removing the referenced record does; only refuse in this RFC
+  onRemove?: 'refuse';                // what removing the referenced record does; refuse is the only value there will be
   description?: string;
 }
 ```
 
-The schema mirrors it: `unique` and `indexes` are arrays of arrays of `common.schema.json#/$defs/ident`, each
+The schema mirrors it: `unique` is an array of arrays of `common.schema.json#/$defs/ident`, each
 inner array `minItems: 1`, `uniqueItems` throughout; `refs` and `defaults` have `propertyNames` of `ident`;
 `onRemove` is `enum: ["refuse"]`; `additionalProperties: false` everywhere. The baseline document in
 `packages/core/test/validate.test.ts` gains a collection with every field. The template row becomes:
 
 | kind | what it is | where |
 |---|---|---|
-| `store` | what the feature keeps: a connection and collections of a core shape, each by key, with `unique`, `refs`, `defaults`, `indexes` | `data/` |
+| `store` | what the feature keeps: a connection and collections of a core shape, each by key, with `unique`, `refs`, `defaults` | `data/` |
 
 `wilanis new store <name> --of <shape>` (RFC 0002) is unchanged: the new fields are added by hand, and a
 scaffold that writes none of them is complete.
@@ -168,15 +165,22 @@ type -- `$T` and `$K` are resolved from the store document. This RFC widens `ens
 
 - its description says it adds what is missing to a collection that exists, and refuses `drift` for what it
   would have to destroy or change;
-- its `returns` keeps `collections: number` and adds `columns: number`, `constraints: number`, `indexes:
-  number`, each the count created; all zero on a second run and on the memory engine;
+- its `returns` keeps `collections: number` and adds `columns: number` and `constraints: number`, each the
+  count created; all zero on a second run and on the memory engine;
 - `refuses` stays false: `drift` is not a graph's declared outcome but a startup failure, reported by `start`
   with the differences, one per line, so the step stops the tree the way an unreachable database does.
 
-A violated `unique` or `refs` at run time fails the `put` or `remove` node with a message naming the
-constraint, as RFC 0002 fails a node on a row that does not fit the shape. Whether `put` should instead
-answer the conflict so a `switch` can route on it, the way `http#request` answers a status, is an open
-question below.
+A violated `unique` or `refs` at run time is answered, not thrown. A node never fails on a condition the
+author could have expected: failure is for the unforeseen -- an uncaught exception, or an assertion a plugin
+placed on purpose -- and a constraint the store itself declares is the opposite of unforeseen. So `put`
+answers `{ record?, conflict: boolean, violated?: string }` and `remove` answers `{ removed: boolean,
+referencedBy?: string }`, and a graph routes on the flag with a `switch` exactly as it routes on `conflict`
+from a `put` with `replace: false` (RFC 0002) or on a status from `http#request`. `violated` and
+`referencedBy` name the constraint that answered, so the branch can say which. This extends RFC 0002's
+own rule -- "the answer carries the flag rather than failing the node" -- from the key to every constraint
+the declaration adds; it widens `put`'s `returns` and `remove`'s in RFC 0002's port table, which is
+compatible for a graph that ignores the new fields, and the narrowing rules already know `record` is
+present on the branch where `conflict` is false.
 
 ### Checker rules
 
@@ -203,12 +207,12 @@ the next free in the family (the families stand at A006 B008 C002 D010 G013 L008
 
 | Code | Where it lives | Refuses when | Hint |
 |---|---|---|---|
-| C0nn | `checkStore` | a name in `unique`, `indexes`, `refs` or `defaults` is not a field of the shape | `wilanis describe <shape>` |
+| C0nn | `checkStore` | a name in `unique`, `refs` or `defaults` is not a field of the shape | `wilanis describe <shape>` |
 | C0nn | `checkStore` | a `defaults` value is not assignable to its field's type, or is given for the key | `write a literal of type <type>; a key is never defaulted` |
 | C0nn | `checkStore` | a `refs` entry names a collection this store does not declare | `a reference stays within one store; declare the collection here, or read it by a second get` |
 | C0nn | `checkStore` | a `refs` field's type is not the type of the referenced collection's key | `<field> is <type>; <collection> is keyed by <type>` |
-| C0nn | `checkStore` | a `refs` field is the collection's own key, or a `unique` or `indexes` list repeats a field | `a key is unique already; a constraint names each field once` |
-| C0nn | `checkStore` | a `unique`, `indexes` or `refs` entry names a field an engine cannot constrain | `wilanis describe <the connection's kind>` |
+| C0nn | `checkStore` | a `refs` field is the collection's own key, or a `unique` list repeats a field | `a key is unique already; a constraint names each field once` |
+| C0nn | `checkStore` | a `unique` or `refs` entry names a field an engine cannot constrain | `wilanis describe <the connection's kind>` |
 
 Plugin rules live in `packages/plugin-storage/src/rules.ts`, the plugin's `check`, given `PluginCheckContext`
 (`packages/core/src/plugin.ts`), continuing RFC 0002's table. They walk every run and map node of every graph
@@ -234,18 +238,18 @@ one feature; another feature asks the domain port.
 
 `ensure`, in `packages/plugin-storage/src/engines/postgres.ts` (RFC 0002), grows from "create what is
 missing, collection by collection" to a comparison of the declaration with `information_schema` for every
-collection of the store: tables, columns, constraints and indexes. Mapping as RFC 0002 fixes it: a
+collection of the store: tables, columns and constraints. Mapping as RFC 0002 fixes it: a
 collection is a table, a field a column of the same name (`string` → `text`, `number` → `double precision`,
 `boolean` → `boolean`, a shape, a list or `unknown` → `jsonb`), a required field `NOT NULL`, the key the
-primary key. This RFC adds: each `unique` list is one unique constraint, each `indexes` list one index in that
-order, each `refs` a foreign key to the target's key with `ON DELETE RESTRICT`; a column added to a table that
+primary key. This RFC adds: each `unique` list is one unique constraint, each `refs` a foreign key to the
+target's key with `ON DELETE RESTRICT`; a column added to a table that
 has rows carries `DEFAULT <defaults[field]>` when one is declared, and the default is dropped once the column
 exists, so it never applies to what `put` writes. Everything created goes in one transaction, and the answer
 counts it. It refuses `drift` and creates nothing when a column exists with another type or nullability, a
 column exists that the shape has no field for and is `NOT NULL`, a required column would be added to a table
 with rows and no default, a `unique` or a `refs` would fail on existing rows, or the primary key differs.
 The memory engine's `ensure` answers zeros; the memory engine enforces `unique` and `refs` in its `put` and
-`remove` so that a test sees the same failures as PostgreSQL.
+`remove`, answering the same flags PostgreSQL does, so that a test sees one behaviour on both.
 
 The handlers of `find`, `count` and `patch` keep RFC 0002's run-time judgement of `where` and `changes`: a
 value may reach them typed `unknown` from an edge, and a check-time rule cannot see what arrives. Nothing is
@@ -264,20 +268,26 @@ before it what they can see.
 store  @monitor/data/entries.store.json  (Entries)
   connection  @connections/entries.connection.json  (engine postgres)
   collection entries: @monitor/domain/Entry.shape.json
-    key id   unique [url, method]   default ua = "unknown"   index [method]
+    key         id
+    unique      [url, method], [slug]
+    default     ua = "unknown"
     read by     @monitor/data/get-row.graph.json#asked (get), @monitor/data/list-rows.graph.json#asked (find)
     written by  @monitor/data/create-row.graph.json#saved (put), @monitor/data/delete-row.graph.json#gone (remove)
   collection notes: @monitor/domain/Note.shape.json
-    key id   refs entryId → entries.id (refuse on remove)
+    key         id
+    refs        entryId → entries.id (refuse on remove)
   ensured by  @monitor/domain/monitor.port.json#prepare  (startup 1/3, profile live)
 ```
 
-The readers and writers come from the same walk the plugin's rules make. `describe` of a shape held by a
+One line per mark family, its constraints comma-separated and each composite in declaration order, so a
+collection with several uniques grows one line rather than one unreadable one; the label column is the
+`padEnd` the rest of `discovery.ts` already uses, and a family with nothing to say prints no line. The
+readers and writers come from the same walk the plugin's rules make. `describe` of a shape held by a
 collection gains a line `held by  @monitor/data/entries.store.json#entries`, beside the lines saying who
 writes it. `wilanis map` already prints `store entries (get)` (RFC 0002); nothing to add.
 
 The viewer's `store` case in `renderDocPage` (`packages/view/client/index.html`, RFC 0002) grows one column
-per mark -- key, unique, default, ref, index -- on each collection's field table, a ref rendered as a link to
+per mark -- key, unique, default, ref -- on each collection's field table, a ref rendered as a link to
 the target collection, and the `ensured by` step in the right-hand panel.
 
 ### Plugin contract
@@ -287,9 +297,11 @@ None. The rules use `PluginCheckContext` as it stands.
 ## Compatibility
 
 `store` is RFC 0002's kind; this RFC adds optional fields to its schema and changes no other schema. A store
-written under RFC 0002 alone keeps validating and means the same, and `ensure` on it does what it did. `ensure`'s
-`returns` gains fields, which is compatible for every caller. Nothing about IR v1 that exists today changes;
-until 1.0 this lands in place (RFC 0008).
+written under RFC 0002 alone keeps validating and means the same, and `ensure` on it does what it did. The
+`returns` of `ensure`, `put` and `remove` each gain fields, which is compatible for every caller: a graph that
+ignores `violated` or `referencedBy` reads what it read before, and only a graph that declares a `unique` or a
+`refs` can see them at all. Nothing about IR v1 that exists today changes; until 1.0 this lands in place
+(RFC 0008).
 
 ## Tests
 
@@ -297,11 +309,11 @@ RFC 0002 gives the example a store, a `local` profile on the memory engine and a
 tests edit that store. In `packages/runtime/test/sabotage-storage.test.ts`, with the `sabotage` helper of
 `example-harness.ts`, one `it` per compiler row:
 
-- C (names): `"unique": [["urrl"]]`; `"indexes": [["nope"]]`; `"defaults": { "nope": 1 }`; `"refs": { "nope": ... }`.
+- C (names): `"unique": [["urrl"]]`; `"defaults": { "nope": 1 }`; `"refs": { "nope": ... }`.
 - C (defaults): `"defaults": { "ua": 7 }`; `"defaults": { "id": "x" }`.
 - C (refs): `"refs": { "ua": { "collection": "nowhere" } }`; a ref on an optional field (`ua`); a ref on the
   collection's own key.
-- C (repeats): `"unique": [["url", "url"]]`; `"indexes": [["method", "method"]]`.
+- C (repeats): `"unique": [["url", "url"]]`.
 - C (case): two collections `Entries` and `entries`.
 
 In `packages/plugin-storage/test/rules.test.ts`, extending RFC 0002's small tree and its `check` through
@@ -317,10 +329,11 @@ In `packages/plugin-storage/test/rules.test.ts`, extending RFC 0002's small tree
 - X210: `ensure` in a graph node; a binding delegating to `ensure` that no startup step reaches.
 - X211: a graph of feature `b` naming feature `a`'s store.
 
-In `packages/plugin-storage/test/ensure.test.ts`: against the memory engine, `ensure` answers zeros and `put`
-fails on a violated `unique`, `remove` on a referenced record; against PostgreSQL (skipped without
+In `packages/plugin-storage/test/ensure.test.ts`: against the memory engine, `ensure` answers zeros, `put`
+answers `violated` on a broken `unique` and `remove` answers `referencedBy` on a referenced record, each
+routed by a `switch` in the test's graph; against PostgreSQL (skipped without
 `WILANIS_TEST_POSTGRES_URL`, as RFC 0002 arranges), `ensure` on an empty database creates every table, column,
-constraint and index and counts them; a second run counts zeros; adding an optional field to the shape adds
+constraint and counts them; a second run counts zeros; adding an optional field to the shape adds
 the column; adding a field with a default to a table with rows fills them; changing a field's type refuses
 `drift` and leaves the table as it was; adding a `unique` that existing rows violate refuses `drift`. In
 `packages/runtime/test/startup.test.ts`: a required startup step whose binding delegates to `ensure` stops
@@ -333,10 +346,12 @@ the column; adding a field with a default to a table with rows fills them; chang
 2. Extend `checkStore` with the C rules; `sabotage-storage.test.ts`.
 3. `rules.ts`: X206 to X208 over `where` and `order`, with `assignable`, `typeAt` and `valueRead`.
 4. X209 over `changes`; X210 and X211.
-5. `ensure`: the memory engine's `unique` and `refs`, then the PostgreSQL comparison, additions and `drift`;
+5. Widen `put`'s and `remove`'s `returns` in `@storage/store.port.json` (RFC 0002's table) with `violated`
+   and `referencedBy`, so a constraint is answered rather than thrown; the narrowing tests for the branches.
+6. `ensure`: the memory engine's `unique` and `refs`, then the PostgreSQL comparison, additions and `drift`;
    `ensure.test.ts` and the startup test.
-6. `describe` marks, the `held by` line, the viewer's columns. `good first issue`.
-7. The example: `unique`, `defaults` and an index on its store; README's paragraph on stores names them.
+7. `describe` marks, the `held by` line, the viewer's columns. `good first issue`.
+8. The example: `unique` and `defaults` on its store; README's paragraph on stores names them.
 
 ## Drawbacks and alternatives
 
@@ -352,27 +367,34 @@ the call site, and `defaults` here touches only rows that exist when a column is
 
 **A new family letter.** Store rules could take a letter of their own (`K`) instead of joining C. C is chosen
 because a store is judged the way a connection is -- a declaration against the contracts it names -- and
-because the families stay few; the tracking issue may decide otherwise before `accepted`.
+because the families stay few; the review settled that they do.
 
 **Declaring the schema in the shape.** `unique` and `refs` could be marks on the shape's fields instead of on
 the collection. A shape is a type and is used in more places than a store; the same `Entry` may be held in two
 stores with different uniqueness. The declaration stays with the store.
 
-**No `cascade`.** `onRemove` admits only `refuse`, so removing a parent means removing the children first, in
-a graph. A cascade is a hidden write the checker cannot see; if it comes, it comes as an explicit choice here.
+**No `cascade`, ever.** `onRemove` admits only `refuse`, so removing a parent means removing the children
+first, in a graph. This is not caution about a feature that may come later: what removing a record means for
+the records that refer to it is business, and business lives in the domain, not in the data layer. A cascade
+is a hidden write -- the checker cannot see it, a trace cannot show it, and an agent deleting one record would
+have no way to know what else went with it. The graph that wants the children gone says so, node by node.
 
-## Open questions
+## Settled on review
 
-Before `accepted`:
-
-- Is C the right family, or does storage deserve its own letter?
-- Should a violated `unique` or `refs` fail the node, as here, or should `put` and `remove` answer it (a
-  `conflict` field beside `record`) so a `switch` routes on it the way it routes on an HTTP status? The second
-  changes RFC 0002's `returns` and would be decided in both RFCs together.
-- Should `ensure` add columns and constraints in the `live` profile at all, or only in development, with
-  production waiting for RFC 0017's planner? The RFC says additive everywhere and destructive nowhere.
-
-During implementation:
-
-- Whether `indexes` earns its place, or whether `unique` and `refs` cover what an AI-written tree needs first.
-- How `describe` prints a composite `unique` or `index` when a collection has several.
+- **C is the family.** Storage does not earn its own letter; the families stay few, and a store's names are
+  contract names like any other.
+- **A constraint answers; it does not fail the node.** A node never fails on a condition the author could
+  have expected -- failure is for the unforeseen, an uncaught exception or a deliberate assertion -- so `put`
+  and `remove` carry the violation as a flag a `switch` routes on, as the section above states. This is a
+  global rule about nodes, not a storage exception, and it widens RFC 0002's `returns` for both operations.
+- **`ensure` in `live` is the author's call.** The RFC neither blocks it nor forces it: the startup step
+  names the operation, and whether a profile runs it is a property of the profile. Additive everywhere,
+  destructive nowhere, and RFC 0017's planner remains the answer for what `ensure` refuses as `drift`.
+- **No `indexes`.** An index is a downstream concern -- how the database answers, not what the business
+  means. `unique` is the exception and stays, because uniqueness is a rule the domain holds and a violated
+  one must be answered loudly. A tree that needs an index gets it from the database, not from a document
+  the compiler judges.
+- **`describe` prints one line per mark family**, its constraints comma-separated, as the Discoverability
+  section shows.
+- **No `cascade`, ever**, for the reason the section above gives: what a removal means for referring records
+  is business, and it belongs to the domain.
