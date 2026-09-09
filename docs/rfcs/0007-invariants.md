@@ -3,7 +3,7 @@
 - **Status:** draft
 - **Milestone:** A credible backend
 - **Areas:** `area:core`, `area:compiler`, `area:runtime`, `area:view`
-- **Tracking issue:** #NNN (opened when the RFC is proposed)
+- **Tracking issue:** #9
 - **Depends on:** none for access invariants (class 1); RFC 0002 (storage) for the examples of field
   invariants (class 2) over stored records, though class 2 itself needs only shapes and graphs; RFC 0002
   and RFC 0021 (higher-level constructs) for transition invariants (class 3), which this RFC names and

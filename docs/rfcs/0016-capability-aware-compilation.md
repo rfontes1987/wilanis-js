@@ -3,7 +3,7 @@
 - **Status:** draft (stub)
 - **Milestone:** The AI advantage
 - **Areas:** `area:compiler`, `area:runtime`
-- **Tracking issue:** #NNN
+- **Tracking issue:** #18
 - **Depends on:** RFC 0013 (deployment and profiles)
 
 ## Summary

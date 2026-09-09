@@ -3,7 +3,7 @@
 - **Status:** draft
 - **Milestone:** A credible backend
 - **Areas:** `area:plugin-auth`, `area:plugin-blob`, `area:runtime`, `area:plugin-storage`
-- **Tracking issue:** #NNN (opened when the RFC is proposed)
+- **Tracking issue:** #7
 - **Depends on:** RFC 0002 (the `@storage` plugin: records of a declared shape behind a connection)
 
 ## Summary

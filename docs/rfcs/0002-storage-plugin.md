@@ -3,7 +3,7 @@
 - **Status:** draft
 - **Milestone:** A credible backend
 - **Areas:** `area:plugin-storage`, `area:core`, `area:runtime`
-- **Tracking issue:** #NNN (opened when the RFC is proposed)
+- **Tracking issue:** #4
 - **Depends on:** none
 
 ## Summary

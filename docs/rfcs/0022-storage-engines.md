@@ -3,7 +3,7 @@
 - **Status:** draft (stub)
 - **Milestone:** Ecosystem
 - **Areas:** `area:plugin-storage`
-- **Tracking issue:** #NNN
+- **Tracking issue:** #24
 - **Depends on:** RFC 0002 (storage)
 
 ## Summary
