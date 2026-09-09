@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/shape.schema.json",
   "label": "Issued code",
   "description": "The code of a challenge and when it expires. Printed here; a real tree delivers it instead.",
   "layer": "edge",

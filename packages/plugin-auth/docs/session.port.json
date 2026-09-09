@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/port.schema.json",
   "label": "Sessions",
   "description": "The session a token belongs to, and its attributes -- values a graph stores on one call and reads on another, keyed by the credential the caller presents. The attributes have the shape settings.session names; every write is judged against it, and `type` names it where the operation is called so the checker can too. The session id is what the guard hands as request.session.id, read through a resolvers document.",
   "operations": {

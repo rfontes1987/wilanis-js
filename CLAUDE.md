@@ -137,8 +137,9 @@ branches `then` and `otherwise`. Neither is a place to put new debt.
   in the guard's `plugin.json` (`guard.credentials`, `guard.context`, `guard.refuses`), never in a trigger kind.
   What the `@auth` plugin alone can judge (a challenge method, a session write against the session shape) is its
   `check` (X101-X103).
-- **A schema change.** Compatible: edit in place. Breaking: the base URL in `model.ts` and every `$id`
-  move to `schemas-v2`, and the old branch stays.
+- **A schema change.** Until 1.0: edit in place; the schemas are served from `main`. After 1.0: compatible,
+  edit in place; breaking, the base URL in `model.ts` and every `$id` move to the tag `schemas-v2`, and the
+  `schemas-v1` tag stays (RFC 0008).
 - **A new plugin.** A new package under `packages/`, depending on core and engine only, exporting its
   `PluginModule` as default: `root`, `docs` (the directory of the JSON documents it ships, with
   `plugin.json`; listed in the package's `files`), `handlers`, and optionally `triggers`, `codecs`, `check`

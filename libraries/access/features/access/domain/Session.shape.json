@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/shape.schema.json",
   "label": "Session",
   "description": "What a session carries between calls: the display name the directory gave at sign-in, the realm the sign-in decided, and the theme the caller chose, when one was. Named by the @auth plugin's settings.session, so every write through session.port.json is judged against it.",
   "layer": "core",

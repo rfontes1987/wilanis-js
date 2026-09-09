@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/policy.schema.json",
+  "$id": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/policy.schema.json",
   "title": "policy",
   "description": "A gate on a way in. A trigger names one or more policies; each fires a domain port operation the way a trigger's `fire` does, reading what the kind and the guarding plugin hand as request.* (the principal, the session, a challenge). The graph behind it allows by answering, and refuses with a reason where it does not; `outcomes` says what each reason means: deny, or challenge the caller. A policy never validates a credential -- the guard has done that before any policy runs -- it decides what a verified (or absent) identity may do.",
   "type": "object",
@@ -8,7 +8,7 @@
     "$schema": {
       "description": "The kind of this document: its published schema URL, or the alias @wilanis/policy.schema.json.",
       "enum": [
-        "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/policy.schema.json",
+        "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/policy.schema.json",
         "@wilanis/policy.schema.json"
       ]
     },

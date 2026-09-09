@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/trigger.schema.json",
   "label": "POST /api/v1/sign-out",
   "description": "End the caller's session: its tokens no longer verify, and the session cookie is cleared. Gated by signed-in, the token read from the Authorization header or the session cookie: 401 as anonymous without a token, 401 as invalid_credential with one that does not verify.",
   "settings": {

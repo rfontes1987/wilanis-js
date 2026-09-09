@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/policy.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/policy.schema.json",
   "label": "One-time code verified",
   "description": "The caller has answered a one-time challenge on this very call. Without one, the caller is challenged: told a challenge id and how to obtain and present the code.",
   "decide": {

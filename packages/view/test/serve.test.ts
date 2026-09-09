@@ -11,7 +11,7 @@ describe('schemas as pages', () => {
     expect(schemaRelOf('@wilanis/graph.schema.json')).toBe('graph.schema.json');
     expect(
       schemaRelOf(
-        'https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json',
+        'https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/trigger.schema.json',
       ),
     ).toBe('trigger.schema.json');
     expect(schemaRelOf('@features/monitor/domain/Entry.shape.json')).toBeUndefined();
@@ -27,7 +27,7 @@ describe('schemas as pages', () => {
       judges: 'graph',
       label: 'graph',
       description: 'A dataflow.',
-      url: expect.stringMatching(/schemas-v1\/packages\/core\/schemas\/graph\.schema\.json$/),
+      url: expect.stringMatching(/main\/packages\/core\/schemas\/graph\.schema\.json$/),
     });
     expect(schemaViewOf('node/run.schema.json', { title: 'node/run' }).judges).toBeUndefined();
     expect(schemaViewOf('common.schema.json', {}).judges).toBeUndefined();

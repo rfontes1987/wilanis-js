@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/trigger.schema.json",
   "label": "POST /monitor",
   "description": "POST /monitor \u2192 201 with the recorded entry. The body is the input. 502 as upstream when the monitor API broke. Employees holding the recorder role only: 401 as anonymous without a token or as invalid_credential with a bad one, 403 as forbidden for a customer or an employee without the role.",
   "settings": {

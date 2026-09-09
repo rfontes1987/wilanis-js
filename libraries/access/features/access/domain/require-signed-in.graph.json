@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/graph.schema.json",
   "label": "Require a signed-in caller",
   "description": "Anyone our token names is allowed; no token is anonymous.",
   "in": "@access/domain/PrincipalGate.shape.json",

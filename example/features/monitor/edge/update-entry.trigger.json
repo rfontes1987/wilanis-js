@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/trigger.schema.json",
   "label": "PUT /monitor/{id}",
   "description": "PUT /monitor/{id}: the id from the route, the new call from the body \u2192 the entry; 404 as missing when there is none, 502 as upstream when the monitor API broke. Employees holding the recorder role only: 401 as anonymous without a token or as invalid_credential with a bad one, 403 as forbidden for a customer or an employee without the role.",
   "settings": {

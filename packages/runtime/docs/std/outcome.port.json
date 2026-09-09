@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/port.schema.json",
   "label": "Outcomes",
   "description": "Outcomes dataflow alone cannot state. `refuse` ends the graph on purpose: the branch a decision routed here is a declared refusal, not a bug. It names its outcome with a `reason`, one word the trigger kind maps to an answer; the graph never says how the trigger answers.",
   "operations": {

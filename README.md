@@ -256,7 +256,7 @@ A project installs `@wilanis/runtime`, the plugin packages it uses, and the tree
 
 Skip this on a first read. It is the compact statement of the rules the checker enforces.
 
-- **Documents.** One JSON file each. The `$schema` names the kind: `https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json`, or the alias `@wilanis/graph.schema.json`.
+- **Documents.** One JSON file each. The `$schema` names the kind: `https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/graph.schema.json`, or the alias `@wilanis/graph.schema.json`.
 - **References are paths.** `@features/tasks/tasks.port.json`; `project.json` declares aliases (`@tasks` → `@features/tasks`); plugins are alias roots (`@std`, `@http`); an operation is `path#operation`.
 - **A feature is three directories.** `features/<name>/edge/` holds the triggers, the shapes the world speaks and the resolvers; `domain/` the port, the core shapes and the graphs that hold business rules; `data/` the binding and the graphs that translate and reach effects. The directory *is* the layer: the checker reads it off the path (D008) and never infers it from who references a document.
 - **Shapes** have a layer: `edge` (what the world imposes) or `core` (ours). An edge shape lives in `edge/`, a core shape in `domain/`. `unknown` exists only in edge shapes and native contracts.
@@ -355,15 +355,16 @@ does not pass `wilanis check` is reported and the last good tree keeps answering
 
 ### Schemas
 
-The schemas live in `packages/core/schemas/` and are published from the `schemas-v1` branch of this
-repository, so every document can name its schema by URL and an editor can fetch it:
+The schemas live in `packages/core/schemas/` and are served from `main` of this repository, so every
+document can name its schema by URL and an editor can fetch it:
 
 ```
-https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/<kind>.schema.json
+https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/<kind>.schema.json
 ```
 
-The branch name carries the schema major version. A breaking change to a schema goes to `schemas-v2`;
-documents written against v1 keep validating. Node types are documents of their own under `node/`, listed
+Until 1.0 is published the schemas are a working draft and `main` is their address. At 1.0 the tag
+`schemas-v1` marks the first supported version and becomes the address; a breaking change after that is
+tagged `schemas-v2`, and documents written against v1 keep validating. RFC 0008 states the rules. Node types are documents of their own under `node/`, listed
 in `graph.schema.json`.
 
 ## Developing this repository

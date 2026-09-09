@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/graph.schema.json",
   "label": "Write CSV",
   "description": "Data graph behind monitor.toCsv: the entries written as monitor.csv into the blob registry; the graph answers the handle, and the route streams the file.",
   "in": "@monitor/domain/Entry.shape.json[]",

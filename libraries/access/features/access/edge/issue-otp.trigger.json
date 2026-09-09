@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/trigger.schema.json",
   "label": "issue-otp",
   "description": "Give an open challenge its code and print it: wilanis run @access/edge/issue-otp.trigger.json --challenge-id=XXXX-XXXX. This stands in for delivery: a real tree binds deliverCode to a graph that mails or texts the code and answers nothing. An unknown or expired challenge is refused as unknown_challenge.",
   "kind": "@cli/cli.trigger-kind.json",

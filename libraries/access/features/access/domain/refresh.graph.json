@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/graph.schema.json",
   "label": "Refresh a token pair",
   "description": "Trade the refresh token; a pair comes back when it was good, and invalid_refresh is refused when it was not.",
   "in": "@access/domain/RefreshToken.shape.json",

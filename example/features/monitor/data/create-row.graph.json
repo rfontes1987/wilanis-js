@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/graph.schema.json",
   "label": "Create a row",
   "description": "Data graph behind monitor.record: POST the record, take the row the API answers with 201. The caller's own user agent is forwarded to the API as a header; the row itself is attributed to the recorder the domain chose.",
   "resolvers": "@monitor/edge/request.resolvers.json",

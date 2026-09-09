@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/policy.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/policy.schema.json",
   "label": "Can record",
   "description": "A caller holding the recorder role: the directory's group, written into the token at sign-in.",
   "decide": {

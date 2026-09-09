@@ -24,7 +24,7 @@ file name would not say enough.
 Every file opens with its `$schema`. The schema for a kind is
 
 ```
-https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/<kind>.schema.json
+https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/<kind>.schema.json
 ```
 
 (the alias `@wilanis/<kind>.schema.json` is also accepted). Fetch the schema when a field is unclear: every

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/trigger.schema.json",
   "label": "GET /monitor.csv",
   "description": "GET /monitor.csv \u2192 every entry as a CSV download (monitor.csv), streamed from the blob registry. 502 as upstream when the monitor API broke.",
   "kind": "@http/http.trigger-kind.json",

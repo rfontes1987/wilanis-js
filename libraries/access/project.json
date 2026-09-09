@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/project.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/project.schema.json",
   "label": "Access",
   "name": "access",
   "description": "Who is calling and what they may do, as a tree another tree includes: two sign-in routes (customers, employees) that both end in this tree's own token, refresh and sign-out, preferences kept in the session, the policies other features gate their triggers with, and the command that gives a challenge its code. The host binds identity.port.json to its directories and configures the @auth plugin as below; on its own, access-dev binds it to the directories written in connections/ so this tree checks, rehearses and runs alone.",

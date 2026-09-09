@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/plugin.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/plugin.schema.json",
   "label": "Auth",
   "description": "Identifies callers before any policy runs, and never decides what they may do. Our own tokens: a sign-in graph verifies a credential against a directory (identity.port.json), then token.port.json#issue signs a short-lived access token and opens a session with a refresh token; on every gated trigger the guard verifies that token -- and nothing a downstream directory issued -- and hands request.principal and request.session to the policies. Sessions carry attributes of the shape settings.session names, written and read through session.port.json. A policy that challenges opens a one-time challenge; challenge.port.json#issue gives it a code, and the guard verifies the code the caller presents. A trigger gives the guard its credentials where it attaches a policy: { \"policy\": \"...\", \"in\": { \"token\": \"{{request.headers.authorization}}\" } }.",
   "settings": {

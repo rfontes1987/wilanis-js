@@ -4,7 +4,7 @@ The wilanis document language.
 
 - `schemas/`: one JSON Schema per document kind (project, feature, shape, port, binding, graph, trigger,
   connection, scenario, and the kinds plugins ship: plugin, trigger-kind, connection-kind, codec), plus the
-  node types under `schemas/node/`. Published from the `schemas-v1` branch so documents can name them by URL.
+  node types under `schemas/node/`. Served from `main` so documents can name them by URL; a tag marks each published version from 1.0 on.
 - `model.ts`: the TypeScript types that mirror the schemas, `schemaUrl`, `kindOfSchema`; `registry.ts`: `Registry`, `RefusalList`, `Loaded`.
 - `types.ts`: the type system the checker reasons with, with `assign.ts` (`assignable`, `unify`, `substitute`),
   `values.ts` (`typeAt`, `conforms`, `toJsonSchema`) and `generate.ts` (values under a seed).

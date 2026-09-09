@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/policy.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/policy.schema.json",
   "label": "Signed in",
   "description": "Any caller our token names: a customer or an employee. Anonymous callers are denied.",
   "decide": {

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/resolvers.schema.json",
+  "$id": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/resolvers.schema.json",
   "title": "resolvers",
   "description": "Named reads of the trigger kind's context. A data graph or a binding that names this document reads each resolver as {{name}} or {{name.field}}, and the value comes straight from request.* -- nothing runs. This is the one place a feature says what it takes from the request; a domain graph never reads it. Lives in a feature's edge/ directory, since request.* is the world's vocabulary.",
   "type": "object",
@@ -8,7 +8,7 @@
     "$schema": {
       "description": "The kind of this document: its published schema URL, or the alias @wilanis/resolvers.schema.json.",
       "enum": [
-        "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/resolvers.schema.json",
+        "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/resolvers.schema.json",
         "@wilanis/resolvers.schema.json"
       ]
     },

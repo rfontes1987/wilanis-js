@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/plugin.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/plugin.schema.json",
   "label": "HTTP",
   "description": "HTTP out, HTTP connections, HTTP triggers, body codecs. Settings say which codec handles which content type; a content type mapped to the blob codec is stored as a file and carried as a handle. Who may call a route is not this plugin's business: a trigger attaches its policies and gives the guard the token where the route reads it (a header, a cookie), and the guarding plugin (@wilanis/plugin-auth) identifies the caller.",
   "settings": {

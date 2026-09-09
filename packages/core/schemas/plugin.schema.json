@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/plugin.schema.json",
+  "$id": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/plugin.schema.json",
   "title": "plugin",
   "description": "Native code, described: the settings a project may pass it, and what it grants -- ports (native), trigger kinds, connection kinds, codecs, shapes. Everything effectful enters through a grant. A plugin is an alias root: @http/http.port.json.",
   "type": "object",
@@ -8,7 +8,7 @@
     "$schema": {
       "description": "The kind of this document: its published schema URL, or the alias @wilanis/plugin.schema.json.",
       "enum": [
-        "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/plugin.schema.json",
+        "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/plugin.schema.json",
         "@wilanis/plugin.schema.json"
       ]
     },

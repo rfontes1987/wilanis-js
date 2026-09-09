@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/trigger.schema.json",
   "label": "GET /api/v1/me/preferences",
   "description": "The caller's preferences, read from the session the token names. Gated by signed-in, the token read from the Authorization header or the session cookie.",
   "settings": {

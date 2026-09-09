@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/policy.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/policy.schema.json",
   "label": "Employees only",
   "description": "A caller whose token was issued by the employee sign-in. A customer holds a perfectly valid token and is still denied.",
   "decide": {

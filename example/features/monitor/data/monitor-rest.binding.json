@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/binding.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/binding.schema.json",
   "label": "REST storage",
   "description": "monitor.port.json over the REST API: one data graph per operation, each a declared request plus the decision of what its status means.",
   "port": "@monitor/domain/monitor.port.json",

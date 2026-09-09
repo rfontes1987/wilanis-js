@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/graph.schema.json",
   "label": "List rows",
   "description": "Data graph behind monitor.listAll: one GET, the rows when it answered 200, a failure otherwise. It is also reached from the digest, where there is no caller.",
   "out": {

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/port.schema.json",
   "label": "Watch",
   "description": "Watching the tree for changes. A project's startup list names `watch` to keep the running tree in step with the files on disk.",
   "operations": {

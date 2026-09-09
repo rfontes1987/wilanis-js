@@ -42,9 +42,10 @@ export const KINDS: Kind[] = [
 export const WILANIS = '@wilanis';
 /**
  * Where the schemas are published, so editors and agents can fetch them. The branch name carries the
- * schema major version: a document written against schemas-v1 keeps validating for as long as v1 lives.
+ * schema version: main until 1.0 is published; from then on a tag (schemas-v1, later schemas-v2) that a
+ * document written against it keeps validating under for as long as that version is read.
  */
-export const SCHEMA_BASE = 'https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas';
+export const SCHEMA_BASE = 'https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas';
 export const schemaRef = (kind: Kind) => `${WILANIS}/${kind}.schema.json`;
 export const schemaUrl = (kind: Kind) => `${SCHEMA_BASE}/${kind}.schema.json`;
 const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');

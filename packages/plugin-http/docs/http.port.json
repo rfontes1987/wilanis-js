@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/port.schema.json",
   "label": "HTTP",
   "description": "Outbound HTTP. request knows what HTTP knows: method, path, headers, body in; status, headers, body out. It executes and reports -- whether 404 is a failure is the caller's business, decided by a switch on status. It fails only on the unexpected: network, timeout, a body the codec cannot decode, or a 2xx body that does not conform to the declared type.",
   "operations": {

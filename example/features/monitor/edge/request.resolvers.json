@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/resolvers.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/resolvers.schema.json",
   "label": "Request context",
   "description": "What this feature reads from the HTTP request beyond its body and route: the caller's user agent, forwarded to the API on a recording.",
   "resolvers": {

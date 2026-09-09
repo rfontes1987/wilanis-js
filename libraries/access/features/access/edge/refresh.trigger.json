@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/trigger.schema.json",
   "label": "POST /api/v1/token/refresh",
   "description": "Trade a refresh token for a new pair. The old one is spent either way; an unknown, spent or expired one is 401 as invalid_refresh.",
   "kind": "@http/http.trigger-kind.json",

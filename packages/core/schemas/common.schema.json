@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/common.schema.json",
+  "$id": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/common.schema.json",
   "title": "common",
-  "description": "The grammar every wilanis document shares. A document is one JSON file whose $schema names its kind: https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/<kind>.schema.json, or the alias @wilanis/<kind>.schema.json. Every reference is a path from the source root: @features/tasks/tasks.port.json, or through a project alias such as @tasks/tasks.port.json. Plugins are alias roots: @std, @http. An operation is path#operation. Values where an operation is called are written in one grammar: literals as they are, {{root.path}} to read.",
+  "description": "The grammar every wilanis document shares. A document is one JSON file whose $schema names its kind: https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/<kind>.schema.json, or the alias @wilanis/<kind>.schema.json. Every reference is a path from the source root: @features/tasks/tasks.port.json, or through a project alias such as @tasks/tasks.port.json. Plugins are alias roots: @std, @http. An operation is path#operation. Values where an operation is called are written in one grammar: literals as they are, {{root.path}} to read.",
   "$defs": {
     "ident": {
       "description": "A field, input, operation, resolver or node identifier.",

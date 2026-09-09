@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/node/map.schema.json",
+  "$id": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/node/map.schema.json",
   "title": "node/map",
   "description": "Run one operation per element of over, all at once. The element arrives as the input named item, or by bind (input -> path within the element, \"\" for the whole element); every other value in in is broadcast. The output is the index-ordered list of results.",
   "type": "object",

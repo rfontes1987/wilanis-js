@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/shape.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/shape.schema.json",
   "label": "Identity",
   "description": "Who a directory said a credential belongs to: a stable subject, a display name, the groups it belongs to. The same whatever the directory, so one sign-in graph fits them all.",
   "layer": "edge",

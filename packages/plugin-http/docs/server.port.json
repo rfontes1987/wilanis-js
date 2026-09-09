@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/port.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/port.schema.json",
   "label": "HTTP server",
   "description": "The server that answers this tree's http triggers. A project's startup list names `listen` to open it: nothing opens a port on its own, so a tree that does not ask to listen does not. The routes are the http triggers themselves -- this operation names none of them.",
   "operations": {

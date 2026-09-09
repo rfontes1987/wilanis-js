@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/trigger.schema.json",
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/trigger.schema.json",
   "label": "hello-gated",
   "description": "wilanis run @hello/edge/hello-gated.trigger.json: gated by the one-time code policy, which is given the challenge answer from --challenge-id and --code. Run it bare and it answers a challenge id and how to unlock it; run issue-otp with that id to get the code; run it again with both flags and it greets.",
   "settings": {
