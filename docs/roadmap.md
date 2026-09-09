@@ -56,42 +56,39 @@ trace reaches a local Jaeger through the OpenTelemetry plugin. Draws on RFC 0006
 An access invariant over every monitor write and a field invariant on the entry shape. Removing a policy
 from a route is a refusal; rehearsal reports each invariant as proved or guarded. Draws on RFC 0007.
 
-## M08 1.0
-
-Every package on npm. In an empty directory, install, init, and an agent session produce a tree that passes
-check and rehearse. The security model is published and the `schemas-v1` tag is cut. Draws on RFC 0008
-and RFC 0020.
-
-## M09 Work off the request
+## M08 Work off the request
 
 The digest is computed by a scheduled job and imports are processed by a worker fed from a queue, beside
 the routes. Draws on RFC 0009 and RFC 0010.
 
-## M10 Fails well
+## M09 Fails well
 
 Against a flaky fake upstream the trace shows retries honouring declared idempotency and timeouts; a long
 run is cancelled and still answers a report. Draws on RFC 0011, RFC 0012 and RFC 0014.
 
-## M11 Ship it
+## M10 Ship it
 
 One command produces the image and the manifest; the Helm chart stands the example up on a local `kind`
 cluster; a tree that requires an effect the environment does not permit is refused before it listens.
 Draws on RFC 0013, RFC 0016, RFC 0024 and RFC 0026.
 
-## M12 Tenants by construction
+## M11 Tenants by construction
 
 A second tenant in the example. Feeding the tenant field from the request body is a refusal with a hint.
 Draws on RFC 0015.
 
-## M13 Change the schema, get the plan
+## M12 Change the schema, get the plan
 
 Add a field to the entry shape and `wilanis migrate plan` prints the migration, refusing the destructive
 step until told. Draws on RFC 0017.
 
-## M14 The agent fixes it
+## M13 1.0
 
-Break the example, run `wilanis check --json`, and a small model repairs it in a loop from the
-diagnostics. Solved branches become committed scenarios. Draws on RFC 0018 and RFC 0019.
+Last on purpose: 1.0 is cut only when every accepted RFC that changes a schema has landed or been withdrawn,
+so the schemas are final before they are frozen, and nothing is published to npm before that. Then: every
+package on npm; in an empty directory, install, init, and an agent session produce a tree that passes check
+and rehearse; the security model is published and the `schemas-v1` tag is cut. Draws on RFC 0008 and
+RFC 0020.
 
 ## Unscheduled
 

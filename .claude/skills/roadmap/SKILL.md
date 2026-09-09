@@ -15,7 +15,7 @@ this skill is the procedure.
 gh issue list -R wilanis/wilanis-js --label status:ready --no-assignee --json number,title,labels,milestone
 ```
 
-Prefer the lowest milestone (M01 before M02), then the task whose RFC's earlier steps are closed. If the user
+Prefer the lowest milestone (M01 before M02; 1.0 is last on purpose), then the task whose RFC's earlier steps are closed. If the user
 named an issue, use it. Never take an issue whose RFC is `status:draft`: say so and stop.
 
 ## 2. Read
