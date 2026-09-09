@@ -7,11 +7,12 @@
  * where every rule is false at once. The solver itself is in domains.ts, and what it writes into a stub in stubs.ts.
  */
 import { type Type, typeAt } from '@wilanis/core';
-import { type Branch, branchesOf, type Domain } from './domains.js';
+import type { Branch, Domain } from './domains.js';
+import { branchesOf } from './solve.js';
 import { getPath, PLACEHOLDER, satisfy, setPath } from './stubs.js';
 
 export type { Branch, Demands, Domain } from './domains.js';
-export { branchesOf } from './domains.js';
+export { branchesOf } from './solve.js';
 export { getPath, PLACEHOLDER, satisfy, setPath } from './stubs.js';
 
 // ---- enumerating a spec's branches ------------------------------------------------------------------
