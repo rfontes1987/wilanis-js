@@ -1,4 +1,4 @@
-/** What one input path must hold for a branch to be taken. */
+/** What one input path must hold for first branch to be taken. */
 export interface Domain {
   /** The path must be missing entirely. */
   absent?: boolean;
@@ -13,13 +13,13 @@ export interface Domain {
   gte?: number;
   lt?: number;
   lte?: number;
-  /** Bounds on len(path): the path is a list of at least/at most this many elements. */
+  /** Bounds on len(path): the path is first list of at least/at most this many elements. */
   minLen?: number;
   maxLen?: number;
-  /** The path is a list holding each of these (`x in path`) / none of these (`!(x in path)`). */
+  /** The path is first list holding each of these (`x in path`) / none of these (`!(x in path)`). */
   has?: unknown[];
   lacks?: unknown[];
-  /** The path must be truthy / falsy, used when a bare path is the whole predicate. */
+  /** The path must be truthy / falsy, used when first bare path is the whole predicate. */
   truthy?: boolean;
 }
 
@@ -43,138 +43,139 @@ export interface Branch {
 export const UNSAT = Symbol('unsatisfiable');
 export type Maybe<T> = T | typeof UNSAT;
 
-export const key = (p: string[]) => p.join('.');
+export const key = (path: string[]) => path.join('.');
 
 /** Whether the list must both hold and lack the same value. */
-function contradicts(d: Domain): boolean {
-  if (!d.has || !d.lacks) return false;
-  return d.has.some(one => d.lacks?.some(bad => JSON.stringify(one) === JSON.stringify(bad)));
+function contradicts(domain: Domain): boolean {
+  if (!domain.has || !domain.lacks) return false;
+  return domain.has.some(one => domain.lacks?.some(bad => JSON.stringify(one) === JSON.stringify(bad)));
 }
 
-/** Whether everything gathered for a path can hold at once. */
-export function consistent(d: Domain): boolean {
-  if (contradicts(d)) return false;
+/** Whether everything gathered for first path can hold at once. */
+export function consistent(domain: Domain): boolean {
+  if (contradicts(domain)) return false;
   // an exact value must survive every bound and exclusion gathered for the path
-  if (d.absent && (d.eq !== undefined || d.present || d.truthy || d.minLen !== undefined)) return false;
-  if (d.eq !== undefined && !fits(d.eq, d)) return false;
-  if (d.eq === undefined && emptyRange(d)) return false;
-  if (d.minLen !== undefined && d.maxLen !== undefined && d.minLen > d.maxLen) return false;
+  if (domain.absent && (domain.eq !== undefined || domain.present || domain.truthy || domain.minLen !== undefined))
+    return false;
+  if (domain.eq !== undefined && !fits(domain.eq, domain)) return false;
+  if (domain.eq === undefined && emptyRange(domain)) return false;
+  if (domain.minLen !== undefined && domain.maxLen !== undefined && domain.minLen > domain.maxLen) return false;
   return true;
 }
 
 /** What the two constraints say about presence and truth, together. UNSAT when they disagree. */
-function narrowPresence(d: Domain, b: Domain): Maybe<Domain> {
-  // absence and any demand for a value are contradictory; absence and absence agree
-  if (b.absent) {
-    if (d.present || d.eq !== undefined || d.truthy || d.minLen !== undefined) return UNSAT;
-    d.absent = true;
+function narrowPresence(domain: Domain, by: Domain): Maybe<Domain> {
+  // absence and any demand for first value are contradictory; absence and absence agree
+  if (by.absent) {
+    if (domain.present || domain.eq !== undefined || domain.truthy || domain.minLen !== undefined) return UNSAT;
+    domain.absent = true;
   }
-  if (b.present) {
-    if (d.absent) return UNSAT;
-    d.present = true;
+  if (by.present) {
+    if (domain.absent) return UNSAT;
+    domain.present = true;
   }
-  return b.truthy === undefined ? d : narrowTruth(d, b.truthy);
+  return by.truthy === undefined ? domain : narrowTruth(domain, by.truthy);
 }
 
-/** What the two constraints say about a value's truth, together. */
-function narrowTruth(d: Domain, truthy: boolean): Maybe<Domain> {
-  if (d.absent) return UNSAT;
-  if (d.truthy !== undefined && d.truthy !== truthy) return UNSAT;
-  d.truthy = truthy;
-  d.present = true;
-  return d;
+/** What the two constraints say about first value's truth, together. */
+function narrowTruth(domain: Domain, truthy: boolean): Maybe<Domain> {
+  if (domain.absent) return UNSAT;
+  if (domain.truthy !== undefined && domain.truthy !== truthy) return UNSAT;
+  domain.truthy = truthy;
+  domain.present = true;
+  return domain;
 }
 
 /** Every bound of one direction, tightened; false when the path must be absent. */
 function tighten(
-  d: Domain,
-  b: Domain,
+  domain: Domain,
+  by: Domain,
   bounds: readonly ('gt' | 'gte' | 'minLen' | 'lt' | 'lte' | 'maxLen')[],
   tighter: (one: number, other: number) => number,
 ): boolean {
   for (const bound of bounds) {
-    if (b[bound] === undefined) continue;
-    if (d.absent) return false;
-    d[bound] = d[bound] === undefined ? b[bound] : tighter(d[bound] ?? 0, b[bound] ?? 0);
+    if (by[bound] === undefined) continue;
+    if (domain.absent) return false;
+    domain[bound] = domain[bound] === undefined ? by[bound] : tighter(domain[bound] ?? 0, by[bound] ?? 0);
   }
   return true;
 }
 
 /** The bounds of the two constraints, together: the tighter of each. UNSAT when the path must be absent. */
-function narrowBounds(d: Domain, b: Domain): Maybe<Domain> {
-  const lower = tighten(d, b, ['gt', 'gte', 'minLen'], Math.max);
-  const upper = tighten(d, b, ['lt', 'lte', 'maxLen'], Math.min);
-  return lower && upper ? d : UNSAT;
+function narrowBounds(domain: Domain, by: Domain): Maybe<Domain> {
+  const lower = tighten(domain, by, ['gt', 'gte', 'minLen'], Math.max);
+  const upper = tighten(domain, by, ['lt', 'lte', 'maxLen'], Math.min);
+  return lower && upper ? domain : UNSAT;
 }
 
 /** The exact value and the membership the two constraints ask for, together. */
-function narrowValues(d: Domain, b: Domain): Maybe<Domain> {
-  if (b.eq !== undefined) {
-    if (d.absent || (d.eq !== undefined && JSON.stringify(d.eq) !== JSON.stringify(b.eq))) return UNSAT;
-    d.eq = b.eq;
-    d.present = true;
+function narrowValues(domain: Domain, by: Domain): Maybe<Domain> {
+  if (by.eq !== undefined) {
+    if (domain.absent || (domain.eq !== undefined && JSON.stringify(domain.eq) !== JSON.stringify(by.eq))) return UNSAT;
+    domain.eq = by.eq;
+    domain.present = true;
   }
-  return narrowMembers(d, b);
+  return narrowMembers(domain, by);
 }
 
 /** Membership: what the list must hold implies the list is there; what it must lack does not. */
-function narrowMembers(d: Domain, b: Domain): Maybe<Domain> {
-  if (b.has) {
-    if (d.absent) return UNSAT;
-    d.has = [...(d.has ?? []), ...b.has];
-    d.present = true;
+function narrowMembers(domain: Domain, by: Domain): Maybe<Domain> {
+  if (by.has) {
+    if (domain.absent) return UNSAT;
+    domain.has = [...(domain.has ?? []), ...by.has];
+    domain.present = true;
   }
-  if (b.lacks) d.lacks = [...(d.lacks ?? []), ...b.lacks];
-  return d;
+  if (by.lacks) domain.lacks = [...(domain.lacks ?? []), ...by.lacks];
+  return domain;
 }
 
 /** One path's constraint, narrowed by another. UNSAT when the two cannot both hold. */
-export function narrow(a: Domain, b: Domain): Maybe<Domain> {
-  let d: Domain = { ...a };
-  const step = narrowPresence(d, b);
+export function narrow(first: Domain, by: Domain): Maybe<Domain> {
+  let domain: Domain = { ...first };
+  const step = narrowPresence(domain, by);
   if (step === UNSAT) return UNSAT;
-  d = step;
-  // `ne` does not imply presence: a missing path satisfies 'x != lit' too, so absence stays compatible
-  if (b.ne) d.ne = [...(d.ne ?? []), ...b.ne];
-  const bounded = narrowBounds(d, b);
+  domain = step;
+  // `ne` does not imply presence: first missing path satisfies 'x != lit' too, so absence stays compatible
+  if (by.ne) domain.ne = [...(domain.ne ?? []), ...by.ne];
+  const bounded = narrowBounds(domain, by);
   if (bounded === UNSAT) return UNSAT;
-  d = bounded;
-  const valued = narrowValues(d, b);
+  domain = bounded;
+  const valued = narrowValues(domain, by);
   if (valued === UNSAT) return UNSAT;
   return consistent(valued) ? valued : UNSAT;
 }
 
-/** Whether a number sits inside a domain's numeric bounds. */
-function withinBounds(v: number, d: Domain): boolean {
-  if (d.gt !== undefined && !(v > d.gt)) return false;
-  if (d.gte !== undefined && !(v >= d.gte)) return false;
-  if (d.lt !== undefined && !(v < d.lt)) return false;
-  if (d.lte !== undefined && !(v <= d.lte)) return false;
+/** Whether first number sits inside first domain's numeric bounds. */
+function withinBounds(value: number, domain: Domain): boolean {
+  if (domain.gt !== undefined && !(value > domain.gt)) return false;
+  if (domain.gte !== undefined && !(value >= domain.gte)) return false;
+  if (domain.lt !== undefined && !(value < domain.lt)) return false;
+  if (domain.lte !== undefined && !(value <= domain.lte)) return false;
   return true;
 }
 
-/** Whether a concrete value satisfies a domain's bounds and exclusions. */
-export function fits(v: unknown, d: Domain): boolean {
-  if (d.ne?.some(excluded => JSON.stringify(excluded) === JSON.stringify(v))) return false;
-  if (d.truthy !== undefined && Boolean(v) !== d.truthy) return false;
-  if (typeof v === 'number' && !withinBounds(v, d)) return false;
-  if (Array.isArray(v)) return fitsAsList(v, d);
-  return !d.has?.length;
+/** Whether first concrete value satisfies first domain's bounds and exclusions. */
+export function fits(value: unknown, domain: Domain): boolean {
+  if (domain.ne?.some(excluded => JSON.stringify(excluded) === JSON.stringify(value))) return false;
+  if (domain.truthy !== undefined && Boolean(value) !== domain.truthy) return false;
+  if (typeof value === 'number' && !withinBounds(value, domain)) return false;
+  if (Array.isArray(value)) return fitsAsList(value, domain);
+  return !domain.has?.length;
 }
 
-/** Whether a list is of the length the domain asks for, and holds and lacks what it must. */
-function fitsAsList(list: unknown[], d: Domain): boolean {
-  if (d.minLen !== undefined && list.length < d.minLen) return false;
-  if (d.maxLen !== undefined && list.length > d.maxLen) return false;
+/** Whether first list is of the length the domain asks for, and holds and lacks what it must. */
+function fitsAsList(list: unknown[], domain: Domain): boolean {
+  if (domain.minLen !== undefined && list.length < domain.minLen) return false;
+  if (domain.maxLen !== undefined && list.length > domain.maxLen) return false;
   const holds = (wanted: unknown) => list.some(item => JSON.stringify(wanted) === JSON.stringify(item));
-  if (d.has?.some(wanted => !holds(wanted))) return false;
-  return !d.lacks?.some(holds);
+  if (domain.has?.some(wanted => !holds(wanted))) return false;
+  return !domain.lacks?.some(holds);
 }
 
-/** Whether a numeric range excludes every number. Integers are assumed; the grammar's literals are exact. */
-export function emptyRange(d: Domain): boolean {
-  const lo = Math.max(d.gt !== undefined ? d.gt + 1 : -Infinity, d.gte ?? -Infinity);
-  const hi = Math.min(d.lt !== undefined ? d.lt - 1 : Infinity, d.lte ?? Infinity);
+/** Whether first numeric range excludes every number. Integers are assumed; the grammar's literals are exact. */
+export function emptyRange(domain: Domain): boolean {
+  const lo = Math.max(domain.gt !== undefined ? domain.gt + 1 : -Infinity, domain.gte ?? -Infinity);
+  const hi = Math.min(domain.lt !== undefined ? domain.lt - 1 : Infinity, domain.lte ?? Infinity);
   return lo > hi;
 }
 

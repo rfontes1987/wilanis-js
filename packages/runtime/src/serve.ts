@@ -21,13 +21,13 @@ import { embedderFor } from './tools.js';
 export async function postLoad(
   load: LoadResult,
   emb: Embedder,
-  log: (s: string) => void,
+  log: (line: string) => void,
 ): Promise<() => Promise<void>> {
   const downs: (() => Promise<void>)[] = [];
-  for (const p of load.plugins) {
-    if (!p.postLoad) continue;
-    const settings = (emb.env.plugins as Record<string, Record<string, unknown>>)[p.root] ?? {};
-    const down = await p.postLoad({
+  for (const plugin of load.plugins) {
+    if (!plugin.postLoad) continue;
+    const settings = (emb.env.plugins as Record<string, Record<string, unknown>>)[plugin.root] ?? {};
+    const down = await plugin.postLoad({
       root: load.root,
       registry: load.registry,
       scope: emb.scope,
@@ -38,7 +38,7 @@ export async function postLoad(
     if (down) downs.push(down);
   }
   return async () => {
-    for (const d of downs.reverse()) await d();
+    for (const down of downs.reverse()) await down();
   };
 }
 
@@ -47,22 +47,22 @@ export async function postLoad(
  * operation it names, and the profile's binding decides how it is met. A step that refuses stops serving
  * unless it says `required: false`, in which case the refusal is logged and the rest go on.
  */
-export async function runStartup(load: LoadResult, emb: Embedder, log: (s: string) => void): Promise<void> {
+export async function runStartup(load: LoadResult, emb: Embedder, log: (line: string) => void): Promise<void> {
   const steps = load.registry.project?.doc.startup ?? [];
-  for (const [i, step] of steps.entries()) {
+  for (const [at, step] of steps.entries()) {
     const name = step.label ?? step.run;
     const report = await emb.startup(step);
     if (report.status === 'done') {
-      log(`startup ${i + 1}/${steps.length} ${name}: ok`);
+      log(`startup ${at + 1}/${steps.length} ${name}: ok`);
       continue;
     }
     const why = failureOf(report);
     if (step.required === false) {
-      log(`startup ${i + 1}/${steps.length} ${name}: ${why} (optional, going on)`);
+      log(`startup ${at + 1}/${steps.length} ${name}: ${why} (optional, going on)`);
       continue;
     }
     throw new Error(
-      `startup step ${i} '${name}' ${why}; nothing is serving. Mark it "required": false in project.json to serve without it.`,
+      `startup step ${at} '${name}' ${why}; nothing is serving. Mark it "required": false in project.json to serve without it.`,
     );
   }
 }
@@ -70,9 +70,9 @@ export async function runStartup(load: LoadResult, emb: Embedder, log: (s: strin
 /** Why a report did not reach done: the first node that did not finish, and what it said. */
 function failureOf(report: Report): string {
   if (report.status === 'blocked') return `is blocked, needing ${(report.needs ?? []).join(', ')}`;
-  for (const [id, n] of Object.entries(report.nodes)) {
-    if (n.status !== 'failed') continue;
-    return n.reason ? `refused at '${id}' with '${n.reason}': ${n.error}` : `failed at '${id}': ${n.error}`;
+  for (const [id, node] of Object.entries(report.nodes)) {
+    if (node.status !== 'failed') continue;
+    return node.reason ? `refused at '${id}' with '${node.reason}': ${node.error}` : `failed at '${id}': ${node.error}`;
   }
   return `did not finish (${report.status})`;
 }
@@ -84,7 +84,7 @@ function failureOf(report: Report): string {
 export class Served {
   constructor(
     private current: { load: LoadResult; emb: Embedder },
-    readonly log: (s: string) => void,
+    readonly log: (line: string) => void,
     private readonly profile?: string,
   ) {}
   get emb() {
@@ -122,11 +122,11 @@ export class Served {
       triggers: kind =>
         held.load.registry
           .all('trigger')
-          .filter(t => held.load.resolve(t.doc.kind) === kind)
-          .map(t => t.doc),
+          .filter(trigger => held.load.resolve(trigger.doc.kind) === kind)
+          .map(trigger => trigger.doc),
       fire: ({ trigger, input, request, blobs }) => held.emb.fire(trigger, input, request, { blobs }),
-      types: t => held.emb.types(t),
-      inputFor: (t, r) => held.emb.inputFor(t, r),
+      types: trigger => held.emb.types(trigger),
+      inputFor: (trigger, request) => held.emb.inputFor(trigger, request),
       codecs: root => held.emb.codecsOf(root),
       get blobs() {
         return held.emb.blobs;
@@ -147,24 +147,24 @@ export class Served {
  */
 export async function start(
   load: LoadResult,
-  opts: { profile?: string; log?: (s: string) => void } = {},
+  opts: { profile?: string; log?: (line: string) => void } = {},
 ): Promise<{ stop: () => Promise<void>; held: number }> {
-  const log = opts.log ?? ((s: string) => console.log(s));
+  const log = opts.log ?? ((line: string) => console.log(line));
   const emb = embedderFor(load, { profile: opts.profile });
   if (emb.missingSecrets.length) throw new Error(`missing secrets: ${emb.missingSecrets.join(', ')}`);
   const served = new Served({ load, emb }, log, opts.profile);
   emb.serve(served);
   const down = await postLoad(load, emb, log);
   const bye = async () => {
-    for (const h of [...served.emb.held].reverse()) await h.stop();
+    for (const holding of [...served.emb.held].reverse()) await holding.stop();
     await down();
     if (emb.blobs instanceof FileBlobStore) emb.blobs.destroy();
   };
   try {
     await runStartup(load, emb, log);
-  } catch (e) {
+  } catch (error) {
     await bye();
-    throw e;
+    throw error;
   }
   return { stop: bye, held: emb.held.length };
 }
@@ -193,11 +193,11 @@ export const contentTypeOf = (file: string) => BY_EXTENSION[extname(file).toLowe
  * `--out`, or to stdout, by `deliver`. The run's blobs are released once delivered.
  */
 /** What a run answers: what the trigger kind's runtime encodes, or the report's own output. */
-function encoded(load: LoadResult, t: Loaded<TriggerDoc>, report: Report) {
+function encoded(load: LoadResult, trigger: Loaded<TriggerDoc>, report: Report) {
   const runtime = load.plugins
     .flatMap(plugin => Object.entries(plugin.triggers ?? {}))
-    .find(([kind]) => kind === load.resolve(t.doc.kind))?.[1];
-  return runtime?.encode ? runtime.encode(t.doc, report) : report.output;
+    .find(([kind]) => kind === load.resolve(trigger.doc.kind))?.[1];
+  return runtime?.encode ? runtime.encode(trigger.doc, report) : report.output;
 }
 
 /** What a command line hands a trigger: its flags and arguments, a body from --in, and a file streamed into the registry. */
@@ -229,8 +229,8 @@ export async function runTrigger(
 ) {
   const flags = given.flags ?? {};
   const args = given.args ?? [];
-  const t = load.registry.get('trigger', load.resolve(ref));
-  if (!t) throw new Error(`no trigger at '${ref}'`);
+  const found = load.registry.get('trigger', load.resolve(ref));
+  if (!found) throw new Error(`no trigger at '${ref}'`);
   const emb = embedderFor(load, { profile: opts.profile, seed: opts.seed });
   const down =
     opts.seed === undefined
@@ -239,10 +239,10 @@ export async function runTrigger(
   const blobs = emb.blobs.scope();
   try {
     const request = await requestOf(flags, args, blobs);
-    const built = emb.inputFor(t.doc, request);
+    const built = emb.inputFor(found.doc, request);
     if ('error' in built) throw new Error(`input: ${built.error}`);
-    const report = await emb.fire(t.doc, built.input, request, { blobs });
-    const answer = encoded(load, t, report);
+    const report = await emb.fire(found.doc, built.input, request, { blobs });
+    const answer = encoded(load, found, report);
     if (isBlobHandle(answer) && opts.deliver) await opts.deliver(blobs.open(answer), answer);
     return { report, answer };
   } finally {
