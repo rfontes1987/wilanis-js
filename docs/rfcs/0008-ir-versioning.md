@@ -8,11 +8,11 @@
 
 ## Summary
 
-The documents a tree is made of are the intermediate representation (IR). Its version is the major
-number in the schema URL every document names: `schemas-v1`. Until 1.0 is published, v1 changes in
-place. From 1.0 on, v1 is frozen: a compatible change is made in place and a breaking change opens
-`schemas-v2`, and a runtime says which IR versions it reads and promises the same semantics for a
-document it accepts.
+The documents a tree is made of are the intermediate representation (IR). Its version is the path segment
+in the schema URL every document names: `main` until 1.0 is published, then the tag `schemas-v1`. Until
+1.0, v1 changes in place. From 1.0 on, v1 is frozen: a compatible change is made in place and a breaking
+change opens the tag `schemas-v2`, and a runtime says which IR versions it reads and promises the same
+semantics for a document it accepts.
 
 ## Motivation
 
@@ -27,12 +27,13 @@ down so the freeze is a fact and not a habit.
 Every document names its kind and its version in one line:
 
 ```json
-"$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/schemas-v1/packages/core/schemas/graph.schema.json"
+"$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/graph.schema.json"
 ```
 
 or the alias `@wilanis/graph.schema.json`, which the loader reads as the version the runtime prefers.
-The branch `schemas-v1` of this repository is the published v1: `packages/core/schemas/` on that branch
-is what the URL serves.
+Until 1.0, `main` is the address and `packages/core/schemas/` there is what the URL serves. At 1.0 the
+tag `schemas-v1` is cut, every URL moves to it, and it never moves again: a tag cannot go stale the way
+a branch does.
 
 **Before 1.0.** v1 is the working draft. A schema may change in place, a kind may be renamed, a rule
 may tighten. Documents in this repository (`example/`, `libraries/`, every plugin's `docs/`) are updated
@@ -41,10 +42,11 @@ in the same commit, so `npm test` is the compatibility check.
 **From 1.0 on.** A change to v1 is *compatible* when every document that validated before still
 validates and means the same thing: a new optional field, a new document kind, a new node type, a new
 port a plugin grants, a new refusal for something that was already wrong. Compatible changes are made
-in place on `schemas-v1`. A change is *breaking* when a valid document stops validating or changes
+in place and the tag `schemas-v1` is moved to the new commit (a compatible change keeps every document's
+meaning, so the address may follow it). A change is *breaking* when a valid document stops validating or changes
 meaning: a required field added, a field removed or renamed, a default changed, a rule that now refuses
-a document it accepted. A breaking change is made on a new branch, `schemas-v2`, with new `$id`s; the
-`schemas-v1` branch stays as it was.
+a document it accepted. A breaking change is tagged `schemas-v2`, with new `$id`s; the
+`schemas-v1` tag stays where it was.
 
 **What the runtime promises.** A runtime release states the IR versions it reads. A document of a
 version it reads runs with the semantics that version's RFCs describe; a document of a version it does
