@@ -213,7 +213,7 @@ describe('wilanis run with files', () => {
     });
     expect(r.report.status).toBe('done');
     // the node saw a handle, never the bytes
-    expect(r.report.nodes.op.sub!.nodes.text.in).toMatchObject({
+    expect(r.report.nodes.op.sub?.nodes.text.in).toMatchObject({
       file: { contentType: 'text/csv', filename: 'in.csv', size: 34 },
     });
     expect(r.answer).toBe('url,method\nhttps://a.example/,GET\n');
