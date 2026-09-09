@@ -2,7 +2,7 @@
 
 - **Status:** draft
 - **Areas:** `area:plugin-storage`, `area:core`, `area:runtime`
-- **Schemas:** adds `store.schema.json`; adds the optional `resolves` to `$defs/field` in `common.schema.json` (compatible, RFC 0008)
+- **Schemas:** adds `store.schema.json`; adds the optional `resolves` to `$defs/field` in `common.schema.json` and the optional `storage` to `connection-kind.schema.json` (both compatible, RFC 0008)
 - **Packages:** `@wilanis/plugin-storage`, `@wilanis/plugin-storage-memory`, `@wilanis/plugin-storage-postgres`
 - **Tracking issue:** #4
 - **Depends on:** none
@@ -287,11 +287,17 @@ plugin's own settings (`plugin.json → settings`), separate from any one connec
 `uuidv7`), what `newKey` answers where the collection's key is a string and where it is a number
 respectively. Engine-wide knobs live here; per-database facts live on the connection.
 
-**What makes a connection kind a storage kind.** Its document says so:
-`"storage": true` on the connection kind, a key `@storage` reads and every other reader ignores. That
-is how X203 knows a store's connection reaches an engine and not, say, an HTTP upstream, and how
-`describe` groups them. A kind that claims it and whose plugin registers no engine is a broken
-plugin, not a broken tree.
+**What makes a connection kind a storage kind.** Its document says so: `"storage": true` on the
+connection kind. That is how X203 knows a store's connection reaches an engine and not, say, an HTTP
+upstream, and how `describe` groups them. A kind that claims it and whose plugin registers no engine
+is a broken plugin, not a broken tree.
+
+This is the RFC's second schema change, and a smaller one:
+`packages/core/schemas/connection-kind.schema.json` gains an optional boolean `storage`, described as
+"a connection of this kind reaches a storage engine; `@storage` stores may name it". Like `resolves`
+it is a new optional property, so every existing kind document still validates (*Compatibility*). The
+alternative -- `@storage` keeping a list of the kinds it knows -- is the enum this RFC just removed,
+wearing a different hat: an engine we never wrote could not join it.
 
 **Which engines exist is not this RFC's list.** A store names a connection kind, and any plugin that
 grants a kind marked `storage` and registers an engine for it is an engine. RFC 0022's SQLite and
@@ -387,6 +393,15 @@ time until RFC 0003 refuses it at check time. A `patch` never removes a field; a
 
 **`@storage/Order.shape.json`**, layer `edge`: `{ by: string, dir?: string enum [asc, desc] }`.
 
+**Two stores, one connection.** Nothing stops two features declaring a store over the same connection,
+and they should be able to: one database per tree is the normal case. A collection is therefore named
+by the pair (connection, collection name), not by the store document -- two stores over one connection
+that both declare `entries` name the *same* collection, and if their shapes differ the engine meets
+two shapes for one table. X207 refuses that: two collections of one connection with the same name and
+a different `of`. The same name with the same shape is allowed and is how two features share a table
+deliberately. Prefixing collection names per feature was the alternative, and it is rejected because a
+table's name would then be a fact no document states.
+
 **`@storage/storage.port.json`**, the engine's own operations, for startup:
 
 | Operation | Accepts | Returns | Answers |
@@ -419,7 +434,9 @@ engine a band of its own (`@auth` owns X1xx, `@http` X001-X003).
 | X202 | same | a collection's `key` is not a field of `of`, or that field is optional | name a required field of the shape |
 | X203 | same | a store's `connection` is of a kind not marked `storage`, or of a kind no loaded plugin grants at all | add the engine's plugin to `project.json → plugins`; `wilanis ls connection` |
 | X204 | same | a call's `store` names no store document, or its `collection` is not one of its collections | `wilanis describe <the store>` |
-| X205 | same | two collections of one store name the same collection key, or a collection's name is not an identifier a store may carry | rename the collection |
+| X205 | same | a `where`, `order`, `changes` or `key` is given to an operation that does not accept it, or a `find` is given an `order` naming no field of the shape | `wilanis describe @storage/store.port.json` |
+| X206 | same | a collection's name is not an identifier, or one store declares the same collection name twice | rename the collection |
+| X207 | same | two collections of one *connection* share a name and declare a different `of` | rename one, or give both the same shape if the table is meant to be shared |
 
 X202 says nothing about the key's *type*: a key is whatever the shape says it is, and which types can
 be kept and generated is the engine's judgment, below. `@storage` has no rule against a `blob` field
@@ -525,7 +542,13 @@ Additive for every existing document. One schema file is added and `KINDS` gains
 hint that lists the kinds gains a name; no existing document changes meaning. The example gains
 documents and a profile and keeps the REST binding.
 
-The one change to an existing contract is `resolves`, and it touches an **existing schema**, not only
+Two existing schemas change, both by gaining one optional property, and both compatible under RFC 0008.
+
+The smaller: `connection-kind.schema.json` gains `storage`, a boolean, so an engine plugin's kind can
+say it reaches a storage engine. Every kind document that omits it validates as before and means what
+it did.
+
+The larger is `resolves`, and it touches an **existing schema**, not only
 the TypeScript. A contract's field is `$defs/field` in `packages/core/schemas/common.schema.json`,
 which is `additionalProperties: false`, so a port document carrying `resolves` is refused by
 validation until the property is declared there beside `binds` and `static`. `Field` in
@@ -565,8 +588,8 @@ questions.
 - `resolves.test.ts`: `$T` and `$K` bound from the store, not from the call site: a graph that reads
   a field the collection's shape lacks is refused by a G rule, a collection keyed by a `number`
   types `get` with a number, and `describe` prints where each variable comes from.
-- `rules.test.ts`: one sabotage per rule, X201 to X205, each breaking the small tree and expecting the
-  code, as `packages/plugin-auth/test` does for X101-X103.
+- `rules.test.ts`: one sabotage per rule, X201 to X207, each breaking the small tree and expecting the
+  code, as `packages/plugin-auth/test` does for X101-X103. X207 needs two stores over one connection.
 - `suite.ts`: the port's behaviour as a suite a package exports and an engine's tests import, so
   "this is an engine" has one meaning that is executable. Not a test file itself.
 
@@ -604,7 +627,7 @@ the `store` baseline. The compiler's new rows are exercised through sabotaged co
 5. **`@wilanis/plugin-storage-memory`.** The connection kind, the engine, `postLoad` registering it,
    `engine.test.ts` over the shared suite. The first proof that an engine needs nothing but the
    contract. `good first issue` once step 4 lands.
-6. **The rules.** `@storage`'s X201 to X205 and `rules.test.ts`.
+6. **The rules.** `@storage`'s X201 to X207 and `rules.test.ts`.
 7. **`@wilanis/plugin-storage-postgres`.** Kysely with `pg`: the connection kind, the plugin's
    settings, the shape-to-table mapping, `ensure`, the operations, the filter compiled to Kysely
    expressions, X221 to X223, `engine.test.ts` behind the environment variable.
