@@ -12,7 +12,7 @@ A tree's documents never say where its state lives; its profile does. Today two 
 filesystem of the process that runs the tree: the `@auth` plugin's sessions and challenges, and the blob
 registry's bytes. After this RFC the auth plugin keeps its memory through a port it *requires* and the host
 binds -- to `@storage` collections in production, to the plugin's own file store in development -- and the
-blob registry's backing store is a connection the project names, with an S3-compatible object store as the
+blob registry's backing store is a connection the project names, with an object store speaking the S3 API as the
 first external one. The engine stays deterministic; state is provided by explicit effect providers; and a tree
 runs on many instances without a single document under `features/` changing.
 
@@ -162,12 +162,14 @@ plugin offers a blob store for. Absent, the registry is the file store it is tod
   "$schema": "@wilanis/connection.schema.json",
   "label": "Uploads bucket",
   "kind": "@s3/bucket.connection-kind.json",
-  "settings": { "endpoint": "https://s3.eu-west-1.amazonaws.com", "region": "eu-west-1", "bucket": "monitor-uploads", "accessKeyId": "{{secrets.s3Key}}", "secretAccessKey": "{{secrets.s3Secret}}" }
+  "settings": { "endpoint": "http://minio.wilanis.svc:9000", "region": "us-east-1", "bucket": "monitor-uploads", "accessKeyId": "{{secrets.s3Key}}", "secretAccessKey": "{{secrets.s3Secret}}" }
 }
 ```
 
 Nothing under `features/` changes: a graph still holds a handle, a codec still streams a body in and out, and
-the bytes now stream to and from the bucket.
+the bytes now stream to and from the bucket. The S3 API is a protocol, not a vendor: the reference deployment
+is MinIO on Kubernetes, installed by the Helm chart RFC 0024 ships, and nothing in the plugin names a cloud
+provider. Any store speaking the same API works, but no paid service is part of the roadmap.
 
 ## Reference
 
@@ -312,7 +314,7 @@ End to end:
 - `packages/plugin-auth/test`: two `Embedder`s over the same tree and the same store, a token issued by one
   verified by the other.
 - `packages/plugin-s3/test`: `put` of a 10 MB stream, `open` back, `scope().release()` deleting, against an
-  in-process fake implementing the handful of S3 calls used (put, multipart create/upload/complete, get, delete),
+  in-process fake implementing the handful of S3 calls used, and once in CI against MinIO in a container (put, multipart create/upload/complete, get, delete),
   with a memory-usage assertion that the store held no buffer the size of the body.
 - `packages/runtime/test`: `wilanis start` on a tree whose state store is unreachable exits nonzero before listening.
 
@@ -345,7 +347,7 @@ Steps 1 to 4 need nothing from RFC 0002 and can land first.
 - **Blob stores as connections rather than a new document kind.** A `blob-store` kind was considered and
   rejected: a connection already carries settings, secrets and a kind a plugin grants, and C001/C002 judge it.
 - **Putting S3 in `@blob`.** Rejected: `@wilanis/plugin-blob` has no external dependency and reads rows out of
-  files; the AWS client is a dependency and a concern of its own, so it is its own package.
+  files; the S3 client library is a dependency and a concern of its own, so it is its own package.
 - **A TTL in the store** (`expiresAt` respected by `@storage`) would purge dead sessions without the plugin's
   help. It is left to RFC 0002 to offer and to this plugin to ignore: correctness never depends on the purge.
 

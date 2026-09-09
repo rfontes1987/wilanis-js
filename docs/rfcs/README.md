@@ -29,7 +29,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0021](0021-higher-level-constructs.md) | Higher-level constructs: state machines and resources | stub | Ecosystem |
 | [0022](0022-storage-engines.md) | More storage engines: SQLite, MySQL, and declared capabilities | stub | Ecosystem |
 | [0023](0023-adapters.md) | Adapters: search, cache, email, payment | stub | Ecosystem |
-| [0024](0024-cloud-deployment.md) | Cloud deployment integrations | stub | Ecosystem |
+| [0024](0024-cloud-deployment.md) | Kubernetes deployment: a Helm chart and a local cluster | stub | Ecosystem |
 | [0025](0025-ai-provider-integrations.md) | AI model calls as an effect | stub | Ecosystem |
 | [0026](0026-application-manifest.md) | The application manifest | stub | The AI advantage |
 
