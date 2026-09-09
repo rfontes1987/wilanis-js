@@ -30,20 +30,21 @@ beside, the command whose output changes. Codes for new rules are written as the
 placeholder (`G0nn`) with the note that numbers are assigned when the implementing pull request
 lands. Show the documents an author writes as JSON against `example/`. Say what the RFC does not do.
 
-## 3. Index and propose
-
-Add the row to `docs/rfcs/README.md`. Branch, commit, push, and open the pull request:
-
-```
-git switch -c rfc-NNNN-short-title main
-gh pr create -R wilanis/wilanis-js --label rfc --title "RFC NNNN: Title" --fill
-```
-
-## 4. Track
+## 3. Track first
 
 Open the tracking issue with the RFC form, `gh issue create -R wilanis/wilanis-js --template rfc.yml`
-(or on GitHub), paste the Summary, choose the milestone, link the pull request, and write the issue
-number into the RFC's header in the same pull request.
+(or on GitHub): paste the Summary, choose the milestone. Its number N names the branch and goes into the
+RFC's header (`**Tracking issue:** #N`).
+
+## 4. Index and propose
+
+Add the row to `docs/rfcs/README.md`. Branch on the issue number, commit, push, open the pull request,
+and paste its link into the issue:
+
+```
+git switch -c N-rfc-NNNN-short-title main
+gh pr create -R wilanis/wilanis-js --label rfc --title "RFC NNNN: Title" --fill
+```
 
 ## 5. Acceptance
 
