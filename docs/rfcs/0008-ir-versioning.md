@@ -87,7 +87,7 @@ Numbers are assigned when the implementing pull request lands (current highest: 
 ### Discoverability
 
 `docs/rfcs/README.md` lists which RFCs are v1 and, later, which are v2. The README's "Schemas" section
-already states the branch rule; it gains the compatible/breaking definitions above.
+already states the address rule; it gains the compatible/breaking definitions above.
 
 ### Plugin contract
 
