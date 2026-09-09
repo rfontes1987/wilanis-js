@@ -83,13 +83,7 @@
     },
     {
       // the debt: predates the linter, rules are warnings here until each directory is cleaned
-      "includes": [
-        "packages/plugin-auth/**",
-        "packages/plugin-http/**",
-        "packages/runtime/**",
-        "packages/view/**",
-        "libraries/access/test/**"
-      ],
+      "includes": ["packages/plugin-auth/**", "packages/plugin-http/**", "packages/runtime/**", "packages/view/**"],
       "linter": {
         "rules": {
           "complexity": {
