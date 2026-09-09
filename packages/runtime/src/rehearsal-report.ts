@@ -2,7 +2,6 @@
  * A rehearsal said in words: one line per decision, the branches it took, and what it took to reach each -- so a
  * reader sees which way a tree can go without reading the report's JSON.
  */
-import type { Report } from '@wilanis/engine';
 import type { Settled } from './rehearse.js';
 
 export interface Decision {
@@ -22,21 +21,23 @@ export function gather(decisions: Decision[], d: Decision) {
     decisions.push(d);
     return;
   }
-  for (const tr of d.triggers) if (!hit.triggers.includes(tr)) hit.triggers.push(tr);
-  // the same switch reached from two triggers should settle the same way; keep the worse of the two
-  for (const b of d.branches) {
-    const at = hit.branches.find(x => x.when === b.when && x.to === b.to);
-    if (!at) {
-      hit.branches.push(b);
-      continue;
-    }
-    if (b.uncovered && !at.uncovered) {
-      at.uncovered = b.uncovered;
-      at.settled = undefined;
-    }
-    if (b.settled && at.settled && (b.settled.error || b.settled.blocked || b.settled.misrouted))
-      at.settled = b.settled;
+  for (const trigger of d.triggers) if (!hit.triggers.includes(trigger)) hit.triggers.push(trigger);
+  for (const branch of d.branches) mergeBranch(hit.branches, branch);
+}
+
+/** The same branch reached from two triggers should settle the same way; keep the worse of the two. */
+function mergeBranch(into: Decision['branches'], branch: Decision['branches'][number]) {
+  const at = into.find(one => one.when === branch.when && one.to === branch.to);
+  if (!at) {
+    into.push(branch);
+    return;
   }
+  if (branch.uncovered && !at.uncovered) {
+    at.uncovered = branch.uncovered;
+    at.settled = undefined;
+  }
+  const worse = branch.settled?.error || branch.settled?.blocked || branch.settled?.misrouted;
+  if (branch.settled && at.settled && worse) at.settled = branch.settled;
 }
 
 /**
@@ -55,6 +56,91 @@ function phrase(when: string): string {
  *
  * Answers whether the rehearsal passed: every branch settled, and none was left unreachable.
  */
+/** How a run with no branches ended. */
+function verdict(status: string): string {
+  if (status === 'done') return 'answers';
+  return status === 'BLOCKED' ? 'BLOCKED' : 'fails';
+}
+
+/** A graph's path as the report shows it. */
+const short = (path: string) => path.replace(/^@/, '').replace(/\.graph\.json$/, '');
+
+/** How one branch settled: the line the report shows, and the problem it names when something is wrong. */
+function branchLine(
+  branch: Decision['branches'][number],
+  at: { graph: string; node: string },
+  width: number,
+): { line: string; problem?: string } {
+  const when = phrase(branch.when).padEnd(width);
+  const where = `${at.graph} '${at.node}'`;
+  if (branch.uncovered)
+    return {
+      line: `  ??  ${when}  NEVER RUN -- ${branch.uncovered}`,
+      problem: `${where}: the '${branch.when}' branch to ${branch.to} can never run -- ${branch.uncovered}`,
+    };
+  const settled = branch.settled;
+  const answered = { line: `  ok  ${when}  answered from '${branch.to}'` };
+  if (!settled) return answered;
+  return settledLine(settled, branch, { when, where }) ?? answered;
+}
+
+/** How a settled branch reads: wrong, or one of the ways it may rightly end. */
+function settledLine(
+  settled: NonNullable<Decision['branches'][number]['settled']>,
+  branch: Decision['branches'][number],
+  said: { when: string; where: string },
+): { line: string; problem?: string } | undefined {
+  return wrongly(settled, branch, said) ?? rightly(settled, branch, said.when);
+}
+
+/** A branch that ended wrongly: routed elsewhere, blocked, or broken where no failure is declared. */
+function wrongly(
+  settled: NonNullable<Decision['branches'][number]['settled']>,
+  branch: Decision['branches'][number],
+  said: { when: string; where: string },
+): { line: string; problem: string } | undefined {
+  const { when, where } = said;
+  if (settled.misrouted)
+    return {
+      line: `  !!  ${when}  WRONG ROUTE -- should go to '${branch.to}', went to '${settled.misrouted}'`,
+      problem: `${where}: '${branch.when}' should route to ${branch.to} but went to ${settled.misrouted}`,
+    };
+  if (settled.blocked)
+    return {
+      line: `  !!  ${when}  BLOCKED at '${branch.to}' -- an input it needs is never supplied`,
+      problem: `${where}: the branch to ${branch.to} blocks -- an input it needs is never supplied`,
+    };
+  if (settled.error)
+    return {
+      line: `  !!  ${when}  BROKE at '${branch.to}' -- ${settled.error}`,
+      problem: `${where}: the branch to ${branch.to} fails where the graph declares no failure -- ${settled.error}`,
+    };
+  return undefined;
+}
+
+/** A branch that ended rightly: it refused on purpose, or the node it went to did. */
+function rightly(
+  settled: NonNullable<Decision['branches'][number]['settled']>,
+  branch: Decision['branches'][number],
+  when: string,
+): { line: string } | undefined {
+  if (settled.declared)
+    return {
+      line: `  ok  ${when}  refused on purpose at '${branch.to}' as ${settled.declared.reason}: "${settled.declared.message}"`,
+    };
+  if (settled.propagated)
+    return {
+      line: `  ok  ${when}  went to '${branch.to}', which refused it as ${settled.propagated.reason}: "${settled.propagated.error}"`,
+    };
+  return undefined;
+}
+
+/** What the verdict adds: what the graph declared, or what went wrong. */
+function aside(run: { declared?: string; error?: string }): string {
+  if (run.declared) return ` as declared: ${run.declared}`;
+  return run.error ? `: ${run.error}` : '';
+}
+
 export function format(
   decisions: Decision[],
   plain: { trigger: string; graph: string; status: string; declared?: string; error?: string }[],
@@ -62,78 +148,55 @@ export function format(
   verbose?: boolean,
 ): boolean {
   const problems: string[] = [];
-  const short = (g: string) => g.replace(/^@/, '').replace(/\.graph\.json$/, '');
-  for (const p of plain) {
-    if (p.error || p.status === 'BLOCKED')
-      problems.push(`${short(p.graph)}: ${p.error ?? 'blocked -- an input it needs is never supplied'}`);
-    lines.push(`${short(p.graph)}  (no branches)`);
-    lines.push(
-      `  ${p.status === 'done' ? 'answers' : p.status === 'BLOCKED' ? 'BLOCKED' : 'fails'}${p.declared ? ` as declared: ${p.declared}` : p.error ? `: ${p.error}` : ''}`,
-    );
-  }
-  for (const d of decisions) {
-    const covered = d.branches.filter(b => !b.uncovered).length;
-    lines.push(
-      `${short(d.graph)}  switch '${d.node}'  ${covered}/${d.branches.length} branches${verbose ? `  [via ${d.triggers.join(', ')}]` : ''}`,
-    );
-    // one width for the whole decision, so the outcomes line up and the odd one out is visible
-    const w = Math.max(...d.branches.map(b => phrase(b.when).length));
-    for (const b of d.branches) {
-      const when = phrase(b.when).padEnd(w);
-      if (b.uncovered) {
-        lines.push(`  ??  ${when}  NEVER RUN -- ${b.uncovered}`);
-        problems.push(
-          `${short(d.graph)} '${d.node}': the '${b.when}' branch to ${b.to} can never run -- ${b.uncovered}`,
-        );
-        continue;
-      }
-      const st = b.settled!;
-      if (st.misrouted) {
-        lines.push(`  !!  ${when}  WRONG ROUTE -- should go to '${b.to}', went to '${st.misrouted}'`);
-        problems.push(`${short(d.graph)} '${d.node}': '${b.when}' should route to ${b.to} but went to ${st.misrouted}`);
-        continue;
-      }
-      if (st.blocked) {
-        lines.push(`  !!  ${when}  BLOCKED at '${b.to}' -- an input it needs is never supplied`);
-        problems.push(
-          `${short(d.graph)} '${d.node}': the branch to ${b.to} blocks -- an input it needs is never supplied`,
-        );
-        continue;
-      }
-      if (st.error) {
-        lines.push(`  !!  ${when}  BROKE at '${b.to}' -- ${st.error}`);
-        problems.push(
-          `${short(d.graph)} '${d.node}': the branch to ${b.to} fails where the graph declares no failure -- ${st.error}`,
-        );
-        continue;
-      }
-      if (st.declared) {
-        lines.push(`  ok  ${when}  refused on purpose at '${b.to}' as ${st.declared.reason}: "${st.declared.message}"`);
-        continue;
-      }
-      if (st.propagated) {
-        lines.push(
-          `  ok  ${when}  went to '${b.to}', which refused it as ${st.propagated.reason}: "${st.propagated.error}"`,
-        );
-        continue;
-      }
-      lines.push(`  ok  ${when}  answered from '${b.to}'`);
-    }
-  }
-  const branches = decisions.reduce((n, d) => n + d.branches.length, 0);
+  for (const run of plain) problems.push(...plainLines(run, lines));
+  for (const decision of decisions) problems.push(...decisionLines(decision, lines, verbose));
   lines.push('');
-  if (!problems.length) {
-    lines.push(
-      `every branch settled -- ${branches} branch(es), ${decisions.length} decision(s), ${new Set(decisions.map(d => d.graph)).size} graph(s).`,
-    );
-    lines.push(
-      '"refused on purpose" is a refuse node the graph declares: a designed outcome with a reason the trigger maps, not a fault. Effects are stubbed, so no request left this process.',
-    );
-    return true;
+  return summary(decisions, problems, lines);
+}
+
+/** A graph with no branches: what it answered, and the problem it names when it did not. */
+function plainLines(
+  run: { graph: string; status: string; declared?: string; error?: string },
+  lines: string[],
+): string[] {
+  lines.push(`${short(run.graph)}  (no branches)`);
+  lines.push(`  ${verdict(run.status)}${aside(run)}`);
+  if (!run.error && run.status !== 'BLOCKED') return [];
+  return [`${short(run.graph)}: ${run.error ?? 'blocked -- an input it needs is never supplied'}`];
+}
+
+/** One decision: how many branches were covered, and how each settled. */
+function decisionLines(decision: Decision, lines: string[], verbose?: boolean): string[] {
+  const covered = decision.branches.filter(branch => !branch.uncovered).length;
+  const via = verbose ? `  [via ${decision.triggers.join(', ')}]` : '';
+  lines.push(
+    `${short(decision.graph)}  switch '${decision.node}'  ${covered}/${decision.branches.length} branches${via}`,
+  );
+  // one width for the whole decision, so the outcomes line up and the odd one out is visible
+  const width = Math.max(...decision.branches.map(branch => phrase(branch.when).length));
+  const problems: string[] = [];
+  for (const branch of decision.branches) {
+    const said = branchLine(branch, { graph: short(decision.graph), node: decision.node }, width);
+    lines.push(said.line);
+    if (said.problem) problems.push(said.problem);
   }
-  lines.push(`${problems.length} problem(s):`);
-  for (const p of problems) lines.push(`  - ${p}`);
-  return false;
+  return problems;
+}
+
+/** The last word: every branch settled, or the problems that are left. */
+function summary(decisions: Decision[], problems: string[], lines: string[]): boolean {
+  if (problems.length) {
+    lines.push(`${problems.length} problem(s):`);
+    for (const problem of problems) lines.push(`  - ${problem}`);
+    return false;
+  }
+  const branches = decisions.reduce((count, decision) => count + decision.branches.length, 0);
+  const graphs = new Set(decisions.map(decision => decision.graph)).size;
+  lines.push(`every branch settled -- ${branches} branch(es), ${decisions.length} decision(s), ${graphs} graph(s).`);
+  lines.push(
+    '"refused on purpose" is a refuse node the graph declares: a designed outcome with a reason the trigger maps, not a fault. Effects are stubbed, so no request left this process.',
+  );
+  return true;
 }
 
 /**
