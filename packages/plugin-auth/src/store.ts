@@ -40,10 +40,10 @@ export class Store {
       return [];
     }
     const out: T[] = [];
-    for (const n of names) {
-      if (!n.endsWith('.json')) continue;
+    for (const name of names) {
+      if (!name.endsWith('.json')) continue;
       try {
-        out.push(JSON.parse(readFileSync(join(this.dir, kind, n), 'utf8')) as T);
+        out.push(JSON.parse(readFileSync(join(this.dir, kind, name), 'utf8')) as T);
       } catch {
         /* a half-written file: skip */
       }
@@ -55,10 +55,10 @@ export class Store {
 const stores = new Map<string, Store>();
 /** The store at a directory, one instance per directory in this process. */
 export function storeAt(dir: string): Store {
-  let s = stores.get(dir);
-  if (!s) {
-    s = new Store(dir);
-    stores.set(dir, s);
+  let store = stores.get(dir);
+  if (!store) {
+    store = new Store(dir);
+    stores.set(dir, store);
   }
-  return s;
+  return store;
 }
