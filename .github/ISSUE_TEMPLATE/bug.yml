@@ -1,0 +1,29 @@
+name: Bug
+description: Something the checker, the runtime, a plugin or the viewer does that its RFC or README says it does not.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: repro
+    attributes:
+      label: The tree and the command
+      description: The smallest tree that shows it (or the edit to `example/`), and the `wilanis` command run.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: The refusal or output, verbatim.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versions
+      placeholder: "@wilanis/runtime 0.1.0, node 22.x"
