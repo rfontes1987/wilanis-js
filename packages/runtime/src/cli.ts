@@ -13,18 +13,18 @@ import { describe, fuzz, init, ls, map, regress, rehearse, scaffold, summarize }
 
 const USAGE = `wilanis -- declarative dataflow, judged by a compiler, run by a stateless engine
 
-  wilanis check    [root] [--profile p]            judge the whole tree; exit 1 with every refusal
+  wilanis check    [root] [--profile word]            judge the whole tree; exit 1 with every refusal
   wilanis rehearse [root] [--seed n] [-v]          run every trigger, and every branch of every switch
   wilanis fuzz     [root] [--runs n]               write one scenario per trigger per seed to scenarios/
   wilanis regress  [root]                          replay every scenario and diff node by node
-  wilanis start    [root] [--profile p]            run postLoad and the project's startup steps; what
+  wilanis start    [root] [--profile word]            run postLoad and the project's startup steps; what
                    listens is what those steps say
   wilanis run      <trigger> [root] [--in json] [--file path] [--out path] [--flag=v ...]
                    fire one cli trigger; --file hands a file as request.file, --out receives a blob answer
   wilanis ls       [root] [kind]                   every document, or those of one kind
   wilanis describe <path> [root]                   a document, with its contract laid out
   wilanis map      [root]                          trigger → graph → port → binding → graph
-  wilanis new      <kind> <name|path> [root] [--layer edge|data] [--port p] [--run p#op] [--kind k]
+  wilanis new      <kind> <name|path> [root] [--layer edge|data] [--port word] [--run word#op] [--kind k]
                    kinds: project feature shape port graph binding trigger policy resolvers
   wilanis init     [root]                          write CLAUDE.md and agent hooks into a tree
 
@@ -70,14 +70,14 @@ async function load(root: string): Promise<LoadResult> {
 }
 
 async function check(root: string): Promise<LoadResult> {
-  const l = await load(root);
-  const r = checkTree(l);
-  if (!r.ok) {
-    console.error(r.format());
-    console.error(`\n${r.items.length} refusal(s)`);
+  const loaded = await load(root);
+  const answer = checkTree(loaded);
+  if (!answer.ok) {
+    console.error(answer.format());
+    console.error(`\n${answer.items.length} refusal(s)`);
     process.exit(1);
   }
-  return l;
+  return loaded;
 }
 
 /** What the command line gave: the flags, the words, and the root each command reads from. */
@@ -92,33 +92,33 @@ interface Given {
 /** What each command does. Every one works from a loaded, checked tree; `wilanis <cmd> --help` prints USAGE. */
 const COMMANDS: Record<string, (given: Given) => Promise<void> | void> = {
   check: async ({ rootArg }) => {
-    const l = await check(rootArg(0));
-    console.log(`ok: ${l.registry.files.length} documents`);
+    const loaded = await check(rootArg(0));
+    console.log(`ok: ${loaded.registry.files.length} documents`);
   },
   rehearse: async ({ flags, rootArg }) => {
-    const l = await check(rootArg(0));
-    const r = await rehearse(l, {
+    const loaded = await check(rootArg(0));
+    const answer = await rehearse(loaded, {
       seed: flags.seed ? Number(flags.seed) : undefined,
       profile: flags.profile,
       verbose: Boolean(flags.verbose),
     });
-    console.log(r.lines.join('\n'));
-    if (!r.ok) process.exit(1);
+    console.log(answer.lines.join('\n'));
+    if (!answer.ok) process.exit(1);
   },
   fuzz: async ({ flags, rootArg }) => {
-    const l = await check(rootArg(0));
-    const w = await fuzz(l, { runs: flags.runs ? Number(flags.runs) : undefined, profile: flags.profile });
-    console.log(w.map(f => `wrote ${f}`).join('\n'));
+    const loaded = await check(rootArg(0));
+    const written = await fuzz(loaded, { runs: flags.runs ? Number(flags.runs) : undefined, profile: flags.profile });
+    console.log(written.map(file => `wrote ${file}`).join('\n'));
   },
   regress: async ({ flags, rootArg }) => {
-    const l = await check(rootArg(0));
-    const r = await regress(l, { profile: flags.profile });
-    console.log(r.lines.join('\n') || 'no scenarios -- run wilanis fuzz first');
-    if (!r.ok) process.exit(1);
+    const loaded = await check(rootArg(0));
+    const answer = await regress(loaded, { profile: flags.profile });
+    console.log(answer.lines.join('\n') || 'no scenarios -- run wilanis fuzz first');
+    if (!answer.ok) process.exit(1);
   },
   start: async ({ flags, rootArg }) => {
-    const l = await check(rootArg(0));
-    const { stop, held } = await start(l, { profile: flags.profile });
+    const loaded = await check(rootArg(0));
+    const { stop, held } = await start(loaded, { profile: flags.profile });
     if (!held) {
       console.log('nothing is held: project.json declares no startup step that listens, so there is nothing to serve');
       await stop();
@@ -131,18 +131,18 @@ const COMMANDS: Record<string, (given: Given) => Promise<void> | void> = {
     process.on('SIGTERM', bye);
   },
   run: async ({ flags, positional, rootArg, rest }) => {
-    const l = await check(rootArg(1));
+    const loaded = await check(rootArg(1));
     const { flags: f2 } = parse(rest.slice(1));
     let delivered = false;
-    const deliver = async (body: Readable, h: BlobHandle) => {
+    const deliver = async (body: Readable, handle: BlobHandle) => {
       delivered = true;
       if (f2.out) {
         await pipeline(body, createWriteStream(f2.out));
-        console.error(`wrote ${f2.out} (${h.contentType}, ${h.size} bytes)`);
+        console.error(`wrote ${f2.out} (${handle.contentType}, ${handle.size} bytes)`);
       } else await pipeline(body, process.stdout, { end: false });
     };
     const { report, answer } = await runTrigger(
-      l,
+      loaded,
       positional[0],
       { flags: f2, args: positional.slice(2) },
       {
@@ -156,8 +156,8 @@ const COMMANDS: Record<string, (given: Given) => Promise<void> | void> = {
     if (report.status !== 'done') process.exit(1);
   },
   ls: async ({ positional }) => {
-    const kind = positional.find(p => (KINDS as string[]).includes(p)) as Kind | undefined;
-    const root = positional.find(p => !(KINDS as string[]).includes(p)) ?? '.';
+    const kind = positional.find(word => (KINDS as string[]).includes(word)) as Kind | undefined;
+    const root = positional.find(word => !(KINDS as string[]).includes(word)) ?? '.';
     console.log(ls(await load(root), kind).join('\n'));
   },
   describe: async ({ positional, rootArg }) => {
@@ -174,7 +174,7 @@ const COMMANDS: Record<string, (given: Given) => Promise<void> | void> = {
     }
     console.log(
       scaffold(resolve(rootArg(2)), kind, target, flags)
-        .map(f => `wrote ${f}`)
+        .map(file => `wrote ${file}`)
         .join('\n'),
     );
   },

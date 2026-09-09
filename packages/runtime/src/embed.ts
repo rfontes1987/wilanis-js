@@ -90,7 +90,7 @@ export class Embedder {
     const processEnv = opts.env ?? process.env;
     const built = buildEnv(scope, processEnv);
     this.secrets = Object.fromEntries(
-      Object.entries(scope.project?.secrets ?? {}).map(([k, v]) => [k, processEnv[v] ?? '']),
+      Object.entries(scope.project?.secrets ?? {}).map(([name, value]) => [name, processEnv[value] ?? '']),
     );
     const root = opts.root ?? process.cwd();
     this.blobs = opts.blobs ?? new FileBlobStore(root, scope.project?.blobs?.dir);
@@ -100,7 +100,7 @@ export class Embedder {
     this.env = { ...built.env, blobs: this.blobs, hold, root };
     this.missingSecrets = built.missing;
     this.stubbed = Boolean(opts.stubEffects);
-    this.guard = plugins.find(p => p.guard);
+    this.guard = plugins.find(plugin => plugin.guard);
   }
 
   /** Give `holds` operations the tree being served, as env.serving. Only `start` calls this: a stubbed run holds nothing. */
@@ -110,23 +110,23 @@ export class Embedder {
 
   graph(ref: string): Compiled {
     const path = this.scope.canon(ref);
-    let c = this.compiled.get(path);
-    if (!c) {
-      c = this.compiler.graph(path);
-      this.compiled.set(path, c);
+    let found = this.compiled.get(path);
+    if (!found) {
+      found = this.compiler.graph(path);
+      this.compiled.set(path, found);
     }
-    return c;
+    return found;
   }
 
   /** The compiled binding behind a trigger's port operation. Compiled once per operation, like a graph. */
   operation(opRef: string): Compiled {
     const key = `op:${this.scope.canon(opRef.split('#')[0])}#${opRef.split('#')[1] ?? ''}`;
-    let c = this.compiled.get(key);
-    if (!c) {
-      c = this.compiler.operation(opRef);
-      this.compiled.set(key, c);
+    let found = this.compiled.get(key);
+    if (!found) {
+      found = this.compiler.operation(opRef);
+      this.compiled.set(key, found);
     }
-    return c;
+    return found;
   }
 
   /**
@@ -150,10 +150,10 @@ export class Embedder {
    */
   types(trigger: TriggerDoc): { in?: Type; out?: Type } {
     const accepts = () => {
-      const o = this.scope.op(trigger.fire.run);
-      return typeof o === 'string' || !Object.keys(o.op.accepts ?? {}).length
+      const operation = this.scope.op(trigger.fire.run);
+      return typeof operation === 'string' || !Object.keys(operation.op.accepts ?? {}).length
         ? undefined
-        : this.scope.types.fields(o.op.accepts);
+        : this.scope.types.fields(operation.op.accepts);
     };
     const inType = () => {
       if (trigger.in) return this.scope.types.ref(trigger.in);
@@ -253,9 +253,9 @@ export class Embedder {
     const table = (settings.codecs ?? {}) as Record<string, string>;
     const out: Codecs = {};
     for (const [ct, path] of Object.entries(table)) {
-      for (const p of this.plugins) {
-        const c = p.codecs?.[path];
-        if (c) out[ct.toLowerCase()] = c;
+      for (const plugin of this.plugins) {
+        const found = plugin.codecs?.[path];
+        if (found) out[ct.toLowerCase()] = found;
       }
     }
     return out;
@@ -266,19 +266,19 @@ export class Embedder {
    * Answers the input, or the reason it does not conform to the trigger's in type.
    */
   inputFor(trigger: TriggerDoc, request: Record<string, unknown>): { input: unknown } | { error: string } {
-    const t = this.types(trigger).in;
-    if (!t) return { input: undefined };
+    const type = this.types(trigger).in;
+    if (!type) return { input: undefined };
     const raw = trigger.fire.in !== undefined ? fillTemplates(trigger.fire.in, { request }) : request.body;
     const input =
-      t.kind === 'object' && raw && typeof raw === 'object' && !Array.isArray(raw)
+      type.kind === 'object' && raw && typeof raw === 'object' && !Array.isArray(raw)
         ? Object.fromEntries(
-            Object.entries(raw as Record<string, unknown>).map(([k, v]) => [
-              k,
-              t.fields[k] ? coerceWire(v, t.fields[k].type) : v,
+            Object.entries(raw as Record<string, unknown>).map(([name, value]) => [
+              name,
+              type.fields[name] ? coerceWire(value, type.fields[name].type) : value,
             ]),
           )
         : raw;
-    const bad = conforms(input, t);
+    const bad = conforms(input, type);
     return bad ? { error: bad } : { input };
   }
 
@@ -304,9 +304,9 @@ export class Embedder {
       await guard.settle({ ...this.guardArgs(trigger, request), report });
     const declared = trigger.out ? this.types(trigger).out : undefined;
     if (report.status === 'done' && declared) {
-      const t = declared;
-      const output = prune(report.output, t); // a closed out shape keeps only what it declares
-      const bad = conforms(output, t);
+      const type = declared;
+      const output = prune(report.output, type); // a closed out shape keeps only what it declares
+      const bad = conforms(output, type);
       if (bad)
         return {
           ...report,

@@ -92,10 +92,11 @@ export interface KSwitchLike {
 }
 
 /** Where a switch input reads from: a node in the same spec, and the path within that node's output. */
-function sourceOf(s: unknown): { ref: string; path: string[] } | undefined {
-  if (!s || typeof s !== 'object') return undefined;
-  const o = s as Record<string, unknown>;
-  if (typeof o.ref === 'string' && Array.isArray(o.path)) return { ref: o.ref, path: o.path as string[] };
+function sourceOf(spec_: unknown): { ref: string; path: string[] } | undefined {
+  if (!spec_ || typeof spec_ !== 'object') return undefined;
+  const object = spec_ as Record<string, unknown>;
+  if (typeof object.ref === 'string' && Array.isArray(object.path))
+    return { ref: object.ref, path: object.path as string[] };
   return undefined; // list/object/value/concat sources are composed, not a single stubbable node
 }
 
@@ -196,12 +197,12 @@ export function nonEmpty(
 }
 
 /** Does this call hand its callee the caller's `in` untouched, field for field? Then the trigger's input still reaches inside. */
-function forwardsIn(n: Record<string, unknown>): boolean {
-  const given = n.in as Record<string, unknown> | undefined;
+function forwardsIn(node: Record<string, unknown>): boolean {
+  const given = node.in as Record<string, unknown> | undefined;
   if (!given || typeof given !== 'object') return false;
-  return Object.entries(given).every(([k, v]) => {
-    const src = v as { ref?: string; path?: string[] } | undefined;
-    return src?.ref === 'in' && Array.isArray(src.path) && src.path.length === 1 && src.path[0] === k;
+  return Object.entries(given).every(([name, value]) => {
+    const src = value as { ref?: string; path?: string[] } | undefined;
+    return src?.ref === 'in' && Array.isArray(src.path) && src.path.length === 1 && src.path[0] === name;
   });
 }
 
@@ -215,7 +216,7 @@ export function casesFor(found: FoundSwitch, from: Stubbing): Case[] {
   const { node, prefix } = found;
   const steerable = found.fromTriggerIn ?? !prefix.length;
   const branches = branchesOf(
-    node.rules.map(r => ({ when: r.label, to: r.to })),
+    node.rules.map(rule => ({ when: rule.label, to: rule.to })),
     node.else,
   );
   return branches.map(branch => steer(branch, found, { generated, typeOf, seed, inputSeed, inType }, steerable));
@@ -299,12 +300,12 @@ function steer(
 }
 
 /** The declared type at a path within a node's output type, as far as the type system can follow it. */
-function typeAtPath(t: Type | undefined, path: string[]): Type | undefined {
-  if (!t) return undefined;
+function typeAtPath(type: Type | undefined, path: string[]): Type | undefined {
+  if (!type) return undefined;
   // typeAt answers a string when the path cannot be followed into the type
   try {
-    const r = typeAt(t, path);
-    return typeof r === 'string' ? undefined : r.type;
+    const rule = typeAt(type, path);
+    return typeof rule === 'string' ? undefined : rule.type;
   } catch {
     return undefined;
   }
