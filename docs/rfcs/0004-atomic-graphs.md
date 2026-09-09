@@ -288,6 +288,46 @@ at the store while it stays concurrent in the graph. `@wilanis/plugin-storage-me
 copy-on-write view of its collections and commits by swapping it in, so the plugin's tests and the example's
 tests exercise rollback without a database.
 
+**How a plugin is called when the runtime settles.** The runtime never looks a plugin up, and no part of it
+learns which plugin owns a connection: it calls back through an object the plugin handed it. The handler's
+`join` passes a closure of its own, and what that closure answers is the plugin's `Participant` -- an object
+whose `commit` and `rollback` are the plugin's functions, closed over whatever the plugin needs (the Kysely
+transaction, the checked-out session, the copy-on-write view). The scope keeps it in a `Map` and knows
+nothing of what is inside it:
+
+```ts
+// in the plugin's handler: it decides *whether* to take part, and *what* opening means
+const participant = await scope.join(connection, () => this.begin(connection));
+// the engine's own participant type carries whatever running a statement needs;
+// `Participant` in core says only that it can be committed and rolled back.
+
+// in AtomicScope, at the end of the run: the runtime decides *when*, and *which way*
+async settle(ok: boolean): Promise<void> {
+  for (const pending of this.participants.values()) {
+    const participant = await pending;
+    await (ok ? participant.commit() : participant.rollback());
+  }
+}
+```
+
+The division is the whole of the contract. **The plugin decides whether to take part** -- a handler of an
+operation that is not `transactional` never reads `env.atomic` -- and **what opening, committing and rolling
+back mean** for its store. **The runtime decides when**: the transaction opens on the first `join`, and
+settles when the graph's run reaches quiescence, which is the one moment no handler is in flight. **The run's
+outcome decides which way**, with no one voting: `done` commits, anything else rolls back. A plugin is never
+asked whether to commit and cannot ask for a rollback except by failing its node, which is what a refusal
+already is.
+
+This is the callback shape the runtime already uses for `holds`: `env.hold` takes
+`{ label, stop }` from a plugin and `serve.ts` later runs `for (const holding of [...held].reverse()) await
+holding.stop()` without resolving who held what. `settle` is that move with two outcomes instead of one. It is
+also why `PluginModule` gains no member: there is nothing to register, because the participant arrives by
+being used.
+
+The loop reads over a map that holds exactly one entry, since L0n2 refuses a graph whose effects fall on more
+than one connection. It is written over the map because the map is the natural shape of `join`'s memo, not
+because a second participant is expected; a second one is a fault, which is what `join` raises.
+
 **The embedder** (`packages/runtime/src/embed.ts`) changes nothing: `Embedder.fire`, `startup` and `decide`
 pass `env` as they do, and the scope rides inside. A startup step naming an operation bound to an atomic
 graph is atomic too, for free.
