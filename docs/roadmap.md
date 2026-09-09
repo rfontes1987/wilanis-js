@@ -82,7 +82,12 @@ Draws on RFC 0015.
 Add a field to the entry shape and `wilanis migrate plan` prints the migration, refusing the destructive
 step until told. Draws on RFC 0017.
 
-## M13 1.0
+## M13 The agent fixes it
+
+Break the example, run `wilanis check --json`, and a small model repairs it in a loop from the
+diagnostics. Solved branches become committed scenarios. Draws on RFC 0018 and RFC 0019.
+
+## M14 1.0
 
 Last on purpose: 1.0 is cut only when every accepted RFC that changes a schema has landed or been withdrawn,
 so the schemas are final before they are frozen, and nothing is published to npm before that. Then: every
