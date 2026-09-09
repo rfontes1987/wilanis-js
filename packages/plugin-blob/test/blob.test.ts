@@ -18,21 +18,21 @@ const ROW: Type = types.inline({
 });
 const env = { blobs: store, resolveType: (ref: string) => (ref === 'Row' ? ROW : types.ref(ref)) };
 const ctx = { env, nodePath: [], attach: () => {} } as never;
-const run = (op: string, i: Record<string, unknown>) => plugin.handlers[`@blob/${op}`]({ in: i, ctx });
-const text = async (r: Readable) => (await readAll(r)).toString('utf8');
+const run = (op: string, inputs: Record<string, unknown>) => plugin.handlers[`@blob/${op}`]({ in: inputs, ctx });
+const text = async (stream: Readable) => (await readAll(stream)).toString('utf8');
 
 describe('the file store', () => {
   it('streams bytes in, counts them, hands a handle; streams them back out; drops them', async () => {
-    const h = await store.put(Readable.from([Buffer.from('ab'), Buffer.from('cde')]), {
+    const handle = await store.put(Readable.from([Buffer.from('ab'), Buffer.from('cde')]), {
       contentType: 'text/plain',
       filename: 'x.txt',
     });
-    expect(h).toMatchObject({ contentType: 'text/plain', filename: 'x.txt', size: 5 });
-    expect(existsSync(`${store.dir}/${h.id}`)).toBe(true);
-    expect(await text(store.open(h))).toBe('abcde');
-    await store.drop(h);
-    expect(existsSync(`${store.dir}/${h.id}`)).toBe(false);
-    expect(() => store.open(h)).toThrow('no blob');
+    expect(handle).toMatchObject({ contentType: 'text/plain', filename: 'x.txt', size: 5 });
+    expect(existsSync(`${store.dir}/${handle.id}`)).toBe(true);
+    expect(await text(store.open(handle))).toBe('abcde');
+    await store.drop(handle);
+    expect(existsSync(`${store.dir}/${handle.id}`)).toBe(false);
+    expect(() => store.open(handle)).toThrow('no blob');
   });
   it('opens nothing it does not hold: a handle written by hand is refused, whatever its id says', () => {
     expect(() => store.open({ id: '../../etc/passwd', contentType: 'text/plain', size: 1 })).toThrow('no blob');
@@ -55,9 +55,9 @@ describe('the file store', () => {
 
 describe('CSV rows, fed in pieces', () => {
   const rows = (pieces: string[]) => {
-    const p = new CsvRows();
-    const out = pieces.flatMap(x => p.feed(x));
-    return [...out, ...p.end()];
+    const parser = new CsvRows();
+    const out = pieces.flatMap(piece => parser.feed(piece));
+    return [...out, ...parser.end()];
   };
   it('splits fields and lines, CRLF or LF, and keeps the last line without a newline', () => {
     expect(rows(['a,b\r\n1,2\n3,4'])).toEqual([
@@ -72,8 +72,8 @@ describe('CSV rows, fed in pieces', () => {
   it('a chunk boundary anywhere -- inside a field, a quote, or a CRLF -- changes nothing', () => {
     const whole = 'a,"b,c"\r\n"d""e",f\r\n';
     const one = rows([whole]);
-    for (let i = 1; i < whole.length; i++)
-      expect(rows([whole.slice(0, i), whole.slice(i)]), `split at ${i}`).toEqual(one);
+    for (let at = 1; at < whole.length; at++)
+      expect(rows([whole.slice(0, at), whole.slice(at)]), `split at ${at}`).toEqual(one);
   });
   it('an empty trailing field and an empty file', () => {
     expect(rows(['a,\n'])).toEqual([['a', '']]);
@@ -96,7 +96,7 @@ describe('csv.port.json', () => {
     await expect(run('csv.port.json#parse', { file, type: 'Row' })).rejects.toThrow('row 2.method: "PATCH" not in');
   });
   it("write: the shape's columns in order, quoting what needs it; the handle carries the filename; parse reads it back", async () => {
-    const h = (await run('csv.port.json#write', {
+    const written = (await run('csv.port.json#write', {
       rows: [
         { url: 'https://a/', method: 'GET', hits: 1 },
         { method: 'POST', url: 'https://b/,c', ok: false },
@@ -104,9 +104,11 @@ describe('csv.port.json', () => {
       type: 'Row',
       filename: 'out.csv',
     })) as { id: string; contentType: string; size: number };
-    expect(h).toMatchObject({ contentType: 'text/csv; charset=utf-8', filename: 'out.csv' });
-    expect(await text(store.open(h))).toBe('url,method,hits,ok\r\nhttps://a/,GET,1,\r\n"https://b/,c",POST,,false\r\n');
-    expect(await run('csv.port.json#parse', { file: h, type: 'Row' })).toEqual([
+    expect(written).toMatchObject({ contentType: 'text/csv; charset=utf-8', filename: 'out.csv' });
+    expect(await text(store.open(written))).toBe(
+      'url,method,hits,ok\r\nhttps://a/,GET,1,\r\n"https://b/,c",POST,,false\r\n',
+    );
+    expect(await run('csv.port.json#parse', { file: written, type: 'Row' })).toEqual([
       { url: 'https://a/', method: 'GET', hits: 1 },
       { url: 'https://b/,c', method: 'POST', ok: false },
     ]);
@@ -115,9 +117,13 @@ describe('csv.port.json', () => {
 
 describe('text.port.json', () => {
   it('write then read, round trip, with the content type given or the default', async () => {
-    const h = await run('text.port.json#write', { text: 'héllo', contentType: 'text/markdown', filename: 'a.md' });
-    expect(h).toMatchObject({ contentType: 'text/markdown', filename: 'a.md', size: 6 });
-    expect(await run('text.port.json#read', { file: h })).toBe('héllo');
+    const written = await run('text.port.json#write', {
+      text: 'héllo',
+      contentType: 'text/markdown',
+      filename: 'a.md',
+    });
+    expect(written).toMatchObject({ contentType: 'text/markdown', filename: 'a.md', size: 6 });
+    expect(await run('text.port.json#read', { file: written })).toBe('héllo');
     expect(await run('text.port.json#write', { text: 'x' })).toMatchObject({
       contentType: 'text/plain; charset=utf-8',
     });

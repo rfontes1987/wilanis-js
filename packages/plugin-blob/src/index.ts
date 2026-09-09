@@ -10,159 +10,132 @@ import { fileURLToPath } from 'node:url';
 import type { BlobStore, PluginModule } from '@wilanis/core';
 import { conforms, isBlobHandle, readAll, show, type Type } from '@wilanis/core';
 import type { Handler } from '@wilanis/engine';
+import { CsvRows } from './csv.js';
+
+export { CsvRows } from './csv.js';
 
 const ROOT = '@blob';
-const P = (f: string) => `${ROOT}/${f}`;
+/** The path of a document this plugin ships. */
+const shipped = (name: string) => `${ROOT}/${name}`;
 const DOCS = fileURLToPath(new URL('../docs', import.meta.url));
 
 type Env = { blobs?: BlobStore; resolveType?: (ref: string) => Type };
+type Row = Record<string, unknown>;
+
 const storeOf = (env: Record<string, unknown>): BlobStore => {
-  const b = (env as Env).blobs;
-  if (!b) throw new Error('no blob registry in this environment');
-  return b;
+  const blobs = (env as Env).blobs;
+  if (!blobs) throw new Error('no blob registry in this environment');
+  return blobs;
 };
-const handleOf = (v: unknown, name: string) => {
-  if (!isBlobHandle(v)) throw new Error(`${name}: not a blob`);
-  return v;
+const handleOf = (value: unknown, name: string) => {
+  if (!isBlobHandle(value)) throw new Error(`${name}: not a blob`);
+  return value;
 };
 const rowType = (env: Record<string, unknown>, ref: unknown): Type | undefined => {
-  const r = (env as Env).resolveType;
-  return r && typeof ref === 'string' ? r(ref) : undefined;
+  const resolve = (env as Env).resolveType;
+  return resolve && typeof ref === 'string' ? resolve(ref) : undefined;
 };
 
-// ---- CSV, incrementally ------------------------------------------------------------------------------
-
-/** RFC 4180 rows out of text fed in pieces: a field may be quoted, a quote inside it doubled, a line ended by LF or CRLF. */
-export class CsvRows {
-  private field = '';
-  private row: string[] = [];
-  private inQuotes = false;
-  private afterQuote = false;
-  private quoted = false;
-  feed(text: string): string[][] {
-    const rows: string[][] = [];
-    for (const ch of text) {
-      if (this.inQuotes) {
-        if (!this.afterQuote) {
-          if (ch === '"') this.afterQuote = true;
-          else this.field += ch;
-          continue;
-        }
-        if (ch === '"') {
-          this.field += '"';
-          this.afterQuote = false;
-          continue;
-        }
-        this.inQuotes = false;
-        this.afterQuote = false; // the quote closed the field; ch is a separator or a line end
-      }
-      if (ch === '"' && this.field === '' && !this.quoted) {
-        this.inQuotes = true;
-        this.quoted = true;
-        continue;
-      }
-      if (ch === ',') {
-        this.row.push(this.field);
-        this.field = '';
-        this.quoted = false;
-        continue;
-      }
-      if (ch === '\r') continue;
-      if (ch === '\n') {
-        this.row.push(this.field);
-        rows.push(this.row);
-        this.row = [];
-        this.field = '';
-        this.quoted = false;
-        continue;
-      }
-      this.field += ch;
-    }
-    return rows;
-  }
-  end(): string[][] {
-    if (this.field === '' && !this.row.length && !this.quoted) return [];
-    this.row.push(this.field);
-    const last = this.row;
-    this.row = [];
-    this.field = '';
-    this.quoted = false;
-    return [last];
-  }
-}
+// ---- CSV as rows of a shape ----------------------------------------------------------------------------
 
 /** One text cell as a value of the field's type: numbers and booleans from their spelling, an empty optional cell absent. */
-function cell(v: string, t: Type, required: boolean): unknown {
-  if (v === '' && !required) return undefined;
-  if (t.kind === 'number' && v.trim() !== '' && !Number.isNaN(Number(v))) return Number(v);
-  if (t.kind === 'boolean' && (v === 'true' || v === 'false')) return v === 'true';
-  return v;
+function cell(text: string, type: Type, required: boolean): unknown {
+  if (text === '' && !required) return undefined;
+  if (type.kind === 'number' && text.trim() !== '' && !Number.isNaN(Number(text))) return Number(text);
+  if (type.kind === 'boolean' && (text === 'true' || text === 'false')) return text === 'true';
+  return text;
 }
 
-const quote = (v: unknown) => {
-  const s = v === undefined || v === null ? '' : String(v);
-  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
+/** One CSV row as an object of the row type, cells typed by the fields the header names. */
+function rowOf(header: string[], cells: string[], type: Type): Row {
+  const row: Row = {};
+  for (const [index, name] of header.entries()) {
+    const field = type.kind === 'object' ? type.fields[name] : undefined;
+    const value = field ? cell(cells[index] ?? '', field.type, field.required) : (cells[index] ?? '');
+    if (value !== undefined) row[name] = value;
+  }
+  return row;
+}
 
-async function parse(blobs: BlobStore, file: unknown, t: Type | undefined): Promise<unknown[]> {
-  if (!t) throw new Error("parse: 'type' must name the row shape");
-  const decoder = new StringDecoder('utf8');
-  const csv = new CsvRows();
-  let header: string[] | undefined;
-  const out: unknown[] = [];
-  let line = 0;
-  const take = (rows: string[][]) => {
-    for (const r of rows) {
-      line++;
-      if (!header) {
-        header = r.map(h => h.trim());
+/** Rows of a shape, read from a CSV blob as it streams: the first line names the columns. */
+class RowReader {
+  private header: string[] | undefined;
+  private line = 0;
+  readonly rows: Row[] = [];
+
+  constructor(private readonly type: Type) {}
+
+  take(rows: string[][]): void {
+    for (const cells of rows) {
+      this.line++;
+      if (!this.header) {
+        this.header = cells.map(name => name.trim());
         continue;
       }
-      if (r.length === 1 && r[0] === '') continue; // a blank line
-      const o: Record<string, unknown> = {};
-      header.forEach((h, i) => {
-        const f = t.kind === 'object' ? t.fields[h] : undefined;
-        const v = f ? cell(r[i] ?? '', f.type, f.required) : (r[i] ?? '');
-        if (v !== undefined) o[h] = v;
-      });
-      const bad = conforms(o, t, `row ${line}`);
-      if (bad) throw new Error(`csv does not fit ${show(t)}: ${bad}`);
-      out.push(o);
+      if (cells.length === 1 && cells[0] === '') continue; // a blank line
+      const row = rowOf(this.header, cells, this.type);
+      const bad = conforms(row, this.type, `row ${this.line}`);
+      if (bad) throw new Error(`csv does not fit ${show(this.type)}: ${bad}`);
+      this.rows.push(row);
     }
-  };
-  for await (const chunk of blobs.open(handleOf(file, 'file'))) take(csv.feed(decoder.write(chunk as Buffer)));
-  take(csv.feed(decoder.end()));
-  take(csv.end());
-  return out;
+  }
 }
 
-function lines(rows: unknown[], t: Type | undefined): Iterable<string> {
-  const columns =
-    t?.kind === 'object' && Object.keys(t.fields).length
-      ? Object.keys(t.fields)
-      : Object.keys((rows[0] ?? {}) as Record<string, unknown>);
-  return (function* () {
-    yield `${columns.map(quote).join(',')}\r\n`;
-    for (const r of rows) yield `${columns.map(c => quote((r as Record<string, unknown>)[c])).join(',')}\r\n`;
-  })();
+async function parse(blobs: BlobStore, file: unknown, type: Type | undefined): Promise<unknown[]> {
+  if (!type) throw new Error("parse: 'type' must name the row shape");
+  const decoder = new StringDecoder('utf8');
+  const csv = new CsvRows();
+  const reader = new RowReader(type);
+  for await (const chunk of blobs.open(handleOf(file, 'file'))) reader.take(csv.feed(decoder.write(chunk as Buffer)));
+  reader.take(csv.feed(decoder.end()));
+  reader.take(csv.end());
+  return reader.rows;
 }
+
+const quote = (value: unknown) => {
+  const text = value === undefined || value === null ? '' : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+/** The columns a CSV is written with: the shape's fields in order, else the first row's keys. */
+function columnsOf(rows: unknown[], type: Type | undefined): string[] {
+  if (type?.kind === 'object' && Object.keys(type.fields).length) return Object.keys(type.fields);
+  return Object.keys((rows[0] ?? {}) as Row);
+}
+
+function* lines(rows: unknown[], type: Type | undefined): Iterable<string> {
+  const columns = columnsOf(rows, type);
+  yield `${columns.map(quote).join(',')}\r\n`;
+  for (const row of rows) yield `${columns.map(column => quote((row as Row)[column])).join(',')}\r\n`;
+}
+
+// ---- the operations ------------------------------------------------------------------------------------
+
+const csvParse: Handler = async ({ in: input, ctx }) =>
+  parse(storeOf(ctx.env), input.file, rowType(ctx.env, input.type));
+
+const csvWrite: Handler = async ({ in: input, ctx }) => {
+  if (!Array.isArray(input.rows)) throw new Error('write: rows is not a list');
+  return storeOf(ctx.env).put(Readable.from(lines(input.rows, rowType(ctx.env, input.type))), {
+    contentType: 'text/csv; charset=utf-8',
+    filename: typeof input.filename === 'string' ? input.filename : undefined,
+  });
+};
+
+const textRead: Handler = async ({ in: input, ctx }) =>
+  (await readAll(storeOf(ctx.env).open(handleOf(input.file, 'file')))).toString('utf8');
+
+const textWrite: Handler = async ({ in: input, ctx }) =>
+  storeOf(ctx.env).put(String(input.text ?? ''), {
+    contentType: typeof input.contentType === 'string' ? input.contentType : 'text/plain; charset=utf-8',
+    filename: typeof input.filename === 'string' ? input.filename : undefined,
+  });
 
 const handlers: Record<string, Handler> = {
-  [P('csv.port.json#parse')]: async ({ in: i, ctx }) => parse(storeOf(ctx.env), i.file, rowType(ctx.env, i.type)),
-  [P('csv.port.json#write')]: async ({ in: i, ctx }) => {
-    if (!Array.isArray(i.rows)) throw new Error('write: rows is not a list');
-    return storeOf(ctx.env).put(Readable.from(lines(i.rows, rowType(ctx.env, i.type))), {
-      contentType: 'text/csv; charset=utf-8',
-      filename: typeof i.filename === 'string' ? i.filename : undefined,
-    });
-  },
-  [P('text.port.json#read')]: async ({ in: i, ctx }) =>
-    (await readAll(storeOf(ctx.env).open(handleOf(i.file, 'file')))).toString('utf8'),
-  [P('text.port.json#write')]: async ({ in: i, ctx }) =>
-    storeOf(ctx.env).put(String(i.text ?? ''), {
-      contentType: typeof i.contentType === 'string' ? i.contentType : 'text/plain; charset=utf-8',
-      filename: typeof i.filename === 'string' ? i.filename : undefined,
-    }),
+  [shipped('csv.port.json#parse')]: csvParse,
+  [shipped('csv.port.json#write')]: csvWrite,
+  [shipped('text.port.json#read')]: textRead,
+  [shipped('text.port.json#write')]: textWrite,
 };
 
 const plugin: PluginModule = { root: ROOT, docs: DOCS, handlers };

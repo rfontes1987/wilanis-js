@@ -11,7 +11,8 @@ import type { Handler } from '@wilanis/engine';
 
 const ROOT = '@reload';
 const DOCS = fileURLToPath(new URL('../docs', import.meta.url));
-const P = (name: string) => `${ROOT}/${name}`;
+/** The path of a document this plugin ships. */
+const shipped = (name: string) => `${ROOT}/${name}`;
 const DEFAULT_DEBOUNCE = 120;
 
 /** Directories whose churn is never a document change: what a reload would read is under neither. */
@@ -26,7 +27,7 @@ const watchTree: Handler = async ({ in: input, ctx }) => {
   const serving = env.serving;
   if (!serving || !env.hold)
     throw new Error(
-      `'${P('watch.port.json')}#watch' watches the tree while it is served, so it runs from a project's startup list -- not from a graph`,
+      `'${shipped('watch.port.json')}#watch' watches the tree while it is served, so it runs from a project's startup list -- not from a graph`,
     );
   const settings = env.plugins?.[ROOT] ?? {};
   const wait = Number(input.debounceMs ?? settings.debounceMs ?? DEFAULT_DEBOUNCE);
@@ -43,11 +44,11 @@ const watchTree: Handler = async ({ in: input, ctx }) => {
     } // an edit during a reload is answered by the next one
     running = true;
     try {
-      const r = await serving.reload();
-      if (r.ok) log(`reload: ${r.documents} documents, serving the new tree`);
-      else log(`reload refused, still serving the last good tree:\n${r.refusals}`);
-    } catch (e) {
-      log(`reload failed, still serving the last good tree: ${(e as Error).message}`);
+      const result = await serving.reload();
+      if (result.ok) log(`reload: ${result.documents} documents, serving the new tree`);
+      else log(`reload refused, still serving the last good tree:\n${result.refusals}`);
+    } catch (error) {
+      log(`reload failed, still serving the last good tree: ${(error as Error).message}`);
     } finally {
       running = false;
       if (again) {
@@ -80,7 +81,7 @@ const watchTree: Handler = async ({ in: input, ctx }) => {
 const reload: PluginModule = {
   root: ROOT,
   docs: DOCS,
-  handlers: { [`${P('watch.port.json')}#watch`]: watchTree },
+  handlers: { [`${shipped('watch.port.json')}#watch`]: watchTree },
 };
 
 export default reload;
