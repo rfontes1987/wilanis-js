@@ -3,7 +3,14 @@ import { createReadStream } from 'node:fs';
 import { basename, extname } from 'node:path';
 import type { Readable } from 'node:stream';
 import { checkTree } from '@wilanis/compiler';
-import { type BlobHandle, isBlobHandle, type LoadResult, type Serving } from '@wilanis/core';
+import {
+  type BlobHandle,
+  isBlobHandle,
+  type Loaded,
+  type LoadResult,
+  type Serving,
+  type TriggerDoc,
+} from '@wilanis/core';
 import type { Report } from '@wilanis/engine';
 import { FileBlobStore } from './blobs.js';
 import type { Embedder } from './embed.js';
@@ -185,6 +192,14 @@ export const contentTypeOf = (file: string) => BY_EXTENSION[extname(file).toLowe
  * streams a file into the blob registry and hands its handle as request.file; a blob answer is streamed to
  * `--out`, or to stdout, by `deliver`. The run's blobs are released once delivered.
  */
+/** What a run answers: what the trigger kind's runtime encodes, or the report's own output. */
+function encoded(load: LoadResult, t: Loaded<TriggerDoc>, report: Report) {
+  const runtime = load.plugins
+    .flatMap(plugin => Object.entries(plugin.triggers ?? {}))
+    .find(([kind]) => kind === load.resolve(t.doc.kind))?.[1];
+  return runtime?.encode ? runtime.encode(t.doc, report) : report.output;
+}
+
 /** What a command line hands a trigger: its flags and arguments, a body from --in, and a file streamed into the registry. */
 async function requestOf(
   flags: Record<string, string>,
@@ -227,10 +242,7 @@ export async function runTrigger(
     const built = emb.inputFor(t.doc, request);
     if ('error' in built) throw new Error(`input: ${built.error}`);
     const report = await emb.fire(t.doc, built.input, request, { blobs });
-    const runtime = load.plugins
-      .flatMap(plugin => Object.entries(plugin.triggers ?? {}))
-      .find(([kind]) => kind === load.resolve(t.doc.kind))?.[1];
-    const answer = runtime?.encode ? runtime.encode(t.doc, report) : report.output;
+    const answer = encoded(load, t, report);
     if (isBlobHandle(answer) && opts.deliver) await opts.deliver(blobs.open(answer), answer);
     return { report, answer };
   } finally {
