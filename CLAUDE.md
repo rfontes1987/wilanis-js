@@ -51,7 +51,7 @@ npx wilanis check example   # the CLI from the built runtime
 npx wilanis check libraries/access   # the access tree on its own, with its development binding
 npx wilanis start example   # run what its startup declares (the http listener among them)
 npx wilanis-view example    # the viewer, on http://127.0.0.1:4400/
-npm run release             # publishes engine, core, compiler, runtime, plugin-http, plugin-blob, plugin-reload, plugin-auth, access, view in that order
+npm run release             # publishes every package in dependency order; refuses unless HEAD is tagged schemas-v1 (docs/roadmap.md, RFC 0008)
 ```
 
 `npm test` must pass before a commit. Tests import the built `dist` of sibling packages, so a change in

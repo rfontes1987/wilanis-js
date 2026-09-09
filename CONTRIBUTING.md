@@ -24,7 +24,8 @@ gh issue list -R wilanis/wilanis-js --label "help wanted"
 ```
 
 Prefer the lowest milestone. Pick one, assign yourself, read its RFC, then work. If you use Claude Code, `/roadmap` does exactly
-this, and `/rfc` walks through proposing a new RFC. Both skills live in `.claude/skills/`.
+this, `/rfc` walks through proposing a new RFC, and `/review` briefs the maintainer on a pull request or
+an RFC and acts on their word. The skills live in `.claude/skills/`.
 
 ## Branches
 
