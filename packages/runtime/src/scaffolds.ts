@@ -27,7 +27,8 @@ function into(target: string, layer: 'edge' | 'domain' | 'data', kind: string): 
 }
 
 /** What `wilanis new <kind>` writes: one builder per kind, each answering the files it creates. */
-const S = (k: Kind) => schemaUrl(k);
+/** The published URL of a kind's schema. */
+const schemaOf = (kind: Kind) => schemaUrl(kind);
 
 const SCAFFOLDS: Record<string, (target: string, opts: Record<string, string | undefined>) => [string, unknown][]> = {
   project: (target, _opts) => {
@@ -45,7 +46,7 @@ const SCAFFOLDS: Record<string, (target: string, opts: Record<string, string | u
       [
         'project.json',
         {
-          $schema: S('project'),
+          $schema: schemaOf('project'),
           name: target,
           description: 'TODO',
           aliases: {},
@@ -65,7 +66,10 @@ const SCAFFOLDS: Record<string, (target: string, opts: Record<string, string | u
   },
   feature: (target, _opts) => {
     return [
-      [`features/${target}/feature.json`, { $schema: S('feature'), description: 'TODO', exports: [], effects: [] }],
+      [
+        `features/${target}/feature.json`,
+        { $schema: schemaOf('feature'), description: 'TODO', exports: [], effects: [] },
+      ],
     ];
   },
   shape: (target, opts) => {
@@ -73,14 +77,14 @@ const SCAFFOLDS: Record<string, (target: string, opts: Record<string, string | u
     // is where a shape's layer is read from, so a path that names the layer decides it, and --layer the rest.
     const placed = into(target, opts.layer === 'edge' ? 'edge' : 'domain', 'shape');
     const layer = placed.split('/')[2] === 'edge' ? 'edge' : 'core';
-    return [[placed, { $schema: S('shape'), layer, description: 'TODO', fields: {} }]];
+    return [[placed, { $schema: schemaOf('shape'), layer, description: 'TODO', fields: {} }]];
   },
   port: (target, _opts) => {
     return [
       [
         into(target, 'domain', 'port'),
         {
-          $schema: S('port'),
+          $schema: schemaOf('port'),
           description: 'TODO',
           operations: { example: { description: 'TODO', accepts: {}, returns: 'string' } },
         },
@@ -92,7 +96,7 @@ const SCAFFOLDS: Record<string, (target: string, opts: Record<string, string | u
       [
         into(target, opts.layer === 'data' ? 'data' : 'domain', 'graph'),
         {
-          $schema: S('graph'),
+          $schema: schemaOf('graph'),
           description: 'TODO',
           nodes: [
             {
@@ -113,7 +117,7 @@ const SCAFFOLDS: Record<string, (target: string, opts: Record<string, string | u
       [
         into(target, 'data', 'binding'),
         {
-          $schema: S('binding'),
+          $schema: schemaOf('binding'),
           description: 'TODO',
           port: opts.port ?? '@features/TODO/domain/TODO.port.json',
           operations: {
@@ -128,7 +132,7 @@ const SCAFFOLDS: Record<string, (target: string, opts: Record<string, string | u
       [
         into(target, 'edge', 'resolvers'),
         {
-          $schema: S('resolvers'),
+          $schema: schemaOf('resolvers'),
           description: 'TODO',
           resolvers: { caller: { read: "request.headers['user-agent']", description: 'TODO' } },
         },
@@ -140,7 +144,7 @@ const SCAFFOLDS: Record<string, (target: string, opts: Record<string, string | u
       [
         into(target, 'edge', 'trigger'),
         {
-          $schema: S('trigger'),
+          $schema: schemaOf('trigger'),
           description: 'TODO',
           kind: opts.kind ?? '@http/http.trigger-kind.json',
           settings: { route: '/todo', method: 'GET', produces: 'application/json' },
@@ -155,7 +159,7 @@ const SCAFFOLDS: Record<string, (target: string, opts: Record<string, string | u
       [
         into(target, 'edge', 'policy'),
         {
-          $schema: S('policy'),
+          $schema: schemaOf('policy'),
           description: 'TODO',
           decide: {
             run: opts.run ?? '@features/TODO/domain/TODO.port.json#todo',
@@ -210,11 +214,11 @@ export function init(
     writeFileSync(to, readFileSync(from));
     out.push(`wrote ${to}`);
   };
-  for (const f of readdirSync(templates)) {
-    const from = join(templates, f),
-      to = join(root, f.replace(/^dot-/, '.'));
-    if (f === 'dot-claude') {
-      for (const g of readdirSync(from)) put(join(from, g), join(to, g));
+  for (const name of readdirSync(templates)) {
+    const from = join(templates, name);
+    const to = join(root, name.replace(/^dot-/, '.'));
+    if (name === 'dot-claude') {
+      for (const name of readdirSync(from)) put(join(from, name), join(to, name));
       continue;
     }
     put(from, to);

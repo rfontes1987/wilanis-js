@@ -35,8 +35,8 @@ export class FileBlobStore implements BlobStore {
     const counted = Readable.from(
       source instanceof Readable ? source : [typeof source === 'string' ? Buffer.from(source) : source],
     );
-    counted.on('data', (c: Buffer | string) => {
-      size += typeof c === 'string' ? Buffer.byteLength(c) : c.length;
+    counted.on('data', (chunk: Buffer | string) => {
+      size += typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length;
     });
     await pipeline(counted, createWriteStream(join(this.dir, id)));
     const handle: BlobHandle = {
@@ -64,15 +64,15 @@ export class FileBlobStore implements BlobStore {
     const parent = this;
     return {
       async put(source, meta) {
-        const h = await parent.put(source, meta);
-        mine.push(h);
-        return h;
+        const handle = await parent.put(source, meta);
+        mine.push(handle);
+        return handle;
       },
-      open: h => parent.open(h),
-      drop: h => parent.drop(h),
+      open: handle => parent.open(handle),
+      drop: handle => parent.drop(handle),
       scope: () => parent.scope(),
       async release() {
-        for (const h of mine.splice(0)) await parent.drop(h);
+        for (const handle of mine.splice(0)) await parent.drop(handle);
       },
     };
   }

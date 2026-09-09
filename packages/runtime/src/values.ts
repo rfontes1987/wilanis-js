@@ -67,9 +67,9 @@ export function prune(value: unknown, type: Type): unknown {
 }
 
 /** Coerce wire strings (query, path, headers, form fields) toward the declared field types. */
-export function coerceWire(v: unknown, t: Type): unknown {
-  if (typeof v !== 'string') return v;
-  if (t.kind === 'number' && v.trim() !== '' && !Number.isNaN(Number(v))) return Number(v);
-  if (t.kind === 'boolean' && (v === 'true' || v === 'false')) return v === 'true';
-  return v;
+export function coerceWire(value: unknown, type: Type): unknown {
+  if (typeof value !== 'string') return value;
+  if (type.kind === 'number' && value.trim() !== '' && !Number.isNaN(Number(value))) return Number(value);
+  if (type.kind === 'boolean' && (value === 'true' || value === 'false')) return value === 'true';
+  return value;
 }

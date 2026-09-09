@@ -15,14 +15,14 @@ export interface Decision {
 }
 
 /** Merge a switch's result into the decisions already gathered, so a shared graph is reported once. */
-export function gather(decisions: Decision[], d: Decision) {
-  const hit = decisions.find(x => x.graph === d.graph && x.node === d.node);
+export function gather(decisions: Decision[], decision: Decision) {
+  const hit = decisions.find(one => one.graph === decision.graph && one.node === decision.node);
   if (!hit) {
-    decisions.push(d);
+    decisions.push(decision);
     return;
   }
-  for (const trigger of d.triggers) if (!hit.triggers.includes(trigger)) hit.triggers.push(trigger);
-  for (const branch of d.branches) mergeBranch(hit.branches, branch);
+  for (const trigger of decision.triggers) if (!hit.triggers.includes(trigger)) hit.triggers.push(trigger);
+  for (const branch of decision.branches) mergeBranch(hit.branches, branch);
 }
 
 /** The same branch reached from two triggers should settle the same way; keep the worse of the two. */

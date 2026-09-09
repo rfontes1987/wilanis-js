@@ -168,8 +168,8 @@ export async function loadProject(
   const load = loadTree(root, available, [...(opts.includes ?? []), ...resolved.includes]);
   refusals.push(...resolved.refusals);
   // a plugin whose package failed to load is reported once, with the install hint, not also as unknown
-  const failed = new Set(refusals.map(r => r.at?.replace(/\/from$/, '')));
-  const kept = load.refusals.items.filter(r => !(r.code === 'D006' && failed.has(r.at)));
+  const failed = new Set(refusals.map(refusal => refusal.at?.replace(/\/from$/, '')));
+  const kept = load.refusals.items.filter(item => !(item.code === 'D006' && failed.has(item.at)));
   load.refusals.items.splice(0, load.refusals.items.length, ...kept, ...refusals);
   return load;
 }

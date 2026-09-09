@@ -61,7 +61,7 @@ export async function fuzz(
   return written;
 }
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const same = (one: unknown, other: unknown) => JSON.stringify(one) === JSON.stringify(other);
 
 /** How one node differs from what the scenario recorded. */
 function nodeDiffs(
@@ -114,6 +114,6 @@ export async function regress(
 
 function fakeEnvFor(load: LoadResult): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
-  for (const v of Object.values(load.registry.project?.doc.secrets ?? {})) env[v] = `stub-${v.toLowerCase()}`;
+  for (const name of Object.values(load.registry.project?.doc.secrets ?? {})) env[name] = `stub-${name.toLowerCase()}`;
   return env;
 }

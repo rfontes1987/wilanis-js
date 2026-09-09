@@ -9,9 +9,9 @@ const runtime: TriggerRuntime = {
     return async () => {};
   },
   // an answer prints as it is; a refusal prints as { reason, message } plus whatever it carries (a challenge's id and how to answer it), and `wilanis run` exits 1
-  encode: (_t, r) => {
-    const refused = refusalOf(r);
-    return refused ? { reason: refused.reason, message: refused.message, ...(refused.detail ?? {}) } : r.output;
+  encode: (_trigger, report) => {
+    const refused = refusalOf(report);
+    return refused ? { reason: refused.reason, message: refused.message, ...(refused.detail ?? {}) } : report.output;
   },
 };
 export const cli: PluginModule = {
