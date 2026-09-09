@@ -1,6 +1,6 @@
 # RFC 0006: Observability: the run report as a trace
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:engine`, `area:runtime`, `area:plugin-http`, `area:core` (one field on a trigger kind, one member on `Serving`)
 - **Tracking issue:** #8
 - **Depends on:** none
@@ -113,7 +113,14 @@ context. The http kind declares it once, in `http.trigger-kind.json`:
 placement change, no scaffold change. `packages/runtime/templates/CLAUDE.md` does not change: an author of
 documents never touches this field, a plugin does.
 
-**`plugin-http/docs/http.trigger-kind.json`** declares `"correlation": "headers.traceparent"`.
+**`plugin-http/docs/http.trigger-kind.json`** declares `"correlation": "headers.traceparent"`, and one path,
+not a list. A policy reads its credential from a list because a caller may legitimately present a token in
+more than one place and the guard must accept any of them; a correlation id has no such claim on the runtime
+-- it is copied opaquely, and a kind that wants a different header says a different path. Making the field a
+list, or a string-or-list, is a schema shape that every reader and every kind then carries, and one this RFC
+cannot retract once documents are written against it; a single path can become a list later without
+invalidating a document, while the reverse cannot. A deployment that puts its id in `x-request-id` is served
+by a kind that says so.
 **`runtime/docs/cli/cli.trigger-kind.json`** declares none: a command line has no caller trace.
 
 ### Ports, operations and kinds granted
@@ -184,8 +191,12 @@ interface Fired {
 
 and hands it to every observer registered through a new `Embedder.observe(listener): () => void`. A stubbed
 embedder (`rehearse`, `fuzz`, `regress`, `run --seed`) records nothing: the gate never runs there and no
-observer is registered. Startup steps are fired through `Embedder.startup`, and produce a `Fired` with the
-step's label as the trigger, so the trace of a `start` shows what the pool's `open` did.
+observer is registered. Startup steps are fired through `Embedder.startup` and produce a trace of their own,
+rooted `startup <label>`, never a `Fired` wearing the step as its trigger: a step is not a trigger, it has no
+kind, no correlation and no gate, and putting its label in `Fired.trigger` would make every reader of a trace
+-- the printer, an exporter, a later query -- handle a trigger that does not exist. `Fired` keeps meaning one
+trigger fired; a startup root carries the step's index and label and the same span tree beneath it, so the
+trace of a `start` still shows what the pool's `open` did.
 
 **Trace (`packages/runtime/src/trace.ts`, new).** `traceOf(fired, scope): Trace` is pure. It walks the
 reports and yields spans:
@@ -212,8 +223,21 @@ attributes above, and never a value. At level `full` a span also carries `wilani
 of the report's redacted `in`/`out`, and `wilanis.error` as the node's message. A refusal's `message` and a
 fault's `error` can interpolate values (`"no entry {{in.id}}"`), so `trace.ts` passes every message through
 `redactValue` with the union of the node's redact paths applied to the *values* the message may contain: the
-practical rule is that the message is included only at `full`, and `summary` carries the reason alone.
+rule is that `summary` carries the reason alone and never the message; the message appears at `full` only.
+A reason is a word the author declared in `refuses`, a closed set that cannot leak; a message is prose that
+interpolates whatever the author wrote into it, and `redactValue` blanks only the paths a document *marked*
+secret. The value nobody thought to mark is exactly the one that ends up in a message, so the level that is
+safe to export by default cannot carry one, and turning on `full` is the author saying they have read what
+their messages say.
 `detail` (a challenge's id and how to answer it) never enters a trace at any level.
+
+**An observer outlives a reload, and that has to be written.** `Served.reload` builds a fresh `Embedder` and
+carries only `emb.held` across (`packages/runtime/src/serve.ts`); an observer registered on the old embedder
+would be dropped, and the exporter -- which is a `holds` operation, so it is *not* rebuilt -- would go quiet
+without saying so. The observers therefore live on `Served`, beside `held`, and not on the embedder: `serving()`
+already routes every member through `current`, so `observe` registers with the server and `Embedder.fire` hands
+its `Fired` to whatever `Served` is listening. `reload` then needs no line about observers at all, which is the
+point: the exporter holds the server, never the tree it came from, exactly as the listener does.
 
 **Serving (`packages/core/src/plugin.ts`).** `Serving` gains one member:
 
@@ -318,20 +342,9 @@ gains a member, which only plugins that hold something ever see. `@wilanis/plugi
   document an author writes for the operator's benefit, against the rule that a tree says what happens and
   the runtime how it is observed. Sampling belongs in the collector.
 
-## Open questions
+## Decided during implementation
 
-Before `accepted`:
-
-1. Should `summary` include a refusal's `message`, or only its `reason`? The message can interpolate an
-   input value the author did not mark secret. This RFC says reason only.
-2. Is `traceparent` the right default for the http kind, or should the kind also accept `x-request-id` as a
-   fallback list the way a policy's credential read does (`["headers.traceparent", "headers['x-request-id']"]`)?
-3. Should `Fired` for a startup step carry the step's index and label as the trigger, or should startup traces
-   be a separate root named `startup <label>`? This RFC leans to the latter for readability.
-
-During implementation:
-
-4. ULID vs UUIDv7 for `id`. Either sorts by time; Node 22 has `crypto.randomUUID()` and no ULID, so UUIDv7
-   may avoid a dependency.
-5. Whether `wilanis run --trace` prints before or after the answer on stdout when the answer is a blob
+1. ULID or UUIDv7 for `id`. Either sorts by time; Node 22 has `crypto.randomUUID()` and no ULID, so UUIDv7
+   is the way to avoid a dependency for it.
+2. Whether `wilanis run --trace` prints before or after the answer on stdout when the answer is a blob
    streamed to stdout (`deliver`): the trace goes to stderr regardless, so ordering only affects a terminal.
