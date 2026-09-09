@@ -50,8 +50,10 @@ draft ──► accepted ──► implemented
 
 - *draft*: proposed in a pull request that adds the file. Discussion happens on the pull request, line
   by line. The tracking issue exists from this point so the roadmap shows it.
-- *accepted*: the maintainer merges the pull request after validating every detail. Nothing is
-  implemented before this. The header's status changes in the merge.
+- *accepted*: the maintainer, having validated every detail, sets the file's status to `accepted` in the
+  pull request that proposes it, and its implementation plan becomes task issues. Nothing is implemented
+  before this. The pull request merges when every full spec in it is accepted or moved out; a stub in it
+  merges as a stub.
 - *implemented*: every task closed. The RFC stays as the record of why.
 - *withdrawn*: merged with the reason, so the next person does not propose it again.
 
@@ -65,7 +67,8 @@ it is expanded into a full spec, in a new pull request, before it can be accepte
 **Finding work.** `gh issue list --label status:ready` lists what may be taken. The `roadmap` skill in
 `.claude/skills/roadmap/` walks an agent through it: pick, read the RFC, branch, implement under
 `CLAUDE.md`, run `npm test`, open a pull request that closes the issue. The `rfc` skill walks through
-proposing one.
+proposing one. The `review` skill briefs the maintainer on a pull request or an RFC, what it changes,
+the decisions it asks for, the checks, and on their word merges, comments, or accepts.
 
 ## Reference
 
@@ -112,7 +115,7 @@ None. The process is checked by reading.
 ## Implementation plan
 
 1. This file, the template, the index, `CONTRIBUTING.md`, the issue and pull request templates, the
-   two skills (this pull request).
+   `roadmap` and `rfc` skills (the first pull request); the `review` skill (the second).
 2. The labels `rfc`, `task`, `status:draft`, `status:accepted`, `status:ready`, `area:*`, and the
    milestones of `docs/roadmap.md` on `wilanis/wilanis-js` (done by hand; recorded here).
 3. The Roadmap project board with a Status field mirroring the labels (needs the `project` token scope).

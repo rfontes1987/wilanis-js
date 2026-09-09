@@ -186,7 +186,8 @@ npx wilanis start example          # run what its startup declares: on :8080
 npx wilanis run @hello/edge/hello-gated.trigger.json example   # challenged until you answer with a one-time code
 ```
 
-Start your own project:
+Start your own project. Until 1.0 the packages are not on npm (`docs/roadmap.md` says why): clone this
+repository, build it, and run `npx wilanis` from its root against your tree. From 1.0:
 
 ```
 mkdir board && cd board
