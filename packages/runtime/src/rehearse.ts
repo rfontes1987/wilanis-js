@@ -5,7 +5,7 @@
 import type { BindingDoc, Loaded, LoadResult, TriggerDoc, Type } from '@wilanis/core';
 import type { Report } from '@wilanis/engine';
 import { refusalOf } from '@wilanis/engine';
-import { casesFor, type FoundSwitch, nonEmpty, setPath, switchesOf } from './branches.js';
+import { type Case, casesFor, type FoundSwitch, nonEmpty, type Stubbing, setPath, switchesOf } from './branches.js';
 import type { Embedder } from './embed.js';
 import { type Decision, format, gather } from './rehearsal-report.js';
 import { embedderFor, failedBelow, generatedFire, policyRoots } from './stubbing.js';
@@ -55,30 +55,28 @@ function reportAt(report: Report, prefix: string[]): Report | undefined {
  */
 function settle(report: Report, sw: FoundSwitch, aim: string): Settled {
   const local = reportAt(report, sw.prefix) ?? report;
-  const node = local.nodes[sw.at.split('.').pop()!];
-  const took = node?.selected;
-  const misrouted = took !== undefined && took !== aim ? took : undefined;
-  const failed = Object.entries(local.nodes).find(([, n]) => n.status === 'failed');
+  const took = local.nodes[sw.at.split('.').pop() ?? '']?.selected;
   const out: Settled = {
     status: local.status === 'blocked' ? 'BLOCKED' : local.status,
     blocked: local.status === 'blocked',
-    misrouted,
+    misrouted: took !== undefined && took !== aim ? took : undefined,
   };
+  const failed = Object.entries(local.nodes).find(([, node]) => node.status === 'failed');
   if (local.status !== 'failed' || !failed) return out;
-  const [id, n] = failed;
-  // a refusal in THIS graph is a declared outcome; a refusal that arrived from a graph this one calls is that
-  // graph's declared outcome surfacing here, and naming it as ours would credit the wrong document
-  const deeper = failedBelow(id, n);
-  if (!deeper && n.reason !== undefined) {
-    out.declared = { reason: n.reason, message: n.error ?? '' };
-    return out;
-  }
-  if (deeper?.reason !== undefined) {
-    out.propagated = { node: id, reason: deeper.reason, error: deeper.error ?? '' };
-    return out;
-  }
-  out.error = `${id}: ${n.error}`;
-  return out;
+  return { ...out, ...whyFailed(failed[0], failed[1]) };
+}
+
+/**
+ * Why a run failed, said where the decision was made. A refusal in THIS graph is a declared outcome; a refusal that
+ * arrived from a graph this one calls is that graph's declared outcome surfacing here, and naming it as ours would
+ * credit the wrong document.
+ */
+function whyFailed(id: string, node: Report['nodes'][string]): Partial<Settled> {
+  const deeper = failedBelow(id, node);
+  if (!deeper && node.reason !== undefined) return { declared: { reason: node.reason, message: node.error ?? '' } };
+  if (deeper?.reason !== undefined)
+    return { propagated: { node: id, reason: deeper.reason, error: deeper.error ?? '' } };
+  return { error: `${id}: ${node.error}` };
 }
 
 /**
@@ -103,35 +101,42 @@ export async function rehearse(
   const settledGraphs: { trigger: string; graph: string; status: string; declared?: string; error?: string }[] = [];
   // every trigger, and every policy as a trigger of each kind that attaches it: a decision is walked like any other graph
   for (const t of [...load.registry.all('trigger'), ...policyRoots(load)]) {
-    const found = await rehearseTrigger(load, t, seed, opts, decisions);
-    if (!found) {
-      // no switch anywhere under this trigger: one run is the whole of it
-      const emb = embedderFor(load, { seed, profile: opts.profile });
-      const { input, request } = generatedFire(emb, t, seed);
-      const report = await emb.fire(t.doc, input, request);
-      const refused = refusalOf(report);
-      const failed = Object.entries(report.nodes).find(([, n]) => n.status === 'failed');
-      settledGraphs.push({
-        trigger: t.name,
-        graph: t.doc.fire.run,
-        status: report.status === 'blocked' ? 'BLOCKED' : report.status,
-        declared: refused ? `${refused.reason}: "${refused.message}"` : undefined,
-        error:
-          report.status === 'failed' && !refused ? (failed ? `${failed[0]}: ${failed[1].error}` : 'failed') : undefined,
-      });
-    }
+    const found = await rehearseTrigger(load, t, { seed, profile: opts.profile }, decisions);
+    if (!found) settledGraphs.push(await wholeOf(load, t, seed, opts.profile));
   }
   return { ok: format(decisions, settledGraphs, lines, opts.verbose), lines };
+}
+
+/** What broke, when a run failed without declaring a refusal. */
+const whatBroke = (failed: [string, { error?: string }] | undefined) =>
+  failed ? `${failed[0]}: ${failed[1].error}` : 'failed';
+
+/** A trigger with no switch anywhere under it: one run is the whole of it. */
+async function wholeOf(load: LoadResult, t: Loaded<TriggerDoc>, seed: number, profile?: string) {
+  const emb = embedderFor(load, { seed, profile });
+  const { input, request } = generatedFire(emb, t, seed);
+  const report = await emb.fire(t.doc, input, request);
+  const refused = refusalOf(report);
+  const failed = Object.entries(report.nodes).find(([, node]) => node.status === 'failed');
+  const broke = report.status === 'failed' && !refused;
+  return {
+    trigger: t.name,
+    graph: t.doc.fire.run,
+    status: report.status === 'blocked' ? 'BLOCKED' : report.status,
+    declared: refused ? `${refused.reason}: "${refused.message}"` : undefined,
+    error: broke ? whatBroke(failed) : undefined,
+  };
 }
 
 /** One switch, its branches, and what each settled to. Named by the graph that declares it. */
 async function rehearseTrigger(
   load: LoadResult,
   t: Loaded<TriggerDoc>,
-  seed: number,
-  opts: { profile?: string },
+  how: { seed: number; profile?: string },
   decisions: Decision[],
 ): Promise<boolean> {
+  const { seed, profile } = how;
+  const opts = { profile };
   // a first run records what the seed generated for every effectful node, the base each case patches,
   // and the type each node declared, so a case can generate a type-correct value for a field the seed
   // left out. Nodes on a branch this run did not take are absent from the recording; those cases start
@@ -168,94 +173,148 @@ async function rehearseTrigger(
     inputSeed: input,
     inType,
   };
-  const cases = (found_: FoundSwitch) => casesFor(found_, stubbing);
-  /**
-   * The stubs and input that route every switch enclosing `sw` towards the node that contains it. A
-   * nested switch is otherwise cancelled before it runs, and its own case would land on a dead path.
-   */
-  const reach = (sw: FoundSwitch): { stubs: Record<string, unknown>; input: { path: string[]; value: unknown }[] } => {
-    const stubs: Record<string, unknown> = {};
-    const patches: { path: string[]; value: unknown }[] = [];
-    // a switch inside a mapped operation runs only when the list it maps over has an element to run for
-    for (const list of sw.lists) {
-      const need = nonEmpty(list, stubbing);
-      Object.assign(stubs, need.stubs);
-      patches.push(...need.input);
-    }
-    for (const ancestorAt of sw.via) {
-      // the enclosing call is `<...>.<node>`; the switch governing it is a sibling in the same spec
-      const segs = ancestorAt.split('.');
-      const nodeId = segs[segs.length - 1];
-      const governing = found.find(
-        f =>
-          f.prefix.join('.') === segs.slice(0, -1).join('.') &&
-          [...f.node.rules.map(r => r.to), f.node.else].includes(nodeId),
-      );
-      if (!governing) continue;
-      const want = cases(governing).find(c => c.branch.to === nodeId && !c.branch.unsolved && !c.unreachable?.length);
-      if (!want) continue;
-      Object.assign(stubs, want.stubs);
-      patches.push(...(want.input ?? []));
-    }
-    return { stubs, input: patches };
-  };
+  const walk: Walk = { load, t, seed, profile, found, stubbing, input, request, probe };
 
   // The probe took one path, so nodes behind every branch it did not take are absent from the recording
   // and their declared types are unknown -- a case built from nothing cannot generate a typed value. One
   // run per switch, steered to reach it, fills the recording before any case is built from it.
-  for (const sw of found) {
-    if (!sw.via.length) continue;
-    const pre = reach(sw);
-    let warm = input;
-    for (const p of pre.input) warm = setPath(warm, p.path, p.value);
-    const w = embedderFor(load, { seed, record, types, profile: opts.profile });
-    await w.fire(t.doc, warm, request, { stubs: pre.stubs });
-  }
-
-  for (const sw of found) {
-    const pre = reach(sw);
-    // A branch of this switch is about where it routes. What the graph it routes into then decides is
-    // that graph's own business, reported under its own decision -- so steer those to the branch that
-    // answers, and this decision reports its routing rather than an incidental downstream refusal.
-    const downstream: Record<string, unknown> = {};
-    for (const other of found) {
-      if (other === sw) continue;
-      // strictly inside a node this switch routes to: its prefix extends this switch's own
-      const here = sw.prefix.join('.');
-      const there = other.prefix.join('.');
-      if (there === here || !(here === '' || there.startsWith(`${here}.`))) continue;
-      const answering = cases(other).find(c => c.branch.rule >= 0 && !c.branch.unsolved && !c.unreachable?.length);
-      if (answering) Object.assign(downstream, answering.stubs);
-    }
-    const d: Decision = {
-      graph: graphOf(probe, t, sw),
-      node: sw.at.split('.').pop()!,
-      triggers: [t.name],
-      branches: [],
-    };
-    for (const c of cases(sw)) {
-      const at = { when: c.branch.when, to: c.branch.to };
-      if (c.branch.unsolved) {
-        d.branches.push({ ...at, uncovered: c.branch.unsolved });
-        continue;
-      }
-      if (c.unreachable?.length) {
-        d.branches.push({
-          ...at,
-          uncovered: `${c.unreachable.join(', ')} is the trigger's own input and the rehearsal cannot vary it`,
-        });
-        continue;
-      }
-      const emb = embedderFor(load, { seed, profile: opts.profile });
-      // a demand on the graph's own input is met by firing with a patched input, not by a stub
-      let fired = input;
-      for (const p of [...pre.input, ...(c.input ?? [])]) fired = setPath(fired, p.path, p.value);
-      const report = await emb.fire(t.doc, fired, request, { stubs: { ...downstream, ...pre.stubs, ...c.stubs } });
-      d.branches.push({ ...at, settled: settle(report, sw, c.branch.to) });
-    }
-    gather(decisions, d);
-  }
+  for (const sw of found) if (sw.via.length) await warmUp(walk, sw, record, types);
+  for (const sw of found) gather(decisions, await decisionFor(walk, sw));
   return true;
+}
+
+/** What rehearsing one trigger's switches reads: the tree, the trigger, the switches found, and what to stub with. */
+interface Walk {
+  load: LoadResult;
+  t: Loaded<TriggerDoc>;
+  seed: number;
+  profile?: string;
+  found: FoundSwitch[];
+  stubbing: Stubbing;
+  input: unknown;
+  request: Record<string, unknown>;
+  probe: Embedder;
+}
+
+/**
+ * The stubs and input that route every switch enclosing `sw` towards the node that contains it. A nested switch is
+ * otherwise cancelled before it runs, and its own case would land on a dead path.
+ */
+function reach(
+  walk: Walk,
+  sw: FoundSwitch,
+): { stubs: Record<string, unknown>; input: { path: string[]; value: unknown }[] } {
+  const stubs: Record<string, unknown> = {};
+  const patches: { path: string[]; value: unknown }[] = [];
+  // a switch inside a mapped operation runs only when the list it maps over has an element to run for
+  for (const list of sw.lists) {
+    const need = nonEmpty(list, walk.stubbing);
+    Object.assign(stubs, need.stubs);
+    patches.push(...need.input);
+  }
+  for (const ancestorAt of sw.via) {
+    const want = governingCase(walk, ancestorAt);
+    if (!want) continue;
+    Object.assign(stubs, want.stubs);
+    patches.push(...(want.input ?? []));
+  }
+  return { stubs, input: patches };
+}
+
+/** The case of the switch that governs an enclosing call, which routes into it. */
+function governingCase(walk: Walk, ancestorAt: string) {
+  // the enclosing call is `<...>.<node>`; the switch governing it is a sibling in the same spec
+  const segments = ancestorAt.split('.');
+  const nodeId = segments[segments.length - 1];
+  const governing = walk.found.find(
+    one =>
+      one.prefix.join('.') === segments.slice(0, -1).join('.') &&
+      [...one.node.rules.map(rule => rule.to), one.node.else].includes(nodeId),
+  );
+  if (!governing) return undefined;
+  return casesFor(governing, walk.stubbing).find(
+    one => one.branch.to === nodeId && !one.branch.unsolved && !one.unreachable?.length,
+  );
+}
+
+/** One run steered to reach a switch, so what it records is there before any case is built from it. */
+async function warmUp(walk: Walk, sw: FoundSwitch, record: Record<string, unknown>, types: Record<string, Type>) {
+  const pre = reach(walk, sw);
+  let warm = walk.input;
+  for (const patch of pre.input) warm = setPath(warm, patch.path, patch.value);
+  const emb = embedderFor(walk.load, { seed: walk.seed, record, types, profile: walk.profile });
+  await emb.fire(walk.t.doc, warm, walk.request, { stubs: pre.stubs });
+}
+
+/**
+ * A branch of this switch is about where it routes. What the graph it routes into then decides is that graph's own
+ * business, reported under its own decision -- so steer those to the branch that answers, and this decision reports
+ * its routing rather than an incidental downstream refusal.
+ */
+function downstreamOf(walk: Walk, sw: FoundSwitch): Record<string, unknown> {
+  const downstream: Record<string, unknown> = {};
+  const here = sw.prefix.join('.');
+  for (const other of walk.found) {
+    if (other === sw) continue;
+    // strictly inside a node this switch routes to: its prefix extends this switch's own
+    const there = other.prefix.join('.');
+    if (there === here || !(here === '' || there.startsWith(`${here}.`))) continue;
+    const answering = casesFor(other, walk.stubbing).find(
+      one => one.branch.rule >= 0 && !one.branch.unsolved && !one.unreachable?.length,
+    );
+    if (answering) Object.assign(downstream, answering.stubs);
+  }
+  return downstream;
+}
+
+/** One switch as a decision: every branch, and what each settled to. */
+async function decisionFor(walk: Walk, sw: FoundSwitch): Promise<Decision> {
+  const pre = reach(walk, sw);
+  const downstream = downstreamOf(walk, sw);
+  const decision: Decision = {
+    graph: graphOf(walk.probe, walk.t, sw),
+    node: sw.at.split('.').pop() ?? '',
+    triggers: [walk.t.name],
+    branches: [],
+  };
+  for (const one of casesFor(sw, walk.stubbing))
+    decision.branches.push(await branchOf(walk, sw, one, { pre, downstream }));
+  return decision;
+}
+
+/** One case of a switch: the branch it reaches, or why nothing can reach it. */
+async function branchOf(
+  walk: Walk,
+  sw: FoundSwitch,
+  one: Case,
+  steer: {
+    pre: { stubs: Record<string, unknown>; input: { path: string[]; value: unknown }[] };
+    downstream: Record<string, unknown>;
+  },
+): Promise<Decision['branches'][number]> {
+  const at = { when: one.branch.when, to: one.branch.to };
+  if (one.branch.unsolved) return { ...at, uncovered: one.branch.unsolved };
+  if (one.unreachable?.length)
+    return {
+      ...at,
+      uncovered: `${one.unreachable.join(', ')} is the trigger's own input and the rehearsal cannot vary it`,
+    };
+  const emb = embedderFor(walk.load, { seed: walk.seed, profile: walk.profile });
+  // a demand on the graph's own input is met by firing with a patched input, not by a stub
+  let fired = walk.input;
+  for (const patch of [...steer.pre.input, ...(one.input ?? [])]) fired = setPath(fired, patch.path, patch.value);
+  const report = await emb.fire(walk.t.doc, fired, walk.request, {
+    stubs: { ...steer.downstream, ...steer.pre.stubs, ...one.stubs },
+  });
+  return { ...at, settled: settle(report, sw, one.branch.to) };
+}
+
+/** The graph one node of a spec runs, named directly or through the binding that meets it. */
+function graphAt(emb: Embedder, spec: { nodes: Record<string, unknown> }, segment: string): string | undefined {
+  const node = spec.nodes?.[segment] as Record<string, unknown> | undefined;
+  const handler = typeof node?.handler === 'string' ? node.handler : undefined;
+  if (!handler) return undefined;
+  return handler.startsWith('graph:') ? handler.slice('graph:'.length) : bindingGraph(emb, handler);
 }
 
 /** The graph document a switch belongs to: the trigger's own graph, or the one its enclosing call runs. */
@@ -265,11 +324,8 @@ function graphOf(emb: Embedder, t: Loaded<TriggerDoc>, sw: FoundSwitch): string 
     bindingGraph(emb, `${emb.scope.canon(t.doc.fire.run.split('#')[0])}#${t.doc.fire.run.split('#')[1]}`) ??
     t.doc.fire.run;
   graph = emb.scope.canon(graph);
-  for (const seg of sw.prefix) {
-    const n = spec.nodes?.[seg] as Record<string, unknown> | undefined;
-    const handler = typeof n?.handler === 'string' ? n.handler : undefined;
-    if (!handler) continue;
-    const ref = handler.startsWith('graph:') ? handler.slice('graph:'.length) : bindingGraph(emb, handler);
+  for (const segment of sw.prefix) {
+    const ref = graphAt(emb, spec, segment);
     if (!ref) continue;
     graph = emb.scope.canon(ref);
     try {
