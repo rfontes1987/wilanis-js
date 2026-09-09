@@ -5,8 +5,9 @@ description: Find the next thing to work on in wilanis-js and take it from issue
 
 # Working the roadmap
 
-The roadmap is the set of RFCs under `docs/rfcs/`, tracked as issues on `wilanis/wilanis-js`. Read
-`CONTRIBUTING.md` once; this skill is the procedure.
+The roadmap is `docs/roadmap.md`: demos, each drawing on RFCs under `docs/rfcs/`, tracked as issues on
+`wilanis/wilanis-js` under the milestone of the demo that first shows them. Read `CONTRIBUTING.md` once;
+this skill is the procedure.
 
 ## 1. Find
 
@@ -14,7 +15,7 @@ The roadmap is the set of RFCs under `docs/rfcs/`, tracked as issues on `wilanis
 gh issue list -R wilanis/wilanis-js --label status:ready --no-assignee --json number,title,labels,milestone
 ```
 
-Prefer the lowest milestone number, then the task whose RFC's earlier steps are closed. If the user
+Prefer the lowest milestone (M01 before M02), then the task whose RFC's earlier steps are closed. If the user
 named an issue, use it. Never take an issue whose RFC is `status:draft`: say so and stop.
 
 ## 2. Read

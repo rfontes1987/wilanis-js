@@ -1,7 +1,6 @@
 # RFC 0000: Title
 
 - **Status:** draft | accepted | implemented | withdrawn
-- **Milestone:** the milestone this belongs to
 - **Areas:** the packages it touches (`area:core`, `area:compiler`, ...)
 - **Tracking issue:** #NNN (opened when the RFC is proposed)
 - **Depends on:** other RFCs that must land first, or none

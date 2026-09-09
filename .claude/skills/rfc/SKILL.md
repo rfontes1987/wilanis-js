@@ -33,8 +33,9 @@ lands. Show the documents an author writes as JSON against `example/`. Say what 
 ## 3. Track first
 
 Open the tracking issue with the RFC form, `gh issue create -R wilanis/wilanis-js --template rfc.yml`
-(or on GitHub): paste the Summary, choose the milestone. Its number N names the branch and goes into the
-RFC's header (`**Tracking issue:** #N`).
+(or on GitHub): paste the Summary and set the issue's milestone to the demo `docs/roadmap.md` names
+(add the RFC there if it is new). Its number N names the branch and goes into the RFC's header
+(`**Tracking issue:** #N`).
 
 ## 4. Index and propose
 
