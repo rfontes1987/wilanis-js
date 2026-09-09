@@ -634,7 +634,8 @@ the `store` baseline. The compiler's new rows are exercised through sabotaged co
 
 ## Implementation plan
 
-1. **The `store` kind in core.** Schema, `StoreDoc`, `KINDS`, `HOME`, the validate baseline, the row in
+1. **The `store` kind in core.** `store.schema.json`, `StoreDoc`, `KINDS`, `HOME`, the optional
+   `storage` boolean on `connection-kind.schema.json`, the validate baseline, the row in
    `templates/CLAUDE.md`, the `wilanis new store` scaffold. `good first issue` for the scaffold and the row.
 2. **`resolves` in core and the compiler.** The property on `$defs/field` in
    `packages/core/schemas/common.schema.json` with the path grammar in its description, the key on
