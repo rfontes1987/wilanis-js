@@ -1,6 +1,6 @@
 # RFC 0002: The `@storage` plugin: records of a shape behind a generic port
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:plugin-storage`, `area:core`, `area:runtime`
 - **Schemas:** adds `store.schema.json`; adds the optional `resolves` to `$defs/field` in `common.schema.json` and the optional `storage` to `connection-kind.schema.json` (both compatible, RFC 0008)
 - **Packages:** `@wilanis/plugin-storage`, `@wilanis/plugin-storage-memory`, `@wilanis/plugin-storage-postgres`
