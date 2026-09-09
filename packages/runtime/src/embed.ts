@@ -176,8 +176,9 @@ export class Embedder {
   ): Promise<Report | undefined> {
     if (this.stubbed || !trigger.policies?.length) return undefined;
     const args = this.guardArgs(trigger, request);
-    if (this.guard) {
-      const id = await this.guard.guard!.identify(args);
+    const identify = this.guard?.guard?.identify;
+    if (this.guard && identify) {
+      const id = await identify(args);
       if ('refuse' in id) return refused(`${this.guard.root} guard`, 'identify', id.refuse);
       Object.assign(request, id.context);
     }
@@ -301,8 +302,9 @@ export class Embedder {
     const guard = this.guard?.guard;
     if (guard?.settle && !this.stubbed && trigger.policies?.length)
       await guard.settle({ ...this.guardArgs(trigger, request), report });
-    if (report.status === 'done' && trigger.out) {
-      const t = this.types(trigger).out!;
+    const declared = trigger.out ? this.types(trigger).out : undefined;
+    if (report.status === 'done' && declared) {
+      const t = declared;
       const output = prune(report.output, t); // a closed out shape keeps only what it declares
       const bad = conforms(output, t);
       if (bad)
