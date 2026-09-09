@@ -2,6 +2,7 @@
 
 - **Status:** draft
 - **Areas:** `area:plugin-storage`, `area:core`, `area:runtime`
+- **Schemas:** adds `store.schema.json`; adds the optional `resolves` to `$defs/field` in `common.schema.json` (compatible, RFC 0008)
 - **Packages:** `@wilanis/plugin-storage`, `@wilanis/plugin-storage-memory`, `@wilanis/plugin-storage-postgres`
 - **Tracking issue:** #4
 - **Depends on:** none
@@ -319,7 +320,10 @@ call (`collection`), so one expression covers every collection of a store. Where
 from is thereby always written in the port document -- `describe` prints it, and no caller repeats it.
 
 This is a core change, and the smallest one that removes the repetition. `resolves` is a new optional
-key on `Field` in `packages/core/src/model.ts`, beside `binds` and `static`. Two sites bind variables
+key on a contract's field: `$defs/field` in `packages/core/schemas/common.schema.json`, where it sits
+beside `binds` and `static` and where its grammar is described, and `Field` in
+`packages/core/src/model.ts`, which mirrors it. The schema is the half that matters for an author,
+since `$defs/field` is `additionalProperties: false` and an editor completes against it. Two sites bind variables
 today and both assume a variable comes from a literal at the call site -- `checkTypeField` in
 `packages/compiler/src/check/inputs.ts`, which ends `if (field.binds) this.subst[field.binds] = type`,
 and `bindings()` in `packages/compiler/src/documents.ts`, which skips any field that is not
@@ -510,7 +514,10 @@ does not list; nothing to add.
 
 ### Plugin contract
 
-None. The plugin uses `root`, `docs`, `handlers`, `check` and `postLoad` as they are.
+`PluginModule` is unchanged: every plugin here uses `root`, `docs`, `handlers`, `check` and `postLoad`
+as they are, and an engine registers itself from `postLoad` rather than through a new hook. What does
+change is the *contract a port document may express*: `resolves` on a field, in
+`packages/core/schemas/common.schema.json` and `Field` in `model.ts`. See *Compatibility*.
 
 ## Compatibility
 
@@ -518,11 +525,29 @@ Additive for every existing document. One schema file is added and `KINDS` gains
 hint that lists the kinds gains a name; no existing document changes meaning. The example gains
 documents and a profile and keeps the REST binding.
 
-The one change to an existing contract is `resolves` on a native operation's input
-(`resolves` on `Field`, `packages/core/src/model.ts`): a new optional key, so every plugin that does not use it is
-unaffected, and a port document that does not carry it behaves exactly as today. IR v1 stays v1: a
-resolved `$T` is the same lowered type it would have been had the call site spelled it, so nothing
-about the intermediate representation changes shape.
+The one change to an existing contract is `resolves`, and it touches an **existing schema**, not only
+the TypeScript. A contract's field is `$defs/field` in `packages/core/schemas/common.schema.json`,
+which is `additionalProperties: false`, so a port document carrying `resolves` is refused by
+validation until the property is declared there beside `binds` and `static`. `Field` in
+`packages/core/src/model.ts` and that `$def` mirror each other, as every kind's interface and schema
+do, and `validate.ts` joins them.
+
+Under RFC 0008 this is a **compatible** change: a new optional property, so every document that
+validates today still validates, and the schema is edited in place at the address `main` serves. It
+does not open `schemas-v2`. It does mean this RFC is one of the accepted RFCs that still changes a
+schema, which is what 1.0 waits on -- the freeze comes after the last such change, not before it, and
+the release gate refuses a publish until `schemas-v1` is tagged.
+
+Two smaller consequences of editing the shared `$def`. `$defs/field` is referenced by both
+`shape.schema.json` and `port.schema.json`, so `resolves` becomes syntactically legal on a shape's
+field, where it means nothing; that is the looseness `binds` already carries ("Native contracts only"
+is enforced by its description and by the checker, not by the schema), and this RFC follows the
+existing rule rather than tightening it -- splitting `$defs/field` into a shape field and a contract
+field is its own change and its own RFC. And the property's description in the schema is where the
+path grammar is written down, since the schema is what an editor completes against.
+
+IR v1 stays v1: a resolved `$T` is the same lowered type it would have been had the call site spelled
+it, so nothing about the intermediate representation changes shape.
 
 ## Tests
 
@@ -562,8 +587,11 @@ the `store` baseline. The compiler's new rows are exercised through sabotaged co
 
 1. **The `store` kind in core.** Schema, `StoreDoc`, `KINDS`, `HOME`, the validate baseline, the row in
    `templates/CLAUDE.md`, the `wilanis new store` scaffold. `good first issue` for the scaffold and the row.
-2. **`resolves` in core and the compiler.** The key on `Field` in `packages/core/src/model.ts`, its
-   resolution in `checkTypeField` (`check/inputs.ts`) and `bindings()` (`documents.ts`) so the checker
+2. **`resolves` in core and the compiler.** The property on `$defs/field` in
+   `packages/core/schemas/common.schema.json` with the path grammar in its description, the key on
+   `Field` in `packages/core/src/model.ts`, a case in `packages/core/test/validate.test.ts` (a port
+   document that carries it validates; one whose path is malformed does not), its resolution in
+   `checkTypeField` (`check/inputs.ts`) and `bindings()` (`documents.ts`) so the checker
    and the compiler bind `$T` and `$K` alike,
    the stubs reading the bound type, `describe` printing where a variable comes from, and the refusal
    when a port document's `resolves` names a path that is not a type reference. Its own tests in
