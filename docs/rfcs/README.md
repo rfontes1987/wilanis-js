@@ -21,11 +21,11 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0013](0013-deployment-and-profiles.md) | A deployment model: profiles, environments and what a tree needs to run | stub | Production grade |
 | [0014](0014-outcome-semantics.md) | Outcome semantics: refusals, failures and faults, end to end | stub | Production grade |
 | [0015](0015-tenant-and-resource-scoping.md) | Tenant and resource scoping as a provenance rule | stub | The AI advantage |
-| [0016](0016-capability-aware-compilation.md) | Capability-aware compilation | stub | The AI advantage |
+| [0016](0016-capability-aware-compilation.md) | Capability-aware compilation: what a tree requires against what an environment permits | stub | The AI advantage |
 | [0017](0017-migration-planner.md) | Migrations derived from store declarations | stub | The AI advantage |
 | [0018](0018-scenario-generation.md) | Scenario generation from the branch solver | stub | The AI advantage |
 | [0019](0019-diagnostics-for-repair-loops.md) | Diagnostics designed for an agent's repair loop | stub | The AI advantage |
-| [0020](0020-security-model.md) | The security model | stub | 1.0: published |
+| [0020](0020-security-model.md) | The security model: what is guaranteed, what is enforced, what is the application's | stub | 1.0: published |
 | [0021](0021-higher-level-constructs.md) | Higher-level constructs: state machines and resources | stub | Ecosystem |
 | [0022](0022-storage-engines.md) | More storage engines: SQLite, MySQL, and declared capabilities | stub | Ecosystem |
 | [0023](0023-adapters.md) | Adapters: search, cache, email, payment | stub | Ecosystem |
