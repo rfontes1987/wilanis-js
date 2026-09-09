@@ -15,6 +15,9 @@ import type { BlobHandle, BlobScope, BlobStore } from '@wilanis/core';
 
 const ID = /^[0-9a-f-]{36}$/;
 
+/** A directory named against a root, unless it is already absolute. */
+const absoluteOr = (root: string, dir: string) => (isAbsolute(dir) ? dir : resolve(root, dir));
+
 export class FileBlobStore implements BlobStore {
   /** Every handle this store holds, by id: the size counted as it was written. */
   private held = new Map<string, BlobHandle>();
@@ -22,11 +25,7 @@ export class FileBlobStore implements BlobStore {
 
   /** `dir` relative to `root` or absolute; absent, a fresh directory under the system temp dir. */
   constructor(root: string, dir?: string) {
-    this.dir = dir
-      ? isAbsolute(dir)
-        ? dir
-        : resolve(root, dir)
-      : join(tmpdir(), `wilanis-blobs-${process.pid}-${randomUUID().slice(0, 8)}`);
+    this.dir = dir ? absoluteOr(root, dir) : join(tmpdir(), `wilanis-blobs-${process.pid}-${randomUUID().slice(0, 8)}`);
     mkdirSync(this.dir, { recursive: true });
   }
 
