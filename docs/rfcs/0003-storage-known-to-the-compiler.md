@@ -84,8 +84,7 @@ A data graph reads the store the way RFC 0002 shows, with the filter it declares
     "store": "@monitor/data/entries.store.json",
     "collection": "entries",
     "where": { "method": "{{in.method}}", "ua": { "has": true } },
-    "order": [{ "by": "url" }],
-    "type": "@monitor/domain/Entry.shape.json"
+    "order": [{ "by": "url" }]
   }
 }
 ```
@@ -119,7 +118,8 @@ it: a column, unique, reference or index the declaration has and the table lacks
 refuses, with reason `drift`, when the database holds something the declaration would destroy: a column of
 another type or nullability, a unique or a reference existing rows violate, a required column with no
 default that existing rows would have to receive. The start stops there, as it does for any required step.
-The memory engine's `ensure` still answers at once: there is nothing to reconcile.
+The memory engine's `ensure` still answers at once: there is nothing to reconcile. Which of these
+rules an engine can honour is its own to declare and refuse, as RFC 0002 splits them.
 
 ## Reference
 
@@ -160,9 +160,11 @@ scaffold that writes none of them is complete.
 
 ### Ports, operations and kinds granted
 
-None new. RFC 0002 grants `@storage/store.port.json` (`get`, `find`, `count`, `put { record }`, `patch { key,
-changes }`, `remove`, `newKey`), `@storage/storage.port.json#ensure`, `@storage/storage.connection-kind.json`
-with `engine: memory | postgres`, and `@storage/Order.shape.json`. This RFC widens `ensure` in place:
+None new. RFC 0002 grants `@storage/store.port.json` (`get`, `find`, `count`, `put { record, replace }`,
+`patch { key, changes }`, `remove`, `newKey`), `@storage/storage.port.json#ensure` and
+`@storage/Order.shape.json`; the connection kinds belong to the engine plugins
+(`@wilanis/plugin-storage-memory`, `@wilanis/plugin-storage-postgres`), and no call site names a record
+type -- `$T` and `$K` are resolved from the store document. This RFC widens `ensure` in place:
 
 - its description says it adds what is missing to a collection that exists, and refuses `drift` for what it
   would have to destroy or change;
@@ -186,11 +188,12 @@ plugin's semantics, judged where `@auth` judges session writes against the sessi
 `assignable` and `typeAt` from `@wilanis/core` for every type question, reads the store through
 `scope.get('store', path)`, and types a read value with `scope.valueRead` and the graph's own resolver.
 
-What RFC 0002 already judges is not repeated here: X201 (`of` is a core shape without `blob`), X202 (`key` is a
-required string field), X203 (connection settings fit the engine), X204 (a call's `store`, `collection` and
-`type`), X205 (the store's connection kind), R001 and L0nn on the store's references, D008 on its place. Nor is
-`put`: its `record` is `$T`, bound by `type`, so `checkInputs` in `packages/compiler/src/check/inputs.ts` already
-holds a record to the whole shape (G004, G005) and nothing here relaxes that.
+What RFC 0002 already judges is not repeated here: X201 (`of` is a core shape), X202 (`key` is a required
+field of it), X203 (the connection is of a kind an engine grants), X204 (a call's `store` and `collection`),
+X205 (the store's collection names), what each engine refuses in its own band (X22x for postgres), R001 and
+L0nn on the store's references, D008 on its place. Nor is `put`: its `record` is `$T`, resolved from the
+store, so `checkInputs` in `packages/compiler/src/check/inputs.ts` already holds a record to the whole shape
+(G004, G005) and nothing here relaxes that.
 
 Compiler rules extend `checkStore` in `packages/compiler/src/check/contracts.ts` (RFC 0002), family C
 ("connections, settings and stores"); when the module passes the 300-line house rule they move together to
@@ -202,9 +205,9 @@ the next free in the family (the families stand at A006 B008 C002 D010 G013 L008
 | C0nn | `checkStore` | a name in `unique`, `indexes`, `refs` or `defaults` is not a field of the shape | `wilanis describe <shape>` |
 | C0nn | `checkStore` | a `defaults` value is not assignable to its field's type, or is given for the key | `write a literal of type <type>; a key is never defaulted` |
 | C0nn | `checkStore` | a `refs` entry names a collection this store does not declare | `a reference stays within one store; declare the collection here, or read it by a second get` |
-| C0nn | `checkStore` | a `refs` field is not a required string, the type every key has (X202) | `<field> is <type>; a key is a required string` |
+| C0nn | `checkStore` | a `refs` field's type is not the type of the referenced collection's key | `<field> is <type>; <collection> is keyed by <type>` |
 | C0nn | `checkStore` | a `refs` field is the collection's own key, or a `unique` or `indexes` list repeats a field | `a key is unique already; a constraint names each field once` |
-| C0nn | `checkStore` | two collections of one store are named alike ignoring case | `collection names become table names; keep them distinct in lower case` |
+| C0nn | `checkStore` | a `unique`, `indexes` or `refs` entry names a field an engine cannot constrain | `wilanis describe <the connection's kind>` |
 
 Plugin rules live in `packages/plugin-storage/src/rules.ts`, the plugin's `check`, given `PluginCheckContext`
 (`packages/core/src/plugin.ts`), continuing RFC 0002's table. They walk every run and map node of every graph

@@ -22,8 +22,11 @@ engine lacks something.
 
 ## Sketch
 
-`@storage/storage.connection-kind.json` is RFC 0002's. This RFC adds `sqlite.connection-kind.json` and
-`mysql.connection-kind.json`, and gives every storage connection kind a `capabilities` block:
+RFC 0002 makes each engine its own plugin granting its own connection kind, so this RFC adds two
+packages, `@wilanis/plugin-storage-sqlite` and `@wilanis/plugin-storage-mysql`, rather than two values
+of an enum: each implements the `Engine` interface `@wilanis/plugin-storage` exports, registers itself
+in `postLoad`, and passes the shared suite. What is genuinely new here is the `capabilities` block
+every storage connection kind gains:
 
 ```json
 "capabilities": { "transactions": true, "returning": true, "skipLocked": false, "json": true,
@@ -35,7 +38,8 @@ refuses: an `atomic` graph (RFC 0004) over an engine without transactions; a que
 without `skipLocked`; a `unique` with a `where` without partial indexes; and so on, each with the hint to
 change the engine or the declaration. SQLite ships with `better-sqlite3` behind Kysely's dialect, in the same
 package, since the point is zero setup for development and `rehearse` gets a real store to run against.
-MySQL follows when someone needs it.
+MySQL follows when someone needs it. Because an engine is already a package, the work of this RFC is
+the capability vocabulary and the rules over it, not the packaging.
 
 ## Checker rules, tests, implementation plan
 
@@ -43,8 +47,8 @@ Written when this RFC is expanded to a full spec.
 
 ## Compatibility
 
-Additive: connection kinds under the plugin's `docs/`, and a `capabilities` block on the connection kind
-schema the plugin already grants.
+Additive: two packages, each with its connection kind under its own `docs/`, and a `capabilities` block
+on the storage connection kinds RFC 0002's engines already grant.
 
 ## Drawbacks and alternatives
 
@@ -55,8 +59,9 @@ PostgreSQL features the first engine needs.
 
 ## Open questions
 
-- Does SQLite become the store `rehearse` uses by default, replacing the stubbed store of RFC 0002, or only
-  an option?
+- RFC 0002 settles that `rehearse` reaches no non-pure node, so a real store never backs a rehearsal.
+  Does anything here reopen that -- a `wilanis run` against a throwaway SQLite file is not rehearsal and
+  needs no rule, but is there a case for a command between the two?
 - Are capabilities declared by the connection kind (per engine) or discovered from the connection at
   `postLoad` (per server version)?
 - Is a MySQL dialect worth its test matrix before anyone asks, or does it wait for a contributor?
