@@ -1,6 +1,6 @@
 # RFC 0007: Invariants: what must hold, declared once and judged by the checker
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:core`, `area:compiler`, `area:runtime`, `area:view`
 - **Tracking issue:** #9
 - **Depends on:** none for access invariants (class 1); RFC 0002 (storage) for the examples of field
@@ -22,8 +22,9 @@ and a `refuse` node the compiler synthesises.
 ## Motivation
 
 The example gates every write of the monitor feature with `@access/edge/can-record.policy.json`. It
-does so trigger by trigger: six triggers each attach `employees-only` and `can-record`. Nothing in the
-tree says that this is a rule rather than six coincidences. An agent adding `PATCH /monitor/{id}/method`
+does so trigger by trigger: five triggers each attach `employees-only` and `can-record`, and a sixth
+operation, `#record`, is gated only because the two that reach it are. Nothing in the tree says that this
+is a rule rather than five coincidences and a piece of luck. An agent adding `PATCH /monitor/{id}/method`
 that fires `monitor.port.json#update` and forgets the policies produces a tree `wilanis check` accepts.
 The write is public, and the only thing that would catch it is a human reading the trigger.
 
@@ -149,7 +150,7 @@ invariant
   description  string, required
   label        string
   access       object            exactly one of access | holds
-    over       opRef[] | path[]  domain port operations, or a domain port path meaning every operation of it; unique, at least one
+    over       opRef[]           domain port operations; unique, at least one
     requires   object            at least one of:
       policy   path              a policy every reaching trigger attaches
       proves   string[]          request.* paths (the policy schema's `proves` pattern) some attached policy proves
@@ -170,10 +171,32 @@ case the `access` form with `requires.proves: ["request.principal"]`.
 
 No existing schema changes.
 
+**An include's invariants bind the host.** The loader walks an include's `features/` as if local and marks
+each document `included`; an invariant among them is judged with the rest, over the host's triggers. This is
+what lets a library say what it requires rather than describe it in a README -- `@wilanis/access` shipping
+"sign-in is public, refresh is signed in" is a rule the host cannot silently drop, and the host that reaches
+those ports is held to it. The exemption is I003 alone (above): an include may carry a rule this host does
+not exercise without being wrong.
+
+**`proves` stays a static list of paths.** It is a compile-time claim, not a run-time one: A001 judges each
+entry is a `request.*` path and A006 lets a resolver lean on it, so I001 can be decided without running
+anything. Naming a graph there -- to compute the required proofs from a store or an identity provider --
+would make both undecidable, and the invariant would assert something the checker cannot see. Dynamic access
+is already expressible where it belongs: a policy's `decide.run` names a domain port operation, and the
+binding that meets it may be a graph reading roles from a store, an HTTP directory or an IdP. The invariant
+constrains the wiring -- that a policy proving `request.principal` gates every write -- while the policy
+behind it decides the answer, as dynamically as its binding likes.
+
 ### Ports, operations and kinds granted
 
 None. The guard is lowered to `@std/object.port.json#make` and `@std/outcome.port.json#refuse`, both of
-which exist. The reason word `invariant` is reserved: a `refuse` node an author writes with
+which exist. There is one reason word, `invariant`, and not a pair (`invariant` / `invariant_in`) telling
+a trigger whether the value was the caller's or the tree's. Which side a value came from is the tree's
+knowledge, not the caller's: a kind that wants 422 for one and 500 for the other reads the guarded site
+from the trace or the report, and a tree that wants to say something different maps the one word to what
+it means. Two words would put the shape of the graph into the vocabulary every trigger must map, and T005
+would then hold a trigger to a distinction it did not make. The reason word `invariant` is reserved: a
+`refuse` node an author writes with
 `"reason": "invariant"` is refused (I006), so that a mapped `invariant` always means a guard.
 
 ### Checker rules
@@ -200,7 +223,7 @@ for each path, some attached policy's `proves` holds it or a path above it, by `
 |---|---|---|---|
 | I001 | `check/invariants.ts`, against the trigger's file, at `policies` | a trigger reaches an operation an access invariant covers, under some profile, and no attached policy satisfies `requires`; the message names the invariant, the operation, and the path it was reached through when not fired directly | `attach "<policy>" under policies` (or `attach a policy whose proves lists "<path>"`), `or take <op> out of the invariant's over` |
 | I002 | `check/invariants.ts`, against the invariant, at `access/over/<i>`, `access/requires/proves/<i>` or `holds/on` | `over` names a native port or operation, or a port path that is not a domain port; `proves` names a path that is not `request.*` the guard or a kind hands (the A001 judgement in `PolicyCheck.checkProves`, reused); `on` names an edge shape or a non-shape. An unknown path is R001 through `judge.opAt`, `scope.get`, and visibility is L005 through `judge.visible` | `an invariant gates domain ports; a native port is reached through a binding` / `wilanis describe <guard plugin>` / `an invariant holds over core shapes; the edge is judged by the trigger` |
-| I003 | `check/invariants.ts`, against the invariant, at `access/over` or `holds/on` | no trigger reaches any operation of `over` under any profile, or no site makes or takes the shape of `on`: the invariant constrains nothing, like G008 for an unread node or T006 for a dead reason | `remove it, or name what a trigger reaches` / `remove it, or name a shape a graph makes or takes` |
+| I003 | `check/invariants.ts`, against the invariant, at `access/over` or `holds/on` | no trigger reaches any operation of `over` under any profile, or no site makes or takes the shape of `on`: the invariant constrains nothing, like G008 for an unread node or T006 for a dead reason. **A document the loader marked `included` is exempt**: an include ships rules for operations a host may or may not reach, and a library is not wrong for carrying a rule this host does not exercise | `remove it, or name what a trigger reaches` / `remove it, or name a shape a graph makes or takes` |
 | I004 | `check/invariants.ts`, against the invariant, at `holds/when` | the rule does not parse (`expr.parse`) or does not type-check against the shape's fields as inputs (`expr.check` with `Inputs` built from `scope.types.ref(on).fields`, each optional field optional); the message is the `ExprError` | `the roots are the shape's fields: <names>` |
 | I005 | `check/invariants.ts`, against the graph, at `nodes/<id>` | a site whose every read is literal evaluates the rule to false (`expr.evaluate` over the literal object): a compile-time violation | `the value contradicts '<label>' (<file>): <rule>` |
 | I006 | `check/graph-nodes.ts`, against the graph, at `nodes/<id>/in/reason` | a `refuse` node's static `reason` is `invariant`, a word reserved for guards | `choose another word; 'invariant' is what a guard the compiler lowers refuses with` |
@@ -259,6 +282,12 @@ The reason `invariant` joins the reasons reachable from an operation: `graphRefu
 adds `{ reason: 'invariant', file: graph, node: id }` for each guarded site in a graph it walks, so T005
 holds every trigger reaching a guarded site to map `invariant` and T006 refuses mapping it where nothing
 is guarded. A proved site adds nothing: proving an invariant relieves the trigger of mapping it.
+
+The reason crosses a nested call the way every other reason does, and this RFC adds no walk of its own:
+`refusalsReachable` follows a `call` node into the graph its operation is bound to, so a guard lowered
+deep in a data graph is a reason at the trigger that reaches it, through however many domain operations
+lie between. That is what makes the guard honest -- a caller is told `invariant` by the same mechanism
+that tells them any declared refusal -- and it is why nothing needs to be mapped twice.
 
 **Rehearsal.** A guard is a switch, so the branch solver (`packages/runtime/src/solve.ts`) inverts its
 rule the way it inverts any rule and the walk (`rehearse.ts`) tries both branches; nothing new is solved.
@@ -401,23 +430,9 @@ better stated once against a lifecycle (`pending → paid → refunded`, RFC 002
 Nothing in this RFC forecloses it: the document kind has room for a third form, and sites, proof and
 guards apply to it unchanged.
 
-## Open questions
+## Decided during implementation
 
-Before `accepted`:
-
-1. The reason word. `invariant` is proposed; the http kind will map it to 422 at a taken site (the
-   caller's value) and 500 at a made site (the tree's own translation). Should the compiler hand the
-   kind two reasons (`invariant` and `invariant_in`), or one word and the tree decides?
-2. Whether `over` may name a whole domain port (every operation) or must list operations. The example
-   wants the writes only, so listing is the common case; a whole port is a convenience that makes a
-   later `list` operation gated by accident. Proposed: operations only, drop the port form.
-3. Whether an include's invariants bind the host. Proposed: yes, since an include's ports are reached by
-   the host's triggers, and a library that ships "sign-in is public, refresh is signed in" is exactly
-   what `@wilanis/access` should be able to say.
-
-During implementation:
-
-4. How far narrowing goes: the implication table (`>` proves `>=`, `==` a literal proves `!=` another)
+1. How far narrowing goes: the implication table (`>` proves `>=`, `==` a literal proves `!=` another)
    is small on purpose. Widen it only with a failing example.
-5. Whether `describe <graph>` should print the guards as nodes. Proposed: yes, marked `(guard)`, so a
-   reader of the CLI sees what the viewer shows.
+2. Whether `describe <graph>` should print the guards as nodes. Yes, marked `(guard)`, so a reader of the
+   CLI sees what the viewer shows.
