@@ -42,17 +42,35 @@ function shower(scope: Scope) {
   };
 }
 
+/** One input a port's operation accepts: a type parameter is shown as `type`, and a static one says so. */
+function acceptsLine(
+  name: string,
+  field: { type: unknown; required?: boolean; enum?: string[]; binds?: string; static?: boolean; description?: string },
+  showType: (spec: unknown) => string,
+): string {
+  const optional = field.required === false ? '?' : '';
+  const type = field.type === 'type' ? 'type' : showType(field.type);
+  const isStatic = field.static || field.type === 'type' ? '  (static)' : '';
+  const binds = field.binds ? ` binds ${field.binds}` : '';
+  const allowed = field.enum ? ` ∈ ${field.enum.join('|')}` : '';
+  const says = field.description ? `  -- ${field.description}` : '';
+  return `    in  ${name}${optional}: ${type}${isStatic}${binds}${allowed}${says}`;
+}
+
+/** What an operation says about itself: whether it is pure, may refuse, or holds something until stopped. */
+function operationLine(name: string, op: { pure?: boolean; refuses?: unknown; holds?: boolean; description?: string }) {
+  const pure = op.pure ? '  (pure)' : '';
+  const refuses = op.refuses ? '  (refuses on purpose)' : '';
+  const holds = op.holds ? '  (holds until stopped)' : '';
+  return `#${name}${pure}${refuses}${holds}: ${op.description}`;
+}
+
 /** A port: every operation, what it accepts and what it answers. */
 function portLines(doc: Loaded, showType: (spec: unknown) => string): string[] {
   const lines: string[] = [];
   for (const [name, op] of Object.entries((doc.doc as PortDoc).operations)) {
-    lines.push(
-      `#${name}${op.pure ? '  (pure)' : ''}${op.refuses ? '  (refuses on purpose)' : ''}${op.holds ? '  (holds until stopped)' : ''}: ${op.description}`,
-    );
-    for (const [k, f] of Object.entries(op.accepts ?? {}))
-      lines.push(
-        `    in  ${k}${f.required === false ? '?' : ''}: ${f.type === 'type' ? 'type' : showType(f.type)}${f.static || f.type === 'type' ? '  (static)' : ''}${f.binds ? ` binds ${f.binds}` : ''}${f.enum ? ` ∈ ${f.enum.join('|')}` : ''}${f.description ? `  -- ${f.description}` : ''}`,
-      );
+    lines.push(operationLine(name, op));
+    for (const [field, accepts] of Object.entries(op.accepts ?? {})) lines.push(acceptsLine(field, accepts, showType));
     if (op.returns) lines.push(`    returns ${showType(op.returns)}`);
   }
   return lines;
@@ -119,33 +137,66 @@ function guardLines(d: TriggerKindDoc, showType: (spec: unknown) => string): str
 
 /** A shape: the document, and who makes or writes values of it. */
 function shapeLines(doc: Loaded, scope: Scope, load: LoadResult): string[] {
-  const lines: string[] = [];
-  lines.push(JSON.stringify(doc.doc, null, 2));
-  // who makes or writes values of this shape: every node or delegation whose static `type` names it, with the keys it gives --
-  // for a session shape, the link from each attribute to the operation that fills it
-  const writers: string[] = [];
-  const literal = (v: unknown) =>
-    v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v as Record<string, unknown>) : [];
-  const note = (file: string, where: string, run: string, given: Record<string, unknown> | undefined) => {
-    // a `type` field naming the shape (object#make, session#set), or an input the contract declares as the shape (issue's attributes)
-    const keys: string[] = [];
-    let hit = typeof given?.type === 'string' && scope.canon(given.type) === doc.path;
-    if (hit) keys.push(...literal(given?.values), ...literal(given?.value));
-    const o = scope.op(run);
-    if (typeof o !== 'string')
-      for (const [k, f] of Object.entries(o.op.accepts ?? {}))
-        if (typeof f.type === 'string' && scope.canon(f.type) === doc.path && given?.[k] !== undefined) {
-          hit = true;
-          keys.push(...literal(given[k]));
-        }
-    if (hit) writers.push(`    ${file}#${where}  via ${run}${keys.length ? `  (${keys.join(', ')})` : ''}`);
-  };
-  for (const g of load.registry.all('graph'))
-    for (const n of g.doc.nodes) if ('run' in n) note(g.path, n.id, n.run, n.in);
-  for (const b of load.registry.all('binding'))
-    for (const [name, op] of Object.entries(b.doc.operations)) if (op.run) note(b.path, name, op.run, op.in);
+  const lines = [JSON.stringify(doc.doc, null, 2)];
+  const writers = [...graphWriters(load, doc.path, scope), ...bindingWriters(load, doc.path, scope)];
   if (writers.length) lines.push('made or written by (the attributes each gives):', ...writers);
   return lines;
+}
+
+/** Every node of every graph that makes or writes values of this shape. */
+function graphWriters(load: LoadResult, shape: string, scope: Scope): string[] {
+  const out: string[] = [];
+  for (const graph of load.registry.all('graph'))
+    for (const node of graph.doc.nodes) {
+      if (!('run' in node)) continue;
+      const said = writerLine({ file: graph.path, where: node.id, run: node.run, given: node.in }, shape, scope);
+      if (said) out.push(said);
+    }
+  return out;
+}
+
+/** Every binding operation that makes or writes values of this shape. */
+function bindingWriters(load: LoadResult, shape: string, scope: Scope): string[] {
+  const out: string[] = [];
+  for (const binding of load.registry.all('binding'))
+    for (const [name, op] of Object.entries(binding.doc.operations)) {
+      if (!op.run) continue;
+      const said = writerLine({ file: binding.path, where: name, run: op.run, given: op.in }, shape, scope);
+      if (said) out.push(said);
+    }
+  return out;
+}
+
+/** The keys a literal value gives, when it is an object. */
+const keysOf = (value: unknown) =>
+  value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value as Record<string, unknown>) : [];
+
+/** Which of a call's inputs the contract declares as this shape, and the keys each was given. */
+function declaredAs(run: string, given: Record<string, unknown> | undefined, shape: string, scope: Scope) {
+  const found = scope.op(run);
+  if (typeof found === 'string') return [];
+  const keys: string[] = [];
+  for (const [name, field] of Object.entries(found.op.accepts ?? {}))
+    if (typeof field.type === 'string' && scope.canon(field.type) === shape && given?.[name] !== undefined)
+      keys.push(...keysOf(given[name]), '');
+  return keys;
+}
+
+/**
+ * Whether one call makes or writes values of this shape, and the keys it gives: a `type` field naming the shape
+ * (object#make, session#set), or an input the contract declares as the shape (issue's attributes).
+ */
+function writerLine(
+  call: { file: string; where: string; run: string; given: Record<string, unknown> | undefined },
+  shape: string,
+  scope: Scope,
+): string | undefined {
+  const byType = typeof call.given?.type === 'string' && scope.canon(call.given.type) === shape;
+  const keys = byType ? [...keysOf(call.given?.values), ...keysOf(call.given?.value)] : [];
+  const byContract = declaredAs(call.run, call.given, shape, scope);
+  if (!byType && !byContract.length) return undefined;
+  const named = [...keys, ...byContract].filter(Boolean);
+  return `    ${call.file}#${call.where}  via ${call.run}${named.length ? `  (${named.join(', ')})` : ''}`;
 }
 
 /** A policy: what decides it, what it can answer, and the triggers it gates. */
@@ -221,63 +272,77 @@ export function describe(load: LoadResult, ref: string): string {
 }
 
 /** trigger → graph → ports → bindings → graphs, as a tree. */
+/** Where one node of a graph leads: a switch's routes, a native operation, or the binding that meets it. */
+function nodeLines(node: Record<string, unknown>, indent: string, scope: Scope): { lines: string[]; into?: string } {
+  const id = String(node.id);
+  if (!('run' in node)) {
+    const rules = node.rules as { to: string }[];
+    return { lines: [`${indent}  ${id} [switch → ${[...rules.map(rule => rule.to), node.else].join(' | ')}]`] };
+  }
+  const run = String(node.run);
+  const found = scope.op(run);
+  if (typeof found === 'string') return { lines: [`${indent}  ${id} ?? ${run}`] };
+  if (found.port.native) return { lines: [`${indent}  ${id} ${run}${found.op.pure ? '' : '  (effect)'}`] };
+  const binding = scope.bindingFor(found.path);
+  const lines = [`${indent}  ${id} ${run}`];
+  if (typeof binding === 'string') return { lines: [...lines, `${indent}    ?? ${binding}`] };
+  const op = binding.doc.operations[found.opName];
+  lines.push(`${indent}    ${binding.path}#${found.opName}${op?.run ? ` → ${op.run}` : ''}`);
+  return { lines, into: op?.graph };
+}
+
+/** One graph and everything it reaches, indented; a graph already seen is named but not walked again. */
+function graphLines(ref: string, indent: string, seen: Set<string>, scope: Scope): string[] {
+  const graph = scope.get('graph', ref);
+  if (!graph) return [`${indent}?? ${ref}`];
+  const lines = [`${indent}${graph.path}`];
+  if (seen.has(graph.path)) return lines;
+  seen.add(graph.path);
+  for (const node of graph.doc.nodes) {
+    const said = nodeLines(node as unknown as Record<string, unknown>, indent, scope);
+    lines.push(...said.lines);
+    if (said.into) lines.push(...graphLines(said.into, `${indent}      `, seen, scope));
+  }
+  return lines;
+}
+
+/** The policies a trigger is gated by, in order. */
+function gateLines(trigger: Loaded<TriggerDoc>, scope: Scope): string[] {
+  const lines: string[] = [];
+  for (const use of trigger.doc.policies ?? []) {
+    const ref = policyPath(use);
+    const policy = scope.get('policy', ref);
+    const decides = policy ? ` → ${policy.doc.decide.run}` : '';
+    const given = typeof use !== 'string' && use.in ? `  given ${Object.keys(use.in).join(', ')}` : '';
+    lines.push(`  gated by ${policy?.path ?? `?? ${ref}`}${decides}${given}`);
+  }
+  return lines;
+}
+
+/** What each binding of the port a trigger fires meets it with, and the graph behind it. */
+function firesLines(trigger: Loaded<TriggerDoc>, load: LoadResult, scope: Scope): string[] {
+  const port = load.registry.get('port', load.resolve(trigger.doc.fire.run.split('#')[0]));
+  const opName = trigger.doc.fire.run.split('#')[1];
+  const lines = [`  ${trigger.doc.fire.run}`];
+  if (!port) return lines;
+  for (const binding of load.registry.all('binding').filter(one => load.resolve(one.doc.port) === port.path)) {
+    const op = binding.doc.operations[opName];
+    if (op?.graph) lines.push(...graphLines(op.graph, '    ', new Set(), scope));
+    else if (op?.run) lines.push(`    ${binding.path}#${opName} → ${op.run}`);
+  }
+  return lines;
+}
+
+/** Every trigger of the tree, everything each one reaches, and the graphs nothing reaches. */
 export function map(load: LoadResult): string[] {
   const scope = new Scope(load.registry, load.resolve);
   const lines: string[] = [];
-  const graph = (ref: string, indent: string, seen: Set<string>) => {
-    const g = scope.get('graph', ref);
-    if (!g) {
-      lines.push(`${indent}?? ${ref}`);
-      return;
-    }
-    lines.push(`${indent}${g.path}`);
-    if (seen.has(g.path)) return;
-    seen.add(g.path);
-    for (const n of g.doc.nodes) {
-      if (!('run' in n)) {
-        lines.push(`${indent}  ${n.id} [switch → ${[...n.rules.map(r => r.to), n.else].join(' | ')}]`);
-        continue;
-      }
-      const o = scope.op(n.run);
-      if (typeof o === 'string') {
-        lines.push(`${indent}  ${n.id} ?? ${n.run}`);
-        continue;
-      }
-      if (o.port.native) {
-        lines.push(`${indent}  ${n.id} ${n.run}${o.op.pure ? '' : '  (effect)'}`);
-        continue;
-      }
-      const b = scope.bindingFor(o.path);
-      lines.push(`${indent}  ${n.id} ${n.run}`);
-      if (typeof b === 'string') {
-        lines.push(`${indent}    ?? ${b}`);
-        continue;
-      }
-      const bop = b.doc.operations[o.opName];
-      lines.push(`${indent}    ${b.path}#${o.opName}${bop?.run ? ` → ${bop.run}` : ''}`);
-      if (bop?.graph) graph(bop.graph, `${indent}      `, seen);
-    }
-  };
-  for (const t of load.registry.all('trigger')) {
-    lines.push(`${t.path}  (${t.doc.kind})`);
-    for (const use of t.doc.policies ?? []) {
-      const ref = policyPath(use);
-      const p = scope.get('policy', ref);
-      lines.push(
-        `  gated by ${p?.path ?? `?? ${ref}`}${p ? ` → ${p.doc.decide.run}` : ''}${typeof use !== 'string' && use.in ? `  given ${Object.keys(use.in).join(', ')}` : ''}`,
-      );
-    }
-    const o = load.registry.get('port', load.resolve(t.doc.fire.run.split('#')[0]));
-    const opName = t.doc.fire.run.split('#')[1];
-    lines.push(`  ${t.doc.fire.run}`);
-    if (o)
-      for (const b of load.registry.all('binding').filter(b => load.resolve(b.doc.port) === o.path)) {
-        const bop = b.doc.operations[opName];
-        if (bop?.graph) graph(bop.graph, '    ', new Set());
-        else if (bop?.run) lines.push(`    ${b.path}#${opName} → ${bop.run}`);
-      }
+  for (const trigger of load.registry.all('trigger')) {
+    lines.push(`${trigger.path}  (${trigger.doc.kind})`);
+    lines.push(...gateLines(trigger, scope));
+    lines.push(...firesLines(trigger, load, scope));
   }
-  const reached = new Set(lines.filter(l => l.trim().endsWith('.graph.json')).map(l => l.trim()));
-  for (const g of load.registry.all('graph')) if (!reached.has(g.path)) lines.push(`orphan  ${g.path}`);
+  const reached = new Set(lines.filter(line => line.trim().endsWith('.graph.json')).map(line => line.trim()));
+  for (const graph of load.registry.all('graph')) if (!reached.has(graph.path)) lines.push(`orphan  ${graph.path}`);
   return lines;
 }

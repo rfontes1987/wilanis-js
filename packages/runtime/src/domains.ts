@@ -1,14 +1,3 @@
-/**
- * The little solver behind branch enumeration: what one input path must hold for a branch to be taken.
- *
- * A switch rule is a predicate over the node's inputs, written in the one expression grammar. Constraints accumulate
- * per path as a small domain (must be absent, must be present, a numeric range, a set of excluded values, a required
- * length) rather than a single value, because a rule's case is usually the conjunction of its own demand with the
- * negation of the rules before it: `n > 5` after `!(n > 10)` is the range (5, 10], which no single guessed value
- * would find.
- */
-import { expr } from '@wilanis/core';
-
 /** What one input path must hold for a branch to be taken. */
 export interface Domain {
   /** The path must be missing entirely. */
@@ -84,12 +73,15 @@ function narrowPresence(d: Domain, b: Domain): Maybe<Domain> {
     if (d.absent) return UNSAT;
     d.present = true;
   }
-  if (b.truthy !== undefined) {
-    if (d.absent) return UNSAT;
-    if (d.truthy !== undefined && d.truthy !== b.truthy) return UNSAT;
-    d.truthy = b.truthy;
-    d.present = true;
-  }
+  return b.truthy === undefined ? d : narrowTruth(d, b.truthy);
+}
+
+/** What the two constraints say about a value's truth, together. */
+function narrowTruth(d: Domain, truthy: boolean): Maybe<Domain> {
+  if (d.absent) return UNSAT;
+  if (d.truthy !== undefined && d.truthy !== truthy) return UNSAT;
+  d.truthy = truthy;
+  d.present = true;
   return d;
 }
 
@@ -118,12 +110,15 @@ function narrowBounds(d: Domain, b: Domain): Maybe<Domain> {
 /** The exact value and the membership the two constraints ask for, together. */
 function narrowValues(d: Domain, b: Domain): Maybe<Domain> {
   if (b.eq !== undefined) {
-    if (d.absent) return UNSAT;
-    if (d.eq !== undefined && JSON.stringify(d.eq) !== JSON.stringify(b.eq)) return UNSAT;
+    if (d.absent || (d.eq !== undefined && JSON.stringify(d.eq) !== JSON.stringify(b.eq))) return UNSAT;
     d.eq = b.eq;
     d.present = true;
   }
-  // membership: what the list must hold implies the list is there; what it must lack does not
+  return narrowMembers(d, b);
+}
+
+/** Membership: what the list must hold implies the list is there; what it must lack does not. */
+function narrowMembers(d: Domain, b: Domain): Maybe<Domain> {
   if (b.has) {
     if (d.absent) return UNSAT;
     d.has = [...(d.has ?? []), ...b.has];
@@ -160,17 +155,20 @@ function withinBounds(v: number, d: Domain): boolean {
 
 /** Whether a concrete value satisfies a domain's bounds and exclusions. */
 export function fits(v: unknown, d: Domain): boolean {
-  if (d.ne?.some(x => JSON.stringify(x) === JSON.stringify(v))) return false;
+  if (d.ne?.some(excluded => JSON.stringify(excluded) === JSON.stringify(v))) return false;
   if (d.truthy !== undefined && Boolean(v) !== d.truthy) return false;
   if (typeof v === 'number' && !withinBounds(v, d)) return false;
-  if (Array.isArray(v)) {
-    if (d.minLen !== undefined && v.length < d.minLen) return false;
-    if (d.maxLen !== undefined && v.length > d.maxLen) return false;
-    const holds = (x: unknown) => v.some(y => JSON.stringify(x) === JSON.stringify(y));
-    if (d.has?.some(x => !holds(x))) return false;
-    if (d.lacks?.some(holds)) return false;
-  } else if (d.has?.length) return false;
-  return true;
+  if (Array.isArray(v)) return fitsAsList(v, d);
+  return !d.has?.length;
+}
+
+/** Whether a list is of the length the domain asks for, and holds and lacks what it must. */
+function fitsAsList(list: unknown[], d: Domain): boolean {
+  if (d.minLen !== undefined && list.length < d.minLen) return false;
+  if (d.maxLen !== undefined && list.length > d.maxLen) return false;
+  const holds = (wanted: unknown) => list.some(item => JSON.stringify(wanted) === JSON.stringify(item));
+  if (d.has?.some(wanted => !holds(wanted))) return false;
+  return !d.lacks?.some(holds);
 }
 
 /** Whether a numeric range excludes every number. Integers are assumed; the grammar's literals are exact. */
