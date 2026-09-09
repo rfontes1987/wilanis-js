@@ -190,7 +190,8 @@ plugin's semantics, judged where `@auth` judges session writes against the sessi
 
 What RFC 0002 already judges is not repeated here: X201 (`of` is a core shape), X202 (`key` is a required
 field of it), X203 (the connection is of a kind an engine grants), X204 (a call's `store` and `collection`),
-X205 (the store's collection names), what each engine refuses in its own band (X22x for postgres), R001 and
+X205 to X207 (a call's arguments, collection names, and two stores over one connection), what each engine
+refuses in its own band (X22x for postgres), R001 and
 L0nn on the store's references, D008 on its place. Nor is `put`: its `record` is `$T`, resolved from the
 store, so `checkInputs` in `packages/compiler/src/check/inputs.ts` already holds a record to the whole shape
 (G004, G005) and nothing here relaxes that.
