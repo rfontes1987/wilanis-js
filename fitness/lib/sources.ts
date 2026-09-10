@@ -37,6 +37,30 @@ export function importsOf(text: string): string[] {
   return statementsOf(text).flatMap(specifierOf);
 }
 
+/** One import statement: the module it names, and the names it binds from it. */
+export interface NamedImport {
+  from: string;
+  names: string[];
+}
+
+/**
+ * Every import statement of a file's text as the module it names and the names it binds. A claim asks this
+ * rather than `importsOf` when the source matters: two packages may export one name for different things, so
+ * a rule about `readAll` from `@wilanis/core` must not judge the engine's own `readAll`.
+ */
+export function namedImportsOf(text: string): NamedImport[] {
+  return statementsOf(text).flatMap(statement =>
+    statement.type === 'ImportDeclaration' ? [{ from: statement.source.value, names: boundNames(statement) }] : [],
+  );
+}
+
+/** The names one import statement binds, as the exporting module spells them; a default or a namespace binds none. */
+function boundNames(statement: Extract<Statement, { type: 'ImportDeclaration' }>): string[] {
+  return statement.specifiers.flatMap(specifier =>
+    specifier.type === 'ImportSpecifier' && specifier.imported.type === 'Identifier' ? [specifier.imported.name] : [],
+  );
+}
+
 /** An exported declaration: the name it binds, and whether a doc comment leads it. */
 export interface Export {
   name: string;

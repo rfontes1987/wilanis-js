@@ -72,7 +72,12 @@ export interface Serving {
   root: string;
 }
 
-/** The whole of a stream, for a codec that needs the body entire (JSON, text, a form). A blob codec never calls this. */
+/**
+ * The whole of a stream, for a codec that needs the body entire (JSON, text, a form). A blob *codec* never
+ * calls this -- it streams, so the bytes stay in the registry -- and the one operation whose answer is a whole
+ * file as text, `@blob/text#read`, does. Who may is held by
+ * `fitness/a-blob-is-never-read-whole.fitness.ts`.
+ */
 export async function readAll(source: Readable): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of source) chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer));
