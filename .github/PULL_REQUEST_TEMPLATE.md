@@ -1,6 +1,6 @@
 <!-- What changed and why, in the imperative, as the commit says it. -->
 
-**Closes:** #NNN <!-- the task issue, so merging closes it and the board moves; "Serves:" instead for a tracking issue that outlives the pull request; "none" for a fix that changes no rule -->
+Closes #NNN <!-- plain and unbolded, or GitHub links nothing and merging closes nothing; **Serves:** #NNN instead for a tracking issue that outlives the pull request, and "none" for a fix that changes no rule -->
 
 - [ ] `npm test` passes
 - [ ] Every new rule has a code, a hint and a sabotage test, as its RFC says
