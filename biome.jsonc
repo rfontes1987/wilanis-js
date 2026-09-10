@@ -10,7 +10,14 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
-    "includes": ["packages/*/src/**/*.ts", "packages/*/test/**/*.ts", "libraries/*/test/**/*.ts", "packages/*/bin/*.js"]
+    "includes": [
+      "packages/*/src/**/*.ts",
+      "packages/*/test/**/*.ts",
+      "libraries/*/test/**/*.ts",
+      "packages/*/bin/*.js",
+      "fitness/**/*.ts",
+      "vitest.config.ts"
+    ]
   },
   "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 120 },
   "javascript": {

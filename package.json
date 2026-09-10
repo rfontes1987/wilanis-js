@@ -18,16 +18,19 @@
   "scripts": {
     "build": "tsc -b",
     "lint": "biome check .",
+    "fitness": "tsc -p fitness && vitest run --project fitness",
     "lint:fix": "biome check --write .",
     "clean": "rm -rf packages/*/dist packages/*/tsconfig.tsbuildinfo",
-    "test": "npm run lint && npm run build && vitest run",
+    "test": "npm run lint && npm run build && tsc -p fitness && vitest run",
     "check:example": "npm run build && wilanis check example",
     "rehearse:example": "npm run build && wilanis rehearse example",
     "release": "git describe --tags --exact-match --match schemas-v1 >/dev/null 2>&1 || { echo 'release refused: 1.0 is published only from the commit tagged schemas-v1, once no accepted RFC still changes a schema (docs/roadmap.md, RFC 0008)'; exit 1; }; npm test && npm publish -w packages/engine -w packages/core -w packages/compiler -w packages/runtime -w packages/plugin-http -w packages/plugin-blob -w packages/plugin-reload -w packages/plugin-auth -w libraries/access -w packages/view"
   },
   "devDependencies": {
+    "@babel/parser": "^8.0.4",
     "@biomejs/biome": "2.5.12",
     "@types/node": "^26.0.0",
+    "jsonc-parser": "^3.3.1",
     "typescript": "^7.0.0",
     "vitest": "^5.0.0"
   },
