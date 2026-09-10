@@ -1,7 +1,7 @@
 # RFC 0028: The principles hold: four sentences of `CLAUDE.md` that nothing held, and the two claims not to write
 
-- **Status:** draft
-- **Areas:** `area:process`, `area:core`, `area:compiler`, `area:plugin-blob`
+- **Status:** accepted
+- **Areas:** `area:process`, `area:core`, `area:compiler`
 - **Tracking issue:** #111
 - **Depends on:** RFC 0027
 
@@ -9,9 +9,10 @@
 
 Four more fitness functions under `fitness/`, each holding a sentence `CLAUDE.md` states under "Principles"
 and nothing enforces today: a refusal says how to fix it (`hint` becomes required on `Refusal` and `Refuser`,
-and 56 refusals that pass none are given one); a schema describes every property (90 properties under
+and 56 refusals that pass none are given one); a schema describes every property (95 properties under
 `packages/core/schemas/` are described); a blob is never read whole outside the codecs that need a body
-entire (one call in `@wilanis/plugin-blob` is fixed or named); and only the guard knows who is calling (no
+entire (the one call in `@wilanis/plugin-blob`, `@blob/text#read`, is named with its reason); and only the
+guard knows who is calling (no
 other plugin and no trigger kind spells `principal`, `session`, `challenge`, `credential` or `policy`). One
 existing claim, `a-fitness-function-is-one-claim`, gains a rule about `fitness/lib/`: an export a claim does
 not name is a reader nobody reads. Two claims that were proposed alongside these are recorded here as
@@ -41,19 +42,31 @@ unguarded today:
   `Refuser` in `packages/compiler/src/check/judge.ts`. Under `packages/compiler/src/check`, 46 of the 118
   `refuse(...)` calls that spell a code pass no hint (`bindings.ts` 12 of 17, `graph-nodes.ts` 9 of 10,
   `triggers.ts` 7 of 18, `graph-whole.ts` 5 of 9, `project.ts` 4 of 13); in core, 10 of the 23 refusal
-  literals do (`documents.ts` 6, `load.ts` 4). An agent in a repair loop reads `B001 operation 'x' of 'p'
-  is not bound` and is left to guess the edit.
+  literals do (`documents.ts` 6, `load.ts` 4). The 118 are every call whose first argument is a code
+  literal, in all three forms it takes: `refuse(...)`, a method call (`this.refuse`, `site.refuse`,
+  `graph.refuse`), and the curried `judge.refuser(file)(...)` -- 9 calls, `contracts.ts:47` among them,
+  which a grep for `refuse(` misses and two readers of this RFC miscounted by. An agent in a repair loop
+  reads `B001 operation 'x' of 'p' is not bound` and is left to guess the edit.
 - "Every document kind has a schema with descriptions." Under `packages/core/schemas/` and its `node/`
-  directory there are 195 properties; 116 carry no `description` of their own. 26 of those are a `$ref` to
-  a definition that describes itself, which is a description by reference; 90 are not: 78 plain
-  properties (`feature.dependsOn`, `binding.operations`, `graph.out`, every kind's own `description`
-  field) and 12 `$ref`s to a definition that says nothing either (`policy.decide.in`,
-  `port.operations.*.accepts`, `common.$defs.field.type`). 3 of the 11 `$defs` are undescribed. These are
-  the files an agent reads to write a document.
-- "Never buffer a blob whole beside the store." `readAll` in `packages/core/src/plugin.ts` says in its own
-  doc comment "A blob codec never calls this." `packages/plugin-blob/src/index.ts:126`, the handler of
-  `@blob/text#read`, calls it on a blob opened from the store. Whether that is a violation or the one
-  operation whose answer *is* the whole text is a decision nobody has made in a place that holds.
+  directory, 19 files, there are 200 properties -- every entry of every `properties` object anywhere in a
+  file, under whatever keyword holds it (`items`, `additionalProperties`, `allOf`, `if`,
+  `dependentSchemas`, `$defs`); 121 carry no `description` of their own. 26 of those are a `$ref` to a
+  definition that describes itself, which is a description by reference; 95 are not: 83 plain properties
+  (`feature.dependsOn`, `binding.operations`, `graph.out`, every kind's own `description` field) and 12
+  `$ref`s to a definition that says nothing either -- all twelve to one of three `$defs` in
+  `common.schema.json`, `type`, `fields` and `values` (`policy.decide.in`, `port.operations.*.accepts`,
+  `shape.fields`, the `in` of every node kind). Those are the 3 of the 11 `$defs` that are undescribed, so
+  three sentences clear twelve violations. A `$ref` is resolved within the file set: `#/$defs/x` in its own
+  file, `common.schema.json#/$defs/x` or `../common.schema.json#/$defs/x` in the file of that name. These
+  are the files an agent reads to write a document.
+- "Never buffer a blob whole beside the store." The one function that reads a stream entire is `readAll`
+  in `packages/core/src/plugin.ts`, and nothing says who may call it: its doc comment, "A blob codec never
+  calls this", is about codecs, and the one caller outside the http codecs is a handler,
+  `packages/plugin-blob/src/index.ts:126` behind `@blob/text#read`, which reads a blob opened from the
+  store. That is not the comment violated; it is the comment being imprecise, and `CLAUDE.md`'s sentence
+  being held by nobody. The operation's answer *is* the whole text, so the read is right, and until now that
+  was a fact recorded nowhere that holds; this RFC names it, with its reason, in the claim's data, and
+  corrects the comment.
 - "Who is calling is the guard's business ... no kind ever checks access." True today -- outside the guard,
   `principal`, `session`, `challenge`, `credential`, `policy` appear in `packages/plugin-http/src` only in
   two comments -- and nothing keeps it so. A trigger kind that starts reading a cookie into a session is one
@@ -146,7 +159,8 @@ AssertionError: see fitness/only-the-guard-knows-who-is-calling.fitness.ts
 
 No kind and no field changes. Every `*.schema.json` under `packages/core/schemas/` and
 `packages/core/schemas/node/` gains a `description` on each property that has none and is not a `$ref` to a
-definition that has one, and the three undescribed `$defs` in `common.schema.json` gain theirs. A
+definition that has one, and the three undescribed `$defs` in `common.schema.json` (`type`, `fields`,
+`values`) gain theirs. A
 description is an annotation: validation of every document is unchanged.
 
 ### Ports, operations and kinds granted
@@ -161,9 +175,12 @@ the edit, in the form the rules that already carry one use.
 
 ### Runtime behaviour
 
-None, unless the open question on `@blob/text#read` is decided as a fix, in which case that handler
-changes and nothing else does. `formatRefusal` in `packages/core/src/registry.ts` prints the `→` line
-unconditionally once the field is required.
+None. `@blob/text#read` keeps reading the file whole: its answer is a string, and the string is the value
+the caller asked for, so there is no copy beside the store; `readAll`'s doc comment in
+`packages/core/src/plugin.ts` is corrected from "a blob codec never calls this" to say that a blob *codec*
+never calls it and the one operation that answers a file as text does. No `limit` is added to `read`.
+`formatRefusal` in `packages/core/src/registry.ts` prints the `→` line unconditionally once the field is
+required.
 
 ### Discoverability
 
@@ -187,9 +204,9 @@ whether the claim holds on `main` at the time of writing, which the implementing
 
 | File | Claim | Data | Today |
 |---|---|---|---|
-| `a-refusal-says-how-to-fix-it` | `Refusal` in `packages/core/src/registry.ts` and `Refuser` in `packages/compiler/src/check/judge.ts` do not declare `hint` optional | `SHAPES` (the two declarations and the member) | fails: both declare `hint?`; 46 of 118 `refuse(` calls under `compiler/src/check` and 10 of 23 refusal literals in `core/src` pass none (the 12 literals in the runtime's loader and the plugins' X rules all carry one). The implementing task writes the 56 hints, then requires the member. `at` stays optional: 12 of the 23 core literals refuse a file as a whole (unreadable, of no known kind), where no path into the document exists |
-| `a-schema-describes-every-property` | every property of every `*.schema.json` under `packages/core/schemas/` and `node/` carries a `description`, or is a `$ref` to a definition that does; every `$defs` entry carries one | `SCHEMAS = ['packages/core/schemas', 'packages/core/schemas/node']` | fails: 195 properties, 90 violations (78 plain, 12 `$ref` to an undescribed definition), 3 of 11 `$defs` undescribed. The implementing task writes them |
-| `a-blob-is-never-read-whole` | under `packages/*/src`, `readAll` is imported from `@wilanis/core` only by the files the table names | `MAY_READ_WHOLE = { 'packages/plugin-http/src/codecs.ts': 'the JSON, text and form codecs need the body entire; the blob codec streams' }`, plus the entry the open question decides | fails on `packages/plugin-blob/src/index.ts` until the open question is decided; the http codecs are the only other importer |
+| `a-refusal-says-how-to-fix-it` | `Refusal` in `packages/core/src/registry.ts` and `Refuser` in `packages/compiler/src/check/judge.ts` do not declare `hint` optional | `SHAPES` (the two declarations and the member) | fails: both declare `hint?`; 46 of 118 `refuse(` calls under `compiler/src/check` and 10 of 23 refusal literals in `core/src` pass none (the 12 literals in the runtime's loader and the plugins' X rules all carry one). The implementing task writes the 56 hints, then requires the member. `at` stays optional, as settled: 12 of the 23 core literals refuse a file as a whole (unreadable, of no known kind), and a path into a document that could not be parsed is a fiction; the claim pins `hint` alone |
+| `a-schema-describes-every-property` | every property of every `*.schema.json` under `packages/core/schemas/` and `node/` carries a `description`, or is a `$ref` to a definition that does; every `$defs` entry carries one | `SCHEMAS = ['packages/core/schemas', 'packages/core/schemas/node']` | fails: 19 files, 200 properties (every entry of every `properties` object, under whatever keyword), 95 violations (83 plain, 12 `$ref` to an undescribed definition), 3 of 11 `$defs` undescribed (`common.schema.json` `type`, `fields`, `values`, which the 12 point at). A `$ref` to a described definition counts as a description, as settled: 26 properties rely on it, and the alternative repeats what `common.schema.json` says once; a `$ref` resolves in its own file, or in the file of the set its path names. The implementing task writes 86 sentences: 83 on properties, 3 on `$defs` |
+| `a-blob-is-never-read-whole` | under `packages/*/src`, `readAll` is imported from `@wilanis/core` only by the files the table names | `MAY_READ_WHOLE = { 'packages/plugin-http/src/codecs.ts': 'the JSON, text and form codecs need the body entire; the blob codec streams', 'packages/plugin-blob/src/index.ts': '@blob/text#read answers the file as a string; the string is the value, so there is no copy beside the store' }` | holds once the table names both: `plugin-http/src/codecs.ts` and `plugin-blob/src/index.ts` are the only importers today |
 | `only-the-guard-knows-who-is-calling` | no identifier and no string literal under `packages/plugin-*/src` other than the guard's, nor under `packages/runtime/src/plugins/`, is one of the guard's words | `GUARD = 'packages/plugin-auth'`, `KINDS_OF_THE_RUNTIME = 'packages/runtime/src/plugins'`, `WORDS = ['principal', 'session', 'challenge', 'credential', 'credentials', 'policy', 'policies']` | holds: `plugin-http/src` carries `policy` in two comments (`serve.ts:177`, `answer.ts:121`), which a reader of identifiers passes over. The embedder, `discovery.ts`, `stubbing.ts`, `scaffolds.ts` and the view know the words because they run, print, rehearse, scaffold and show the gate; they are outside the claim's scope by design, not exempted by data |
 | `a-fitness-function-is-one-claim` (amended) | as today, and: every export of `fitness/lib/*.ts` is imported by a `*.fitness.ts`, or is a type named in the signature of an export that is | none | holds: `Export` in `lib/sources.ts` is the one export no claim imports, and it is the return type of `exportsOf`, which `every-public-function-says-what-it-answers` imports |
 
@@ -204,7 +221,10 @@ reader nobody reads:
   walking `properties`, `items`, `additionalProperties`, `patternProperties`, `oneOf`/`anyOf`/`allOf`,
   `then`/`else`/`not` and `$defs`, with each `$ref` resolved within the set. In a new `lib/schemas.ts`.
 - `namedImportsOf(text)`: each import statement as `{ from, names }`, so a claim can ask who imports one
-  name of a package. In `sources.ts`, beside `importsOf`.
+  name *of one package*. The source matters: `packages/engine/src/sources.ts:69` exports an unrelated
+  `readAll` over a node's sources, and a claim over the bare name would refuse the engine's own callers;
+  the blob claim matches `readAll` imported from `@wilanis/core` and nothing else. In `sources.ts`, beside
+  `importsOf`.
 - `wordsOf(text)`: every identifier and every string literal of a file, comments excluded, so a claim can
   hold a vocabulary. In `sources.ts`.
 
@@ -233,13 +253,14 @@ field's shape a decision that is changed on purpose, not a line that drifts back
 The fitness functions are the tests, registered by `fitness/run.test.ts`: one test under each claim and one
 proof, "<claim> bites", over its `sabotage` cases. The cases: a `registry.ts` text declaring `hint?: string`;
 a schema with a plain undescribed property, one with a `$ref` to an undescribed definition, and an
-undescribed `$defs` entry; a file under `packages/plugin-blob/src` importing `readAll` from `@wilanis/core`;
+undescribed `$defs` entry; a file the table does not name (`packages/plugin-reload/src/index.ts`) importing
+`readAll` from `@wilanis/core`;
 a file under `packages/plugin-http/src` with the identifier `session`; a `lib/` file exporting `unused`
 that no claim imports, and one exporting a type named in an imported function's signature, which passes.
 
 The 56 hints are not tested for content: `packages/runtime/test/example.test.ts` already sabotages the
 example into every code, and `formatRefusal` prints whatever hint the rule passed. What the type holds is
-that there is one. The 90 descriptions are held the same way: `validate.ts` still validates every document
+that there is one. The 86 descriptions are held the same way: `validate.ts` still validates every document
 against the changed schemas, and `packages/core/test/validate.test.ts` still passes, which is the proof an
 annotation changed nothing else.
 
@@ -247,7 +268,8 @@ annotation changed nothing else.
 
 Every task that adds or amends a fitness function carries a `Decision: adds fitness/<file>` or
 `Decision: reconfigures fitness/<file>` line, and waits in the `decisions` environment once RFC 0027's step
-6 (#108) has landed. Tasks 2 and 4 change shipped code, not only the suite. The two `good first issue`
+6 (#108) has landed. Tasks 2 and 3 change shipped code, not only the suite; task 4 changes one doc comment
+in core and no behaviour. The two `good first issue`
 tasks of RFC 0027 were taken in-house by the maintainer; the two below are marked all the same.
 
 1. **Amend `a-fitness-function-is-one-claim`** with the `lib/` export rule and its two sabotage cases.
@@ -260,9 +282,10 @@ tasks of RFC 0027 were taken in-house by the maintainer; the two below are marke
 3. **`a-refusal-says-how-to-fix-it`**: `hint` required on `Refusal` and `Refuser`; `lib/types.ts` with
    `optionalMembersOf`; the claim. Depends on 2. `Decision: adds`.
 4. **`a-blob-is-never-read-whole`**: `namedImportsOf` in `lib/sources.ts`; the claim, with
-   `MAY_READ_WHOLE` as the open question decides it, and the `@blob/text#read` handler changed if the
-   decision is a fix. `Decision: adds`.
-5. **Write the 90 descriptions** and the three on `$defs`, then **`a-schema-describes-every-property`**:
+   `MAY_READ_WHOLE` naming the http codecs and `@blob/text#read` with their reasons; `readAll`'s doc
+   comment in `packages/core/src/plugin.ts` corrected. The handler is unchanged. `Decision: adds`.
+5. **Write the 83 descriptions** and the three on `common.schema.json`'s `$defs` (which clear the 12
+   `$ref` violations at once), then **`a-schema-describes-every-property`**:
    `lib/schemas.ts` with `propertiesOf`; the claim. One pull request, since the schemas are served from
    `main` and the claim fails until they are written. `Decision: adds`.
 6. **`only-the-guard-knows-who-is-calling`**: `wordsOf` in `lib/sources.ts`; the claim. Holds today.
@@ -340,22 +363,20 @@ places only" is a rule about trees, which the checker holds (`graph-reads.ts`, A
 should. Green on the whole suite means every sentence with a shadow still casts it; it does not mean the
 principles hold, and no claim's header should say otherwise.
 
-## Open questions
+## Decided during implementation
 
-- **`@blob/text#read`: fix or name?** `packages/plugin-blob/docs/text.port.json` already says of the port
-  "read whole as one string ... for anything larger than a value should be, prefer an operation that reads
-  the blob as rows", and the operation's answer *is* the whole text: there is no copy beside the store, the
-  string is the value the caller asked for. The recommendation is to name it in `MAY_READ_WHOLE` with that
-  reason, so `readAll`'s doc comment is corrected to "a blob *codec* never calls this; the one operation
-  that answers a file as text does". The alternative is a fix -- a static `limit` on `read`, refused beyond
-  -- which is a feature `CLAUDE.md` says to stop and ask about. Decide before `accepted`.
-- **Does `at` stay optional?** Yes as proposed: 12 refusals in core refuse a file as a whole (it cannot be
-  read; its kind is unknown), and a path into a document that could not be parsed is a fiction. The claim
-  pins `hint` alone. If the maintainer prefers `CLAUDE.md`'s sentence taken literally, `SHAPES` gains
-  `at` and the 12 gain a path of `/`; that is a `Decision: reconfigures`, not a new claim.
-- **Is a `$ref` to a described definition a description?** Yes as proposed; 26 properties rely on it, and
-  the alternative is 26 sentences repeating what `common.schema.json` says once. Decide before `accepted`.
-- **The word list.** `token` is not among the guard's words on purpose: core's expression lexer speaks of
-  tokens and a trigger kind may too. Whether `cookie` belongs there -- the http kind hands one to the guard
-  and must be able to spell it -- is settled the same way: it does not. May be decided during
-  implementation.
+None open before acceptance. The three questions this RFC raised were settled before it was accepted, each
+as recommended. `@blob/text#read` is named in `MAY_READ_WHOLE` rather than fixed: `packages/plugin-blob/
+docs/text.port.json` already says of the port "read whole as one string ... for anything larger than a
+value should be, prefer an operation that reads the blob as rows", the operation's answer *is* the whole
+text, and a static `limit` on `read` would be a feature `CLAUDE.md` says to stop and ask about; `readAll`'s
+doc comment is corrected instead. `at` stays optional and the claim pins `hint` alone: 12 refusals in core
+refuse a file as a whole (it cannot be read; its kind is unknown), and a path into a document that could not
+be parsed is a fiction. A `$ref` to a described definition counts as a description: 26 properties rely on
+it, and the alternative is 26 sentences repeating what `common.schema.json` says once.
+
+One matter may be decided during implementation, by the task that adds the claim: the word list of
+`only-the-guard-knows-who-is-calling`. `token` is not among the guard's words on purpose, since core's
+expression lexer speaks of tokens and a trigger kind may too; `cookie` is not either, since the http kind
+hands one to the guard and must be able to spell it. A word added to `WORDS` later is a
+`Decision: reconfigures`.
