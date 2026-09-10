@@ -40,6 +40,7 @@ export interface Manifest {
   name: string;
   dependencies: string[];
   devDependencies: string[];
+  files: string[];
 }
 
 /** The manifest of a package directory, with each dependency section as a sorted list of names. */
@@ -49,5 +50,6 @@ export function manifestOf(dir: string): Manifest {
     name: typeof value.name === 'string' ? value.name : dir,
     dependencies: Object.keys(record(value.dependencies) ?? {}).sort(),
     devDependencies: Object.keys(record(value.devDependencies) ?? {}).sort(),
+    files: Array.isArray(value.files) ? value.files.filter(one => typeof one === 'string') : [],
   };
 }
