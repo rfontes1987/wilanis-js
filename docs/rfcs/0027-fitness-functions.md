@@ -142,7 +142,7 @@ claim holds on `main` at the time of writing, which the implementing task confir
 | `a-kind-is-declared-once-and-mirrored` | every entry of `KINDS` has a schema file under `packages/core/schemas/`, a page in the viewer's `renderDocPage`, and, unless a plugin ships it, a row in `packages/runtime/templates/CLAUDE.md` and a home in `HOME` or the top-level list | `SHIPPED_BY_PLUGINS = ['plugin', 'trigger-kind', 'connection-kind', 'codec']`, `TOP_LEVEL = ['project', 'feature']` | holds |
 | `a-plugin-grants-files-not-objects` | every `packages/plugin-*` has `docs/plugin.json` and lists `docs` in its `files` | none | holds |
 | `tests-live-beside-what-they-test` | every `packages/*/src` has a sibling `test/`, except the packages the table says are tested through another | `TESTED_THROUGH = { compiler: 'packages/runtime/test' }` | holds |
-| `a-refusal-code-is-made-where-its-family-lives` | a string literal shaped `[A-Z]\d{3}` appears only in the directories its family letter names | `HOME = { D: core/src, runtime/src/project.ts; R L G P B T A C S: compiler/src/check; X: plugin-*/src }` | holds; the two `D` literals in the runtime's include resolution are named, not moved |
+| `a-refusal-code-is-made-where-its-family-lives` | a string literal shaped `[A-Z]\d{3}` appears only in the directories its family letter names | `HOME = { D: core/src, runtime/src/project.ts; R L G P B T A C S: compiler/src/check; X: plugin-*/src }` | holds; the two `D` literals in the runtime's include resolution (`resolveIncludes`) stay where they are and the table names them, since resolving an npm package is the runtime's knowledge, not the loader's |
 | `a-fitness-function-is-one-claim` | every `fitness/*.fitness.ts` opens with the three header lines in order and holds exactly one `it` whose title is the claim | none | new |
 | `the-house-rules-hold-everywhere` | `biome.jsonc` carries every rule in the table at level `error` with its option; `files.includes` covers every `packages/*/src`, every `test/` and `fitness/`, with no negated pattern; the overrides are exactly the two the file justifies | `RULES` (complexity 10, 50 lines per function, 300 per file, 4 parameters, 3 nested callbacks, no nested ternary, no `!`, no `any`, names of 2 characters) | holds |
 | `no-house-rule-is-suppressed` | no `biome-ignore` comment under `packages/`, `libraries/` or `fitness/` | `ALLOWED = []` | holds |
@@ -167,13 +167,19 @@ violating input and expect the named violation. A fitness function that has neve
   whose staged files include `fitness/` and whose message has no `^Decision: (adds|reconfigures|retires) fitness/`
   line. `--no-verify` bypasses it; that is the limit of a local hook, and the CI job is the one that binds.
 - **CI.** `ci.yml` gains two jobs. `fitness` runs `npx vitest run --project fitness` after `npm ci`, with no
-  build. `decision` runs only when the pull request's diff touches `fitness/`, checks every such commit for
-  the `Decision:` line, and declares `environment: decisions`; the environment, created once in the
-  repository's settings with the maintainer as required reviewer, holds the run until they approve it in the
-  Actions tab. Environments allow self-review, which pull request review does not. Adding both jobs to the
-  ruleset's required checks is the maintainer's step, after they exist on `main`.
+  build. `decision` is always present and skips itself, through an `if:` on the diff, when the pull request
+  touches nothing under `fitness/`; otherwise it checks every such commit for the `Decision:` line and
+  declares `environment: decisions`. The environment, created once in the repository's settings with the
+  maintainer as required reviewer, holds the run until they approve it in the Actions tab. Environments allow
+  self-review, which pull request review does not. Neither job blocks a merge until it is on the ruleset's
+  list of required status checks, beside `lint, build, test` and `branch name`: unlisted, a failed `fitness`
+  or a waiting `decision` is a badge the merge button ignores; listed, the pull request cannot merge until the
+  check succeeds. GitHub counts a skipped required job as satisfied, which is why `decision` must exist on
+  every run rather than be filtered out by path. Listing them is the maintainer's step, after each has run
+  once on the repository, since GitHub offers only check names it has seen.
 - **Template.** `.github/PULL_REQUEST_TEMPLATE.md` gains a line: `**Decision:** none` or the same sentence
-  the commit carries.
+  the commit carries. The commits are the record and the `decision` job reads them alone; the body line is a
+  summary for the reader and is checked against nothing.
 
 ### Runtime behaviour
 
@@ -273,12 +279,7 @@ decision on a whim; nothing mechanical can, since the token is theirs. What the 
 the change is never silent: it is named in a commit, listed in the pull request, and approved by a hand
 outside any agent's reach.
 
-## Open questions
+## Decided during implementation
 
-- Whether `decision` should also check the pull request body's `**Decision:**` line against the commits, or
-  the body line stays a summary for the reader. Proposed: commits are the record, the body is for the reader.
-- Whether the two `D` literals in `packages/runtime/src/project.ts` (include resolution) should move into
-  core's loader so that `D` has one home. Proposed: name them in the table now, move them in a later fix if
-  the loader grows a hook for it; this RFC does not decide the refactor.
-- Whether to require `fitness` and `decision` in the ruleset or leave them advisory. Decided during
-  implementation by the maintainer, in task 7.
+1. Whether `fitness` and `decision` join the ruleset's required status checks, or stay advisory. The
+   maintainer's step, task 7, once both have run on the repository.
