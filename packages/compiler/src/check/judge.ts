@@ -24,7 +24,7 @@ import {
 import type { ReachableRefusal } from '../refusals.js';
 
 /** A refusal recorded against one file: the rule, what is wrong, where in the document, and the fix. */
-export type Refuser = (code: string, message: string, at?: string, hint?: string) => void;
+export type Refuser = (code: string, message: string, at: string | undefined, hint: string) => void;
 
 /**
  * Types the root of a template read in the caller's context. A string answer is the reason it cannot be read;
@@ -124,7 +124,7 @@ export class Judge {
     return this.resolving(() => this.scope.types.fields(fields), file, at);
   }
 
-  private resolving(resolve: () => Type, file: string, at: string, hint?: string): Type | undefined {
+  private resolving(resolve: () => Type, file: string, at: string, hint = 'wilanis ls shape'): Type | undefined {
     try {
       return resolve();
     } catch (error) {

@@ -30,14 +30,13 @@ export interface Refusal {
   message: string;
   file: string;
   at?: string;
-  hint?: string;
+  hint: string;
 }
 
 /** One refusal as `wilanis check` prints it: the code and file, then the message, then the fix. */
 function formatRefusal(refusal: Refusal): string {
   const where = refusal.at ? `#${refusal.at}` : '';
-  const hint = refusal.hint ? `\n    → ${refusal.hint}` : '';
-  return `${refusal.code}  ${refusal.file}${where}\n    ${refusal.message}${hint}`;
+  return `${refusal.code}  ${refusal.file}${where}\n    ${refusal.message}\n    → ${refusal.hint}`;
 }
 
 /**
