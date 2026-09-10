@@ -19,14 +19,7 @@ type Commented = { leadingComments?: ReadonlyArray<{ type: string }> | null };
 
 /** Every `.ts` file under a directory, repository-relative and sorted, with declaration files left out. */
 export function sourceFiles(dir: string): string[] {
-  if (!exists(dir)) return [];
-  const found: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true }).sort(byName)) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...sourceFiles(path));
-    else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) found.push(path);
-  }
-  return found;
+  return entriesUnder(dir, ['.ts']).filter(file => !file.endsWith('.d.ts'));
 }
 
 /** A repository file's text, read as UTF-8. */
@@ -35,7 +28,7 @@ export function textOf(file: string): string {
 }
 
 /** The top-level statements of a file's text, with the comments that lead each one attached. */
-export function statementsOf(text: string): Statement[] {
+function statementsOf(text: string): Statement[] {
   return parse(text, { sourceType: 'module', plugins: ['typescript'], attachComment: true }).program.body;
 }
 
@@ -111,16 +104,6 @@ function memberName(key: Key): string {
   if (key.type === 'Identifier') return key.name;
   if (key.type === 'StringLiteral') return key.value;
   return '<computed>';
-}
-
-/** Whether a path exists, so a reader over a missing directory answers empty rather than throwing. */
-function exists(path: string): boolean {
-  try {
-    statSync(path);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /** Two directory entries in name order, for a stable walk over a file system that promises none. */

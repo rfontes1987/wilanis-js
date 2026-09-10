@@ -36,7 +36,7 @@ function reasons(errors: ParseError[]): string {
 }
 
 /** A package's manifest as the direction claims read it: its name, and what each section names. */
-export interface Manifest {
+interface Manifest {
   name: string;
   dependencies: string[];
   devDependencies: string[];
