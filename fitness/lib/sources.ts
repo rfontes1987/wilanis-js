@@ -172,3 +172,15 @@ export function entriesOf(dir: string): string[] {
   if (!dirExists(dir)) return [];
   return readdirSync(dir).slice().sort();
 }
+
+/** Every file under a directory whose name ends in one of these suffixes, repository-relative and sorted. */
+export function entriesUnder(dir: string, suffixes: string[]): string[] {
+  if (!dirExists(dir)) return [];
+  const found: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort(byName)) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) found.push(...entriesUnder(path, suffixes));
+    else if (suffixes.some(suffix => entry.name.endsWith(suffix))) found.push(path);
+  }
+  return found;
+}
