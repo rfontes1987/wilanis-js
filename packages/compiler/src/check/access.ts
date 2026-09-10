@@ -30,6 +30,11 @@ const NO_GUARD_HINT = 'add a guarding plugin to project.json → plugins, such a
 
 // ---- a policy on its own ------------------------------------------------------------------------
 
+/**
+ * The refusals for a policy judged on its own: the domain operation it decides through (R001, L006), its
+ * request-only input and the paths it proves (A001), and its outcomes against the reasons that decision can
+ * reach (A002, A003). What its reads are worth under a kind is `checkAccess`, since the context differs per kind.
+ */
 export function checkPolicy(judge: Judge, policy: Loaded<PolicyDoc>): void {
   new PolicyCheck(judge, policy).run();
 }

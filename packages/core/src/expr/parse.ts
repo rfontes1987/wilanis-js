@@ -2,6 +2,7 @@
 import { COMPARISONS, type Expr, ExprError } from './ast.js';
 import { lex, type Token } from './lex.js';
 
+/** The AST an expression source says, or an ExprError naming where it stops being one. */
 export function parse(src: string): Expr {
   return new Parser(src).parse();
 }

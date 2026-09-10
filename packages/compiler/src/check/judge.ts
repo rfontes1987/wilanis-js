@@ -89,6 +89,11 @@ function* typeRefs(spec: TypeSpec, at: string): Generator<[string, string]> {
   if (typeof spec.open === 'string') yield [spec.open, `${at}/open`];
 }
 
+/**
+ * What every rule family judges through: the scope, the project and the refusal list, plus the judgements
+ * that recur -- typing a spec (R001), visibility (L005), the layer a type may name (L001), an operation
+ * reference (R001, L005), settings reading secrets only (C001), the profiles, and reachable reasons.
+ */
 export class Judge {
   /** Every resolvers document as judged, by path: what `resolversFor` hands to the graphs and bindings that name it. */
   readonly resolverReads = new Map<string, Record<string, JudgedResolver>>();

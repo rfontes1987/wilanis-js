@@ -9,6 +9,11 @@ import { type Judge, underProfile } from './judge.js';
 import { opNeeds } from './resolvers.js';
 import { mismatch } from './typing.js';
 
+/**
+ * The refusals for the project document: plugin settings read secrets only and fit the manifest (C001, C002),
+ * each profile binds a domain port to a binding that implements it (R001, B003, B004), and every domain port
+ * is met under every profile (B002).
+ */
 export function checkProject(judge: Judge): void {
   checkPluginSettings(judge);
   for (const [name, profile] of Object.entries(judge.project.doc.profiles ?? {})) {

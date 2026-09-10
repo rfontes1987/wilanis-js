@@ -130,6 +130,7 @@ function directoryVerify(users: Account[], username: string, password: string) {
   };
 }
 
+/** Whether a caller is who they say: the connection they name decides, a directory of accounts or an OIDC issuer. */
 export const verify: Handler = async ({ in: input, ctx }) => {
   const env = ctx.env as Env;
   const canon = env.canon ?? ((ref: string) => ref);

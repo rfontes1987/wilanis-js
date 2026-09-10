@@ -31,6 +31,11 @@ function provedBy(node: SwitchNode, when: string): Set<string> {
   return proved;
 }
 
+/**
+ * What a graph's routing proves: for each node, the request paths a switch's `has(...)` rule established
+ * before routing to it -- or to anything it reads -- so a read of such a path is no longer optional. It also
+ * answers which nodes read which, the dependency table G007 and G010 are judged over.
+ */
 export class Narrowing {
   /** node id -> the nodes it reads */
   readonly dependencies = new Map<string, Set<string>>();

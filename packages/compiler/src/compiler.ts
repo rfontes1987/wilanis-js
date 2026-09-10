@@ -71,6 +71,11 @@ function nestedFailure(spec: KernelSpec, report: Report): Error {
   return new Error(`${spec.name}: ${failed ? `${failed[0]}: ${failed[1].error}` : 'failed'}`);
 }
 
+/**
+ * Lowers a checked tree to what the kernel runs: the spec of a graph, or of the binding that meets a domain
+ * port operation under the chosen profile, with every path#operation resolved to a handler. Handlers
+ * accumulate across calls, so one Kernel runs any spec it compiled. It assumes `checkTree` already accepted.
+ */
 export class Compiler {
   private readonly handlers: Handlers = {};
   private readonly bindingSpecs = new Map<string, KernelSpec>();

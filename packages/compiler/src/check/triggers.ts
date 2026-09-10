@@ -25,6 +25,7 @@ import { type Judge, type Refuser, underProfile } from './judge.js';
 import { opNeeds, type RequestNeed } from './resolvers.js';
 import { assignableWire, atOrBelow, mismatch, requestOnly } from './typing.js';
 
+/** The refusal for a scenario naming a trigger the tree does not have (S001), or nothing when it names one. */
 export function checkScenario(judge: Judge, scenario: Loaded<ScenarioDoc>): void {
   if (judge.scope.get('trigger', scenario.doc.trigger)) return;
   judge.refuser(scenario.path)(
@@ -35,6 +36,11 @@ export function checkScenario(judge: Judge, scenario: Loaded<ScenarioDoc>): void
   );
 }
 
+/**
+ * Every refusal a trigger can earn: the kind and settings it names (R001, T001), the domain port it fires and
+ * whether its edge shapes meet that contract (L006, T002), the request it reads into its input (T003) and the
+ * paths its kind hands (T004), the reasons it maps (T005, T006), and what gates it (A001, A004, A005, A006).
+ */
 export function checkTrigger(judge: Judge, trigger: Loaded<TriggerDoc>): void {
   new TriggerCheck(judge, trigger).run();
 }

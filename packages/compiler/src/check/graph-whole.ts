@@ -17,6 +17,11 @@ export interface WholeGraph {
   outType: Type | undefined;
 }
 
+/**
+ * The refusals over a graph once every node is judged: no cycle through reads and routing (G007), out.from
+ * names nodes that answer the out type and are alternatives of one another (G010), and every field of in,
+ * constant and node is read by something (G008).
+ */
 export function checkWhole(graph: WholeGraph): void {
   const dependencies = graph.reads.narrowing.dependencies;
   // routing edges join the dependency table here, for good: a routed node runs only after its switch
