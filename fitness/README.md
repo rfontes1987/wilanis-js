@@ -32,7 +32,7 @@ in `CLAUDE.md`'s words where it can, and the fact about the code that makes the 
 when** says what would have to become true for the next reader to delete the file with a clear conscience;
 it is the line that decides whether a decision is outdated.
 
-Below the header, a fitness function is a **module, not a test**. It exports three names and registers
+Below the header, a fitness function is a **module, not a test**. It exports four names and registers
 nothing:
 
 ```ts
@@ -44,21 +44,35 @@ export const gather = () => sourceFiles('packages/engine/src').map(file => ({ fi
 
 /** Every import the engine may not have, one sentence each, naming the file and the fix. */
 export const judge = (files: ReturnType<typeof gather>): string[] => ...;
+
+/** The proof that the judge bites: a minimal violating input, and the violation it must name. */
+export const sabotage = [
+  {
+    input: [{ file: 'packages/engine/src/kernel.ts', imports: ['node:fs', './spec.js'] }],
+    violation: 'packages/engine/src/kernel.ts imports node:fs; move the concern behind a handler or a source',
+  },
+];
 ```
 
-Exactly those three, and nothing else: a shared shape is derived with `ReturnType<typeof gather>` rather than
-exported as a type, and a helper stays unexported or moves to `fitness/lib/`.
+Exactly those four, and nothing else: a shared shape is derived with `ReturnType<typeof gather>` rather than
+exported as a type, and a helper stays unexported. A builder for a claim's own sabotage inputs is an
+unexported function in that file, not a helper in `lib/`.
 
-`fitness/run.test.ts` is the suite's one runner and its only test file besides sabotage. It loads every
-`*.fitness.ts` with `import.meta.glob`, eagerly, and registers one test per module, titled with its `claim`,
-asserting that judging what was gathered leaves no violation -- so "one claim, one test" holds for every file
-by construction. A module that does not export all three is failed by name rather than skipped. A failure
-reads as `FAIL fitness/run.test.ts > <the claim>` with `see fitness/<the file>` as its message.
+`fitness/run.test.ts` is the suite's one runner and its only test file. It loads every `*.fitness.ts` with an
+eager `import.meta.glob` and gives each module two tests: the **claim**, titled with its sentence, judging
+what was gathered and expecting no violation; and the **proof**, `<claim> bites`, feeding the judge every
+`sabotage` case and expecting the violation it names. So "one claim, one test, one proof" holds for every
+file by construction, and no central file of proofs grows with the suite. A module that does not export all
+four is failed by name rather than skipped. A failure reads:
 
-This is why `fitness/sabotage.test.ts` imports judges freely: nothing it imports is a test file, so no claim
-re-runs under the sabotage file's name. (Importing from a file that holds `describe`/`it` re-runs its tests
-in the importer -- which is what Biome's `noExportsInTest` exists to prevent, and why a claim registers
-nothing of its own.)
+```
+ FAIL  fitness/run.test.ts > the engine imports nothing
+AssertionError: see fitness/the-engine-imports-nothing.fitness.ts
+```
+
+Nothing imports a test file, which is why Biome's `noExportsInTest` stands over `fitness/` with no override.
+(Importing from a file that holds `describe`/`it` re-runs its tests in the importer -- which is what that
+rule exists to prevent, and why a claim registers nothing of its own.)
 
 ## How one is written
 
@@ -68,17 +82,22 @@ nothing of its own.)
   read it there -- dependency direction reads each `package.json`, the kinds read `KINDS` in
   `packages/core/src/model.ts`. Adding a package or a kind then changes a list, not a decision.
 - **Gathering is separate from judging.** `gather` reads the repository and `judge` is pure: it takes what
-  was read and returns one sentence per violation, naming the offending file and the edit that fixes it. So
-  `fitness/sabotage.test.ts` can hand a judge a minimal violating input and expect the violation named --
-  a fitness function that has never failed is unproved.
+  was gathered and returns one sentence per violation, naming the offending file and the edit that fixes it.
+  That is what lets `sabotage` hand the judge a minimal input and name the violation it expects -- a fitness
+  function that has never failed is unproved, and the proof lives in the file it proves.
 - **A failure reads like a refusal.** It names the offending file and the edit that fixes it, the way a
   checker refusal carries an `at` and a hint.
 - **The full house rules apply.** `biome.jsonc` includes `fitness/**/*.ts` with no override, so a fitness
   function that grows past 50 lines is refused by the tool it defends.
 
-Shared readers live in `fitness/lib/`: `sources.ts` reads TypeScript as text with Babel's parser (import
-specifiers, exported declarations, the comments that lead them), and `jsonc.ts` reads `biome.jsonc` and the
-plain JSON of a `package.json` or a `tsconfig.json`.
+- **The house rules bound the file.** A fitness function past 300 lines is two decisions -- and the edit is a
+  second file -- or its reading is general and belongs in `lib/`.
+
+`fitness/lib/` holds **how the repository is read, never what is judged**: a function there takes a path or a
+text and returns data. It never returns a violation, never imports vitest, and never knows a claim.
+`sources.ts` reads TypeScript as text with Babel's parser (import specifiers, exported declarations, the
+comments that lead them), and `jsonc.ts` reads `biome.jsonc` and the plain JSON of a `package.json` or a
+`tsconfig.json`.
 
 ## Running them
 
