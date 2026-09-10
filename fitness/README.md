@@ -36,20 +36,24 @@ Below the header, a fitness function is a **module, not a test**. It exports thr
 nothing:
 
 ```ts
-/** The claim this module holds, and the title the runner gives its `it`. */
+/** The claim this module holds, and the title the runner gives its test. */
 export const claim = 'the engine imports nothing';
 
-/** Every file under the engine's `src`, with its text. */
-export function gather(): SourceFile[] { ... }
+/** Every file under the engine's `src`, with the specifiers it imports. */
+export const gather = () => sourceFiles('packages/engine/src').map(file => ({ file, imports: importsOf(file) }));
 
 /** Every import the engine may not have, one sentence each, naming the file and the fix. */
-export function judge(files: SourceFile[]): string[] { ... }
+export const judge = (files: ReturnType<typeof gather>): string[] => ...;
 ```
 
+Exactly those three, and nothing else: a shared shape is derived with `ReturnType<typeof gather>` rather than
+exported as a type, and a helper stays unexported or moves to `fitness/lib/`.
+
 `fitness/run.test.ts` is the suite's one runner and its only test file besides sabotage. It loads every
-`*.fitness.ts` with `import.meta.glob`, eagerly, and registers one `it` per module, titled with its `claim`,
-asserting that judging what was gathered leaves no violation. A module that does not export all three is
-failed by name rather than skipped.
+`*.fitness.ts` with `import.meta.glob`, eagerly, and registers one test per module, titled with its `claim`,
+asserting that judging what was gathered leaves no violation -- so "one claim, one test" holds for every file
+by construction. A module that does not export all three is failed by name rather than skipped. A failure
+reads as `FAIL fitness/run.test.ts > <the claim>` with `see fitness/<the file>` as its message.
 
 This is why `fitness/sabotage.test.ts` imports judges freely: nothing it imports is a test file, so no claim
 re-runs under the sabotage file's name. (Importing from a file that holds `describe`/`it` re-runs its tests
