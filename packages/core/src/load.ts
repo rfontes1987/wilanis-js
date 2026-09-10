@@ -110,7 +110,12 @@ class Loader {
     for (const refusal of judged.refusals) this.refuse(refusal);
     if (judged.refusals.length) return undefined;
     if (judged.kind === 'project') return parsed.doc as ProjectDoc;
-    this.refuse({ code: 'D003', file: PROJECT_FILE, message: 'project.json must be a project document' });
+    this.refuse({
+      code: 'D003',
+      file: PROJECT_FILE,
+      message: 'project.json must be a project document',
+      hint: 'point its $schema at project.schema.json',
+    });
     return undefined;
   }
 
@@ -135,7 +140,14 @@ class Loader {
 
   /** D007: an alias collides with nothing -- not a plugin root, not a reserved root, not a folder of the tree. */
   private checkAlias(alias: string, at: string): void {
-    const collision = (message: string) => this.refuse({ code: 'D007', file: PROJECT_FILE, at, message });
+    const collision = (message: string) =>
+      this.refuse({
+        code: 'D007',
+        file: PROJECT_FILE,
+        at,
+        message,
+        hint: 'rename the alias under project.json → aliases',
+      });
     if (this.pluginRoots.has(alias)) collision(`alias '${alias}' collides with plugin root '${alias}'`);
     if (RESERVED_ROOTS.includes(alias)) collision(`alias '${alias}' is reserved`);
     if (subdirectories(this.root).includes(alias.slice(1)))
@@ -258,6 +270,7 @@ class Loader {
         file: PROJECT_FILE,
         at: `includes/${index}`,
         message: `'${include.from}' ships no features/ directory`,
+        hint: `remove the include, or check '${include.from}' publishes its features/ directory`,
       });
       return undefined;
     }
@@ -268,6 +281,7 @@ class Loader {
         file: PROJECT_FILE,
         at: `includes/${index}/features`,
         message: `'${include.from}' ships no feature '${want}' (it ships ${names.join(', ') || 'none'})`,
+        hint: `name one of ${names.join(', ') || 'the features it ships'} under includes[${index}].features`,
       });
     }
     return names;

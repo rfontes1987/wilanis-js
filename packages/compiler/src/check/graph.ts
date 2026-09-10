@@ -110,7 +110,12 @@ class GraphCheck {
       if (!type) continue;
       const bad = conforms(constant.value, type);
       if (bad)
-        this.refuse('G013', `constant '${name}' does not conform to ${show(type)}: ${bad}`, `constants/${name}/value`);
+        this.refuse(
+          'G013',
+          `constant '${name}' does not conform to ${show(type)}: ${bad}`,
+          `constants/${name}/value`,
+          "write a value of that type, or change the constant's type",
+        );
       const literal = type.kind === 'string' && typeof constant.value === 'string';
       types[name] = literal ? { kind: 'string', enum: [constant.value as string] } : type;
     }
@@ -120,9 +125,15 @@ class GraphCheck {
   /** G001: ids are free and unique; every run names an operation this graph may run. */
   private collectNodes(): void {
     for (const node of this.graph.doc.nodes) {
-      if (RESERVED.has(node.id)) this.refuse('G001', `node id '${node.id}' is reserved`, `nodes/${node.id}`);
+      if (RESERVED.has(node.id))
+        this.refuse(
+          'G001',
+          `node id '${node.id}' is reserved`,
+          `nodes/${node.id}`,
+          `rename the node; ${[...RESERVED].join(', ')} are roots a read may name`,
+        );
       if (this.nodes.has(node.id)) {
-        this.refuse('G001', `duplicate node id '${node.id}'`, `nodes/${node.id}`);
+        this.refuse('G001', `duplicate node id '${node.id}'`, `nodes/${node.id}`, 'give each node an id of its own');
         continue;
       }
       this.nodes.set(node.id, node);

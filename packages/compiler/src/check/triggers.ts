@@ -111,7 +111,12 @@ class TriggerCheck {
     if (this.judge.quiet(field.type)?.kind !== 'type' || value === undefined) return;
     const at = `settings/${name}`;
     if (typeof value !== 'string') {
-      this.refuse('T001', `settings.${name} is a type reference, written as a string`, at);
+      this.refuse(
+        'T001',
+        `settings.${name} is a type reference, written as a string`,
+        at,
+        'write the shape path as a string, as in @std/text',
+      );
       return;
     }
     if (this.judge.type(value, this.file, at)) {
@@ -127,7 +132,12 @@ class TriggerCheck {
   private checkFireIn(inType: Type | undefined, ctx: Type): void {
     if (this.doc.fire.in === undefined) return;
     if (!inType) {
-      this.refuse('T003', 'fire.in is given but the trigger declares no in', 'fire/in');
+      this.refuse(
+        'T003',
+        'fire.in is given but the trigger declares no in',
+        'fire/in',
+        'declare in on the trigger, or remove fire.in',
+      );
       return;
     }
     const read = this.judge.scope.valueRead(
@@ -145,7 +155,7 @@ class TriggerCheck {
     }
     if (!read) return;
     const bad = assignableWire(read.type, inType);
-    if (bad) this.refuse('T003', `fire.in → in: ${bad}`, 'fire/in');
+    if (bad) this.refuse('T003', `fire.in → in: ${bad}`, 'fire/in', "make fire.in and the trigger's in one shape");
   }
 
   /** T002: the trigger's in feeds the operation's accepts, and its returns feed the trigger's out. */
@@ -153,7 +163,13 @@ class TriggerCheck {
     const run = this.doc.fire.run;
     const takes = this.judge.acceptsType(op);
     const answers = this.judge.quiet(op.returns);
-    if (takes && !inType) this.refuse('T002', `'${run}' takes ${show(takes)} but the trigger declares no in`, 'in');
+    if (takes && !inType)
+      this.refuse(
+        'T002',
+        `'${run}' takes ${show(takes)} but the trigger declares no in`,
+        'in',
+        `declare in on the trigger; wilanis describe ${run} shows what it takes`,
+      );
     const badIn = mismatch(inType, takes);
     if (badIn) {
       this.refuse(
@@ -164,10 +180,27 @@ class TriggerCheck {
       );
     }
     if (answers && !outType)
-      this.refuse('T002', `'${run}' answers ${show(answers)} but the trigger declares no out`, 'out');
-    if (outType && !answers) this.refuse('T002', `trigger declares out but '${run}' returns nothing`, 'out');
+      this.refuse(
+        'T002',
+        `'${run}' answers ${show(answers)} but the trigger declares no out`,
+        'out',
+        `declare out on the trigger, or fire an operation that answers nothing`,
+      );
+    if (outType && !answers)
+      this.refuse(
+        'T002',
+        `trigger declares out but '${run}' returns nothing`,
+        'out',
+        `remove out, or declare returns on '${run}'`,
+      );
     const badOut = mismatch(answers, outType);
-    if (badOut) this.refuse('T002', `${run} → out: ${badOut}`, 'out');
+    if (badOut)
+      this.refuse(
+        'T002',
+        `${run} → out: ${badOut}`,
+        'out',
+        "make the operation's returns and the trigger's out one shape",
+      );
   }
 
   private policies(): Loaded<PolicyDoc>[] {

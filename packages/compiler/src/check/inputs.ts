@@ -37,7 +37,7 @@ export function reader(judge: Judge, resolve: Resolve, file: string): Reader {
   return (value, at) => {
     const read = judge.scope.valueRead(value, resolve);
     if (typeof read !== 'string') return read;
-    refuse('G003', read, at);
+    refuse('G003', read, at, 'read in, const, request or a node that runs before this one');
     return undefined;
   };
 }
@@ -92,7 +92,8 @@ class InputCheck {
 
   /** G005 when a required input is not given. */
   private requireGiven(field: Field, message: string): void {
-    if (field.required !== false) this.refuse('G005', message, this.site.at);
+    if (field.required !== false)
+      this.refuse('G005', message, this.site.at, `give it under in, or mark the field optional in ${this.site.what}`);
   }
 
   /** A type field is a literal type reference: read here, judged for its layer, bound to its variable. */
@@ -132,7 +133,13 @@ class InputCheck {
       return;
     }
     const bad = assignable(read.type, want);
-    if (bad) this.refuse('G004', `'${name}': ${bad}`, at);
+    if (bad)
+      this.refuse(
+        'G004',
+        `'${name}': ${bad}`,
+        at,
+        `make what '${name}' reads and what ${this.site.what} takes one type`,
+      );
   }
 
   /** How an input is typed: from `extra`, from the value given (a static field as a literal, P001), or not at all (G005 when required). */

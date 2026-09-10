@@ -40,7 +40,12 @@ function checkCycles(graph: WholeGraph, dependencies: Map<string, Set<string>>):
     const seen = state.get(id);
     if (seen === 'done') return;
     if (seen === 'visiting') {
-      graph.refuse('G007', `cycle: ${[...stack.slice(stack.indexOf(id)), id].join(' → ')}`, `nodes/${id}`);
+      graph.refuse(
+        'G007',
+        `cycle: ${[...stack.slice(stack.indexOf(id)), id].join(' → ')}`,
+        `nodes/${id}`,
+        'break the cycle: a graph is a dataflow, so one of these edges must read something earlier',
+      );
       return;
     }
     state.set(id, 'visiting');
@@ -56,13 +61,18 @@ function checkOutput(graph: WholeGraph, dependencies: Map<string, Set<string>>):
   for (const id of candidates) checkCandidate(graph, id);
   if (candidates.length > 1) checkAlternatives(graph, candidates, dependencies);
   if (graph.doc.out && candidates.length === 0)
-    graph.refuse('G010', 'out declares a type but names no node', 'out/from');
+    graph.refuse(
+      'G010',
+      'out declares a type but names no node',
+      'out/from',
+      'write out.from with the node whose answer this graph gives',
+    );
 }
 
 function checkCandidate(graph: WholeGraph, id: string): void {
   const node = graph.reads.table.nodes.get(id);
   if (!node) {
-    graph.refuse('G010', `out.from names unknown node '${id}'`, 'out/from');
+    graph.refuse('G010', `out.from names unknown node '${id}'`, 'out/from', 'name a node declared under nodes');
     return;
   }
   if (isSwitch(node)) {
@@ -79,7 +89,12 @@ function checkCandidate(graph: WholeGraph, id: string): void {
   if (!answers || !graph.outType) return;
   const bad = assignable(answers, graph.outType);
   if (bad)
-    graph.refuse('G010', `'${id}' answers ${show(answers)} but out is ${show(graph.outType)}: ${bad}`, 'out/from');
+    graph.refuse(
+      'G010',
+      `'${id}' answers ${show(answers)} but out is ${show(graph.outType)}: ${bad}`,
+      'out/from',
+      `make out.type and what '${id}' answers one type`,
+    );
 }
 
 /** Candidates are alternatives: one that no switch routes always settles, so later candidates are dead. */
@@ -110,7 +125,12 @@ function checkUnusedIn(graph: WholeGraph): void {
 function checkUnusedConstants(graph: WholeGraph): void {
   for (const name of Object.keys(graph.reads.table.constTypes)) {
     if (!graph.reads.readsConst.has(name))
-      graph.refuse('G008', `constant '${name}' is read by no edge`, `constants/${name}`);
+      graph.refuse(
+        'G008',
+        `constant '${name}' is read by no edge`,
+        `constants/${name}`,
+        `read it as {{const.${name}}}, or remove it from constants`,
+      );
   }
 }
 
