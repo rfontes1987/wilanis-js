@@ -46,3 +46,16 @@ bites is a design signal, not an obstacle.
 A commit message says what changed and why, in the imperative, in plain words. No generated trailers,
 no tool or session references. A pull request names the issue it serves and ticks the template's
 boxes. Discussion of *whether* to do something belongs on the RFC, not on the pull request that does it.
+
+**A change under `fitness/` is a change of decision.** That directory holds the decisions about this
+repository's code -- one file each, a claim with why it holds and when to retire it (RFC 0027). A commit
+touching it carries one more line, in the maintainer's own words:
+
+```
+Decision: retires fitness/the-engine-imports-nothing.fitness.ts because RFC 00NN moves sources into the engine.
+```
+
+`npm install` switches on `.githooks/commit-msg`, which refuses the commit without it; `--no-verify` skips
+the hook, and the `decision` job in CI does not. That job checks every such commit and then waits in the
+`decisions` environment for the maintainer to approve the run, so a decision is never changed silently. A
+fitness function that bites is a design signal: the edit usually goes to the code, not to `fitness/`.

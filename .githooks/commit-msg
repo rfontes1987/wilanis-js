@@ -1,0 +1,42 @@
+#!/bin/sh
+# A commit that changes a decision says so. Every commit touching fitness/ carries a line
+#
+#   Decision: (adds|reconfigures|retires) fitness/<file> because ...
+#
+# written by the maintainer in their own words: fitness/ holds the decisions about this repository's code, and
+# a decision that changes silently is the one thing RFC 0027 exists to prevent. The line is the one exception
+# to CLAUDE.md's "no generated trailers" -- no tool adds it.
+#
+# `git commit --no-verify` bypasses this, as it bypasses any hook; the `decision` job in CI is what binds.
+# `npm install` switches the hook on, through the `prepare` script that sets core.hooksPath.
+
+message_file="$1"
+[ -f "$message_file" ] || exit 0
+
+# What this commit stages. A merge or a rebase stages nothing, so there is nothing to judge.
+staged=$(git diff --cached --name-only 2>/dev/null) || exit 0
+echo "$staged" | grep -q '^fitness/' || exit 0
+
+# A comment line is not part of the message git keeps.
+if grep -v '^#' "$message_file" | grep -Eq '^Decision: (adds|reconfigures|retires) fitness/'; then
+  exit 0
+fi
+
+cat >&2 <<'MSG'
+refused: this commit changes a decision, and does not say so.
+
+fitness/ holds the decisions about this repository's code. A commit that touches it carries one line, in
+your own words, saying which of adds, reconfigures or retires, which file, and why:
+
+  Decision: adds fitness/the-engine-imports-nothing.fitness.ts because the engine's orthogonality is the
+  rule I would least like to lose quietly.
+
+The files this commit stages under fitness/:
+MSG
+echo "$staged" | grep '^fitness/' | sed 's/^/  /' >&2
+cat >&2 <<'MSG'
+
+A fitness function that bites is a design signal: the edit usually goes to the code, not to fitness/.
+If you meant to change a decision, write the line. `git commit --no-verify` skips this hook; CI will not.
+MSG
+exit 1

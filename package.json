@@ -17,6 +17,7 @@
   ],
   "scripts": {
     "build": "tsc -b",
+    "prepare": "git config core.hooksPath .githooks",
     "lint": "biome check .",
     "fitness": "tsc -p fitness && vitest run --project fitness",
     "lint:fix": "biome check --write .",

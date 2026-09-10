@@ -37,3 +37,51 @@ jobs:
           npx wilanis rehearse example
         env:
           MONITOR_JWT_SECRET: ci-only-not-a-secret
+
+  fitness:
+    name: fitness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # No build: a fitness function reads this repository's source as text, so it answers in seconds.
+      - run: npm run fitness
+
+  # Always present, and skipped by its own `if:` when the pull request touches no fitness function -- GitHub
+  # counts a skipped required check as satisfied, while a job filtered out by `paths:` never reports at all.
+  decision:
+    name: decision
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    environment: decisions
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: every commit that changes a decision says so
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          if [ -z "$(git diff --name-only "$base" "$head" -- fitness/)" ]; then
+            echo "this pull request changes no decision; nothing to approve"
+            exit 0
+          fi
+          missing=""
+          for commit in $(git rev-list "$base".."$head"); do
+            git diff-tree --no-commit-id --name-only -r "$commit" | grep -q '^fitness/' || continue
+            git log -1 --format=%B "$commit" | grep -Eq '^Decision: (adds|reconfigures|retires) fitness/' \
+              || missing="$missing $commit"
+          done
+          if [ -n "$missing" ]; then
+            echo "refused: these commits touch fitness/ and carry no Decision: line"
+            for commit in $missing; do echo "  $(git log -1 --oneline "$commit")"; done
+            echo
+            echo "A commit that changes a decision says which of adds, reconfigures or retires, which file,"
+            echo "and why. Rewrite the message (git rebase -i) and push again."
+            exit 1
+          fi
+          echo "every commit touching fitness/ carries its Decision: line"

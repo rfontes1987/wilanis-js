@@ -161,10 +161,22 @@ branches `then` and `otherwise`. Neither is a place to put new debt.
   A plugin's `postLoad` stays what it is: that plugin's own wiring, not the project's.
 - **The project template.** `packages/runtime/templates/` is what `wilanis init` writes into a consumer
   tree. Its `CLAUDE.md` addresses an agent that writes documents, not one that changes this repository.
+- **A decision about the code.** It is a file under `fitness/`, one per decision: `claim`, the sentence its
+  name spells; `gather`, which reads the repository; `judge`, pure, from what was gathered to the violations,
+  each naming the offending file and the edit that fixes it; and `sabotage`, the cases that prove the judge
+  bites. `fitness/run.test.ts` registers a claim and its proof for every one; `fitness/lib/` holds readers
+  only. **A fitness function that bites is a design signal**: the edit goes to the code, not to `fitness/`.
+  Changing a decision is the maintainer's to make and to say -- the `Decision:` line is theirs to write, no
+  tool adds it, and `.githooks/commit-msg` and the `decision` job refuse a commit that changes one silently.
+  `fitness/README.md` and RFC 0027 are the whole story.
 
 Do not add features, document kinds, or plugin hooks beyond what a task asks for. When a task seems to
 need one, stop and say so.
 
 ## Commits
 
-Messages are plain: what changed and why, in the imperative. No generated trailers, no tool or session references.
+Messages are plain: what changed and why, in the imperative. No generated trailers, no tool or session
+references. The one exception is a commit that touches `fitness/`, which carries a `Decision: (adds |
+reconfigures | retires) fitness/<file> because ...` line saying what was decided and why. That line is the
+maintainer's own words; no tool adds it, `.githooks/commit-msg` refuses the commit without it, and the
+`decision` job in CI checks every such commit and then waits for the maintainer to approve the run.
