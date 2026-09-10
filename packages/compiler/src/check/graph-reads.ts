@@ -94,7 +94,7 @@ export class GraphReads {
   private valueRead(value: unknown, at: string): Read | undefined {
     const read = this.judge.scope.valueRead(value, (root, path) => this.rootRead(root, path));
     if (typeof read === 'string') {
-      this.refuse('G003', read, at);
+      this.refuse('G003', read, at, 'read in, const, request or a node that runs before this one');
       return undefined;
     }
     if (read?.optional && this.narrowedWhole(value)) return { type: read.type, optional: false };

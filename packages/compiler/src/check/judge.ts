@@ -161,7 +161,7 @@ export class Judge {
   /** L005 when `from` may not name `target`. */
   visible(from: Loaded, target: Loaded, at: string): void {
     const reason = this.scope.visibility(from, target);
-    if (reason) this.refuser(from.path)('L005', reason, at);
+    if (reason) this.refuser(from.path)('L005', reason, at, `wilanis describe ${target.path} shows who may name it`);
   }
 
   /** Resolve path#operation from a document, with visibility; R001 when it names nothing. */
@@ -229,7 +229,12 @@ export class Judge {
     const refuse = this.refuser(site.from.path);
     const base = ref.replace(/(\[\])+$/, '');
     if (base.startsWith('$') || base === 'type') {
-      refuse('L001', `${site.what} uses '${base}' -- that belongs to native contracts only`, where);
+      refuse(
+        'L001',
+        `${site.what} uses '${base}' -- that belongs to native contracts only`,
+        where,
+        'name a shape of this tree, or a scalar type',
+      );
     }
     if (base === 'unknown' && site.layer === 'core') {
       const hint = 'name the fields, or keep the value at the edge';

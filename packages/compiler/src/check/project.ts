@@ -46,17 +46,28 @@ function checkProfileBinding(judge: Judge, name: string, [portRef, bindingRef]: 
   const at = `profiles/${name}/bindings`;
   const port = judge.scope.get('port', portRef);
   if (!port) {
-    refuse('R001', `profile '${name}' names unknown port '${portRef}'`, at);
+    refuse('R001', `profile '${name}' names unknown port '${portRef}'`, at, 'wilanis ls port');
     return;
   }
-  if (port.native) refuse('B003', `profile '${name}' binds native port '${portRef}' -- the plugin binds it`, at);
+  if (port.native)
+    refuse(
+      'B003',
+      `profile '${name}' binds native port '${portRef}' -- the plugin binds it`,
+      at,
+      'remove it from the profile; a plugin grants its own ports',
+    );
   const binding = judge.scope.get('binding', bindingRef);
   if (!binding) {
-    refuse('R001', `profile '${name}' names unknown binding '${bindingRef}'`, at);
+    refuse('R001', `profile '${name}' names unknown binding '${bindingRef}'`, at, 'wilanis ls binding');
     return;
   }
   if (judge.scope.canon(binding.doc.port) !== port.path) {
-    refuse('B004', `profile '${name}': binding '${bindingRef}' implements '${binding.doc.port}', not '${portRef}'`, at);
+    refuse(
+      'B004',
+      `profile '${name}': binding '${bindingRef}' implements '${binding.doc.port}', not '${portRef}'`,
+      at,
+      `name a binding whose port is '${portRef}', or correct the port in the profile`,
+    );
   }
 }
 

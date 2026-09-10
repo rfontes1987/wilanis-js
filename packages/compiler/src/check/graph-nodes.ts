@@ -37,19 +37,31 @@ function checkRule(site: NodeSite, node: SwitchNode, index: number, inputs: Reco
   const at = `nodes/${node.id}/rules/${index}/when`;
   try {
     const type = expr.check(expr.parse(when), inputs);
-    if (type.kind !== 'boolean') site.refuse('G011', `rule ${index}: '${when}' is ${show(type)}, not boolean`, at);
+    if (type.kind !== 'boolean')
+      site.refuse(
+        'G011',
+        `rule ${index}: '${when}' is ${show(type)}, not boolean`,
+        at,
+        'compare the value, as in a.b == 1, so when answers a boolean',
+      );
   } catch (error) {
-    site.refuse('G011', `rule ${index}: ${(error as Error).message}`, at);
+    site.refuse(
+      'G011',
+      `rule ${index}: ${(error as Error).message}`,
+      at,
+      "write when as an expression over this node's inputs",
+    );
   }
 }
 
 function checkRoute(site: NodeSite, node: SwitchNode, target: string): void {
   const at = `nodes/${node.id}`;
   if (!site.nodes.has(target)) {
-    site.refuse('G009', `routes to unknown node '${target}'`, at);
+    site.refuse('G009', `routes to unknown node '${target}'`, at, 'name a node declared under nodes, or add it');
     return;
   }
-  if (target === node.id) site.refuse('G009', 'switch routes to itself', at);
+  if (target === node.id)
+    site.refuse('G009', 'switch routes to itself', at, 'route to another node; a graph has no loop');
   const previous = site.routedBy.get(target);
   if (previous && previous !== node.id) {
     site.refuse(
@@ -68,15 +80,31 @@ export function elementInputs(site: NodeSite, node: MapNode, read: Reader): Reco
   const over = read(node.over, `${at}/over`);
   if (!over) return {};
   if (over.type.kind !== 'list') {
-    site.refuse('G012', `over is ${show(over.type)}, not a list`, `${at}/over`);
+    site.refuse(
+      'G012',
+      `over is ${show(over.type)}, not a list`,
+      `${at}/over`,
+      'map runs over a list; read one, or use a run node',
+    );
     return {};
   }
   if (over.optional) {
-    site.refuse('G004', 'over may be missing at run time', `${at}/over`);
+    site.refuse(
+      'G004',
+      'over may be missing at run time',
+      `${at}/over`,
+      'narrow it through a switch first, or read a required value',
+    );
     return {};
   }
   if (node.bind) return boundInputs(site, node, over.type.of);
-  if ('item' in (node.in ?? {})) site.refuse('G006', `'item' is the element; do not give it in in`, `${at}/in/item`);
+  if ('item' in (node.in ?? {}))
+    site.refuse(
+      'G006',
+      `'item' is the element; do not give it in in`,
+      `${at}/in/item`,
+      "remove 'item' from in; map hands each element as item",
+    );
   return { item: { type: over.type.of, optional: false } };
 }
 
@@ -86,10 +114,16 @@ function boundInputs(site: NodeSite, node: MapNode, element: Type): Record<strin
   for (const [name, path] of Object.entries(node.bind ?? {})) {
     const read = typeAt(element, path ? path.split('.') : []);
     if (typeof read === 'string') {
-      site.refuse('G012', `bind.${name}: ${read}`, `${at}/bind/${name}`);
+      site.refuse('G012', `bind.${name}: ${read}`, `${at}/bind/${name}`, 'bind a path the element actually holds');
       continue;
     }
-    if (name in (node.in ?? {})) site.refuse('G006', `'${name}' is both bound and given in in`, `${at}/bind/${name}`);
+    if (name in (node.in ?? {}))
+      site.refuse(
+        'G006',
+        `'${name}' is both bound and given in in`,
+        `${at}/bind/${name}`,
+        `drop '${name}' from in, or bind it under another name`,
+      );
     extra[name] = read;
   }
   return extra;

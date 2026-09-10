@@ -43,11 +43,16 @@ export function checkBinding(judge: Judge, binding: Loaded<BindingDoc>): void {
   const refuse = judge.refuser(binding.path);
   const port = judge.scope.get('port', binding.doc.port);
   if (!port) {
-    refuse('R001', `binding implements unknown port '${binding.doc.port}'`, 'port');
+    refuse('R001', `binding implements unknown port '${binding.doc.port}'`, 'port', 'wilanis ls port');
     return;
   }
   if (port.native) {
-    refuse('B003', `'${binding.doc.port}' is a native port; the plugin binds it`, 'port');
+    refuse(
+      'B003',
+      `'${binding.doc.port}' is a native port; the plugin binds it`,
+      'port',
+      'bind a domain port instead, or name the native operation from a graph',
+    );
     return;
   }
   judge.visible(binding, port, 'port');
@@ -56,7 +61,12 @@ export function checkBinding(judge: Judge, binding: Loaded<BindingDoc>): void {
   const check = new BindingCheck(judge, binding, port);
   for (const opName of Object.keys(port.doc.operations)) {
     if (!binding.doc.operations[opName])
-      refuse('B001', `operation '${opName}' of '${port.path}' is not bound`, 'operations');
+      refuse(
+        'B001',
+        `operation '${opName}' of '${port.path}' is not bound`,
+        'operations',
+        `add '${opName}' under operations in the binding, or wilanis new binding <feature>/<name> --port ${port.path}`,
+      );
   }
   for (const [opName, bound] of Object.entries(binding.doc.operations)) check.operation(opName, bound);
 }
@@ -82,7 +92,12 @@ class BindingCheck {
     const at = `operations/${opName}`;
     if (!op) {
       const names = Object.keys(this.port.doc.operations).join(', ');
-      this.refuse('B001', `'${opName}' is not an operation of '${this.port.path}' (${names})`, at);
+      this.refuse(
+        'B001',
+        `'${opName}' is not an operation of '${this.port.path}' (${names})`,
+        at,
+        `wilanis describe ${this.port.path} lists its operations`,
+      );
       return;
     }
     const accepts = this.judge.fieldsType(op.accepts, this.port.path, `${at}/accepts`);
@@ -99,7 +114,7 @@ class BindingCheck {
     const at = `${contract.at}/graph`;
     const graph = this.judge.scope.get('graph', graphRef);
     if (!graph) {
-      this.refuse('R001', `unknown graph '${graphRef}'`, at);
+      this.refuse('R001', `unknown graph '${graphRef}'`, at, 'wilanis ls graph');
       return;
     }
     this.judge.visible(this.binding, graph, at);
@@ -114,7 +129,12 @@ class BindingCheck {
     const names = Object.keys(contract.op.accepts ?? {});
     if (!graphIn) {
       if (names.length)
-        this.refuse('B005', `'${contract.opName}' accepts fields but graph '${graphRef}' takes nothing`, at);
+        this.refuse(
+          'B005',
+          `'${contract.opName}' accepts fields but graph '${graphRef}' takes nothing`,
+          at,
+          `declare in on graph '${graphRef}', or drop accepts from the operation`,
+        );
       return;
     }
     if (graphIn.kind === 'object') {
@@ -146,6 +166,7 @@ class BindingCheck {
         'B005',
         `'${contract.opName}' accepts '${name}' optionally but graph '${graphRef}' takes it whole, so it must be given`,
         at,
+        `mark '${name}' required under accepts, or give graph '${graphRef}' a shape for its in`,
       );
     }
     const bad = assignable(field.type, graphIn);
@@ -154,6 +175,7 @@ class BindingCheck {
         'B005',
         `'${contract.opName}' accepts ${name}: ${show(field.type)} → graph in ${show(graphIn)}: ${bad}`,
         at,
+        `make '${name}' and the in of graph '${graphRef}' one type`,
       );
   }
 
@@ -161,11 +183,27 @@ class BindingCheck {
     const at = `${contract.at}/graph`;
     const { opName, returns } = contract;
     if (returns && !graphOut)
-      this.refuse('B005', `'${opName}' returns ${show(returns)} but graph '${graphRef}' answers nothing`, at);
+      this.refuse(
+        'B005',
+        `'${opName}' returns ${show(returns)} but graph '${graphRef}' answers nothing`,
+        at,
+        `declare out on graph '${graphRef}', or drop returns from the operation`,
+      );
     const bad = mismatch(graphOut, returns);
-    if (bad) this.refuse('B005', `graph out → '${opName}' returns: ${bad}`, at);
+    if (bad)
+      this.refuse(
+        'B005',
+        `graph out → '${opName}' returns: ${bad}`,
+        at,
+        `make the out of graph '${graphRef}' and the returns of '${opName}' one type`,
+      );
     if (!returns && graphOut)
-      this.refuse('B005', `graph '${graphRef}' answers ${show(graphOut)} but '${opName}' returns nothing`, at);
+      this.refuse(
+        'B005',
+        `graph '${graphRef}' answers ${show(graphOut)} but '${opName}' returns nothing`,
+        at,
+        `declare returns on '${opName}', or drop out from graph '${graphRef}'`,
+      );
   }
 
   // ---- a delegation -------------------------------------------------------------------------------
@@ -214,7 +252,12 @@ class BindingCheck {
     const at = `${contract.at}/run`;
     if (!returns) return;
     if (!answers) {
-      this.refuse('B005', `'${opName}' returns ${show(returns)} but '${run}' returns nothing`, at);
+      this.refuse(
+        'B005',
+        `'${opName}' returns ${show(returns)} but '${run}' returns nothing`,
+        at,
+        `wilanis describe ${run} shows what it answers; drop returns, or delegate to an operation that answers`,
+      );
       return;
     }
     const bad = assignable(answers, returns);

@@ -21,7 +21,14 @@ export function parseJson(abs: string, file: string): { doc: unknown } | { refus
   try {
     return { doc: JSON.parse(readFileSync(abs, 'utf8')) };
   } catch (error) {
-    return { refusal: { code: 'D000', file, message: `not JSON: ${(error as Error).message}` } };
+    return {
+      refusal: {
+        code: 'D000',
+        file,
+        message: `not JSON: ${(error as Error).message}`,
+        hint: 'fix the JSON at the position the parser names',
+      },
+    };
   }
 }
 
@@ -75,12 +82,28 @@ export class Documents {
 
   /** D003, D004: the project and a feature manifest have one place each; a plugin's kinds are never authored in a tree. */
   private misplacedKind(kind: Kind, file: string, feature: string | undefined): Refusal | null {
-    if (kind === 'project') return { code: 'D003', file, message: 'the project document is project.json at the root' };
+    if (kind === 'project')
+      return {
+        code: 'D003',
+        file,
+        message: 'the project document is project.json at the root',
+        hint: 'move it to project.json, or change its $schema to the kind this file is',
+      };
     if (kind === 'feature' && file !== `features/${feature}/feature.json`) {
-      return { code: 'D003', file, message: 'a feature lives at features/<name>/feature.json' };
+      return {
+        code: 'D003',
+        file,
+        message: 'a feature lives at features/<name>/feature.json',
+        hint: `move it to features/${feature ?? '<name>'}/feature.json`,
+      };
     }
     if (NATIVE_KINDS.has(kind))
-      return { code: 'D004', file, message: `${kind} documents are shipped by plugins, never authored in a tree` };
+      return {
+        code: 'D004',
+        file,
+        message: `${kind} documents are shipped by plugins, never authored in a tree`,
+        hint: `remove the file; wilanis ls ${kind} shows the ones a plugin grants`,
+      };
     return null;
   }
 
@@ -96,6 +119,7 @@ export class Documents {
         code: 'D006',
         file: PROJECT_FILE,
         message: `plugin '${plugin.root}' has no documents at ${plugin.docs}: ${(error as Error).message}`,
+        hint: "check the plugin's docs directory is published in its package files",
       });
       return;
     }
@@ -104,6 +128,7 @@ export class Documents {
         code: 'D006',
         file: PROJECT_FILE,
         message: `plugin '${plugin.root}' ships no plugin.json in ${plugin.docs}`,
+        hint: `add plugin.json under ${plugin.docs}; it says what the plugin grants`,
       });
     }
     for (const abs of docs) this.registerNative(plugin, abs);
