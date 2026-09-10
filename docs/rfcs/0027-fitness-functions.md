@@ -1,6 +1,6 @@
 # RFC 0027: Fitness functions: decisions about the code, held by the tests that record them
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:process`
 - **Tracking issue:** #92
 - **Depends on:** none
@@ -29,9 +29,9 @@ as a devDependency, for its tests. A change that imports the runtime from `packa
 resolves, builds, lints and tests green; nothing reads `package.json` to say which section the import was
 allowed by. The same holds for `node:http` in `packages/compiler/src`, or `node:fs` in `packages/engine/src`.
 
-A sentence drifts without anyone deciding it should. Today 19 exported functions across `core`, `runtime`
-and `view` have no doc comment (`schemaRef`, `isRun`, `stubEffects`, `getPath`, `versionOf` among them). No
-one decided that rule was over; it was never held.
+A sentence drifts without anyone deciding it should. Today 45 exported functions and arrow constants across
+`core`, `compiler`, `runtime`, `view` and `plugin-http` have no doc comment (`schemaRef`, `isRun`,
+`stubEffects`, `getPath`, `versionOf` among them). No one decided that rule was over; it was never held.
 
 The enforcement itself is unguarded. Any pull request can raise `maxLines` in `biome.jsonc` from 50 to 80,
 add an override that switches `noExplicitAny` off for one package, or narrow `files.includes`, and the diff
@@ -138,11 +138,11 @@ claim holds on `main` at the time of writing, which the implementing task confir
 | `dependencies-point-one-way` | a file under `src/` imports only packages its `package.json` names under `dependencies`, a test only those plus `devDependencies`; among `@wilanis/*`, a package imports only packages earlier in the order; a `plugin-*` imports only `core` and `engine` | `ORDER = ['engine', 'core', 'compiler', 'runtime', 'view']` | holds |
 | `the-engine-imports-nothing` | `packages/engine/src` has no import from outside itself | none | holds |
 | `the-compiler-imports-only-core-and-engine` | `packages/compiler/src` imports nothing but `@wilanis/core`, `@wilanis/engine` and itself; no `node:` module | none | holds |
-| `every-public-function-says-what-it-answers` | every exported function, exported arrow constant and public class method under `src/` has a leading doc comment | none | 19 undocumented; the implementing task documents them |
-| `a-kind-is-declared-once-and-mirrored` | every entry of `KINDS` has a schema file under `packages/core/schemas/`, a page in the viewer's `renderDocPage`, and, unless a plugin ships it, a row in `packages/runtime/templates/CLAUDE.md` and a home in `HOME` or the top-level list | `SHIPPED_BY_PLUGINS = ['plugin', 'trigger-kind', 'connection-kind', 'codec']`, `TOP_LEVEL = ['project', 'feature']` | holds |
+| `every-public-function-says-what-it-answers` | every exported function, exported arrow constant and public class method under `src/` has a leading doc comment | none | 45 undocumented; the implementing task documents them |
+| `a-kind-is-declared-once-and-mirrored` | every entry of `KINDS` has a schema file under `packages/core/schemas/`, a `case` in the viewer's `renderDocPage` unless the table names the function that renders it instead, and, unless a plugin ships it, a row in `packages/runtime/templates/CLAUDE.md` and a home in `HOME` or the top-level list | `SHIPPED_BY_PLUGINS = ['plugin', 'trigger-kind', 'connection-kind', 'codec']`, `TOP_LEVEL = ['project', 'feature']`, `RENDERED_BY = { graph: <the graph page's function> }` | holds; `graph` has its own page outside `renderDocPage` |
 | `a-plugin-grants-files-not-objects` | every `packages/plugin-*` has `docs/plugin.json` and lists `docs` in its `files` | none | holds |
 | `tests-live-beside-what-they-test` | every `packages/*/src` has a sibling `test/`, except the packages the table says are tested through another | `TESTED_THROUGH = { compiler: 'packages/runtime/test' }` | holds |
-| `a-refusal-code-is-made-where-its-family-lives` | a string literal shaped `[A-Z]\d{3}` appears only in the directories its family letter names | `HOME = { D: core/src, runtime/src/project.ts; R L G P B T A C S: compiler/src/check; X: plugin-*/src }` | holds; the two `D` literals in the runtime's include resolution (`resolveIncludes`) stay where they are and the table names them, since resolving an npm package is the runtime's knowledge, not the loader's |
+| `a-refusal-code-is-made-where-its-family-lives` | under `src/` only, a string literal shaped `[A-Z]\d{3}` appears only in the directories its family letter names; tests carry codes of every family on purpose | `HOME = { D: core/src, runtime/src/project.ts; R L G P B T A C S: compiler/src/check; X: plugin-*/src }` | holds; the two `D` literals in the runtime's project loader (`badPlugin`, D006, and `badInclude`, D010, in `project.ts`) stay where they are and the table names them, since resolving an npm package is the runtime's knowledge, not the loader's |
 | `a-fitness-function-is-one-claim` | every `fitness/*.fitness.ts` opens with the three header lines in order and holds exactly one `it` whose title is the claim | none | new |
 | `the-house-rules-hold-everywhere` | `biome.jsonc` carries every rule in the table at level `error` with its option; `files.includes` covers every `packages/*/src`, every `test/` and `fitness/`, with no negated pattern; the overrides are exactly the two the file justifies | `RULES` (complexity 10, 50 lines per function, 300 per file, 4 parameters, 3 nested callbacks, no nested ternary, no `!`, no `any`, names of 2 characters) | holds |
 | `no-house-rule-is-suppressed` | no `biome-ignore` comment under `packages/`, `libraries/` or `fitness/` | `ALLOWED = []` | holds |
@@ -154,9 +154,9 @@ violating input and expect the named violation. A fitness function that has neve
 
 ### Tooling
 
-- **Parsing.** Two devDependencies at the workspace root: `@babel/parser`, for import specifiers, exported
-  declarations and their leading comments (already in the tree through vitest, pure JavaScript), and
-  `jsonc-parser`, for `biome.jsonc` (pure JavaScript, no dependencies). The installed `typescript` is the
+- **Parsing.** Two new devDependencies at the workspace root, both pure JavaScript: `@babel/parser`, for
+  import specifiers, exported declarations and their leading comments, and `jsonc-parser`, for
+  `biome.jsonc`. Neither is in the tree today. The installed `typescript` is the
   native 7.x compiler and exposes no parsing API. Shared helpers live in `fitness/lib/`.
 - **Runner.** A root `vitest.config.ts` declares two projects: `packages`, the existing default pattern, and
   `fitness`, `fitness/**/*.{fitness,test}.ts`. `npm run fitness` runs the second alone.
@@ -219,14 +219,16 @@ behaviour stated in `fitness/README.md`; the CI jobs are seen to run on that pul
    `a-fitness-function-is-one-claim`.
 2. The import claims: `dependencies-point-one-way`, `the-engine-imports-nothing`,
    `the-compiler-imports-only-core-and-engine`, with their sabotage cases.
-3. `every-public-function-says-what-it-answers`, and the doc comments on the 19 functions it finds.
+3. `every-public-function-says-what-it-answers`, and the doc comments on the 45 exports it finds.
    (`good first issue`: each comment says what the function answers, in one line.)
 4. The structure claims: `a-kind-is-declared-once-and-mirrored`, `a-plugin-grants-files-not-objects`,
    `tests-live-beside-what-they-test`, `a-refusal-code-is-made-where-its-family-lives`.
 5. The configuration claims: `the-house-rules-hold-everywhere`, `no-house-rule-is-suppressed`,
    `typescript-is-strict-in-every-package`. (`good first issue`.)
 6. The gate: `.githooks/commit-msg` and the `prepare` script, the `fitness` and `decision` jobs, the
-   pull request template line, the `CLAUDE.md` entry and the `CONTRIBUTING.md` paragraph.
+   pull request template line, the `CLAUDE.md` entry and the `CONTRIBUTING.md` paragraph. `CLAUDE.md`'s
+   "no generated trailers" sentence under Commits gains the one exception: the `Decision:` line, which the
+   maintainer writes by hand and no tool adds.
 7. Maintainer's steps, not a pull request: create the `decisions` environment with themselves as required
    reviewer; add `fitness` and `decision` to the ruleset's required status checks once both have run on
    `main`, beside `lint, build, test` and `branch name`.
@@ -284,4 +286,6 @@ outside any agent's reach.
 ## Decided during implementation
 
 None. Every question this RFC raised was settled before acceptance: commits are the record of a decision,
-the runtime's two `D` literals stay where they are, and both jobs are required status checks.
+the runtime's two `D` literals stay where they are, and both jobs are required status checks. The
+review before acceptance corrected four facts: Babel's parser is a new dependency, 45 exports lack a doc
+comment, the viewer renders `graph` outside `renderDocPage`, and the refusal-code claim is scoped to `src/`.
