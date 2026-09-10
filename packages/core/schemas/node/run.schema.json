@@ -6,12 +6,14 @@
   "type": "object",
   "properties": {
     "type": {
+      "description": "Marks this node a run: it calls one operation.",
       "const": "@wilanis/node/run.schema.json"
     },
     "id": {
       "$ref": "../common.schema.json#/$defs/ident"
     },
     "description": {
+      "description": "What this node does, for a reader of the graph.",
       "type": "string"
     },
     "label": {

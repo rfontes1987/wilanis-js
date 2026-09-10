@@ -13,6 +13,7 @@
       ]
     },
     "description": {
+      "description": "What these resolvers read, in one or two sentences.",
       "type": "string",
       "minLength": 1
     },
@@ -42,6 +43,7 @@
             "minLength": 1
           },
           "description": {
+            "description": "What this resolver reads, for a reader of the document that uses it as {{name}}.",
             "type": "string"
           },
           "required": {

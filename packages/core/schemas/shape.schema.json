@@ -13,6 +13,7 @@
       ]
     },
     "description": {
+      "description": "What this shape is, in one or two sentences.",
       "type": "string",
       "minLength": 1
     },
@@ -22,6 +23,7 @@
       "minLength": 1
     },
     "layer": {
+      "description": "Who may speak this shape: edge for what the outside world imposes, which only triggers and the data layer may name; core for the business's own.",
       "enum": [
         "edge",
         "core"

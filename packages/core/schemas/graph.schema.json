@@ -13,6 +13,7 @@
       ]
     },
     "description": {
+      "description": "What this graph answers, in one or two sentences, so a reader knows it without reading its nodes.",
       "type": "string",
       "minLength": 1
     },
@@ -37,8 +38,11 @@
           "type": {
             "$ref": "common.schema.json#/$defs/type"
           },
-          "value": {},
+          "value": {
+            "description": "The literal itself, which must conform to the type declared beside it (G013)."
+          },
           "description": {
+            "description": "What this constant is for, for a reader deciding whether to read it.",
             "type": "string"
           }
         },
@@ -54,12 +58,14 @@
       "$ref": "common.schema.json#/$defs/typeRef"
     },
     "out": {
+      "description": "What the graph answers: the type, and the node it comes from. A graph with no out answers nothing.",
       "type": "object",
       "properties": {
         "type": {
           "$ref": "common.schema.json#/$defs/typeRef"
         },
         "from": {
+          "description": "The node whose answer this graph gives, or several as alternatives where a switch decides which settles (G010).",
           "oneOf": [
             {
               "$ref": "common.schema.json#/$defs/ident"
@@ -75,6 +81,7 @@
           ]
         },
         "description": {
+          "description": "What the answer means, for a reader of the binding or trigger that receives it.",
           "type": "string"
         }
       },
@@ -85,6 +92,7 @@
       "additionalProperties": false
     },
     "nodes": {
+      "description": "The nodes of the dataflow. A node runs when every value it reads has settled, so list order carries no meaning.",
       "type": "array",
       "minItems": 1,
       "items": {
@@ -92,6 +100,7 @@
         "type": "object",
         "properties": {
           "type": {
+            "description": "Which kind of node this is: run to call an operation, switch to route, map to run over a list.",
             "enum": [
               "@wilanis/node/run.schema.json",
               "@wilanis/node/switch.schema.json",
@@ -107,6 +116,7 @@
             "if": {
               "properties": {
                 "type": {
+                  "description": "Selects the run node's own rules for a node of that type.",
                   "const": "@wilanis/node/run.schema.json"
                 }
               }
@@ -119,6 +129,7 @@
             "if": {
               "properties": {
                 "type": {
+                  "description": "Selects the switch node's own rules for a node of that type.",
                   "const": "@wilanis/node/switch.schema.json"
                 }
               }
@@ -131,6 +142,7 @@
             "if": {
               "properties": {
                 "type": {
+                  "description": "Selects the map node's own rules for a node of that type.",
                   "const": "@wilanis/node/map.schema.json"
                 }
               }

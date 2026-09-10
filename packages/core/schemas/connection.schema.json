@@ -13,6 +13,7 @@
       ]
     },
     "description": {
+      "description": "What this connection reaches, in one or two sentences.",
       "type": "string",
       "minLength": 1
     },

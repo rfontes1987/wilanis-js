@@ -34,6 +34,7 @@
       "type": "object",
       "properties": {
         "fields": {
+          "description": "The fields of this object type, by name.",
           "type": "object",
           "propertyNames": {
             "$ref": "#/$defs/ident"
@@ -54,6 +55,7 @@
           ]
         },
         "description": {
+          "description": "What this object type is, for a reader of the contract that names it.",
           "type": "string"
         }
       },
@@ -63,6 +65,7 @@
       "additionalProperties": false
     },
     "type": {
+      "description": "A type: a type reference, or an object type written in place.",
       "oneOf": [
         {
           "$ref": "#/$defs/typeRef"
@@ -80,10 +83,12 @@
           "$ref": "#/$defs/type"
         },
         "required": {
+          "description": "Whether the field must be given. Absent: it must.",
           "type": "boolean",
           "default": true
         },
         "description": {
+          "description": "What this field means, for whoever writes the value.",
           "type": "string"
         },
         "secret": {
@@ -115,6 +120,7 @@
       "additionalProperties": false
     },
     "fields": {
+      "description": "The fields of a shape or of a contract, by name: each says its type, whether it is required, and what it means.",
       "type": "object",
       "propertyNames": {
         "$ref": "#/$defs/ident"
@@ -127,6 +133,7 @@
       "description": "A value where an operation is called. Literals are written as they are: a string, a number, a boolean, a list or an object of values. A string may carry {{root.path}} templates: alone it takes that value and its type; embedded in text it is interpolated (scalars only). A path segment is .name, or ['a key'] for a key that is not an identifier. Roots in a graph node: in (the graph's input), const (a constant), a node id, a resolver name. In a binding delegation's in: in (the operation's accepts) and resolvers. In a trigger's fire.in: request."
     },
     "values": {
+      "description": "The values given where an operation is called, by name: each is a literal or a {{root.path}} template read from what is in scope.",
       "type": "object",
       "propertyNames": {
         "$ref": "#/$defs/ident"

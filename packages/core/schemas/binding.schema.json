@@ -13,6 +13,7 @@
       ]
     },
     "description": {
+      "description": "What this binding meets and how, in one or two sentences.",
       "type": "string",
       "minLength": 1
     },
@@ -29,6 +30,7 @@
       "$ref": "common.schema.json#/$defs/path"
     },
     "operations": {
+      "description": "How each operation of the port is met: by a data graph, or by delegating to another operation. Every operation of the port needs one and no others may appear (B001).",
       "type": "object",
       "minProperties": 1,
       "propertyNames": {
@@ -47,6 +49,7 @@
             "$ref": "common.schema.json#/$defs/values"
           },
           "description": {
+            "description": "How this operation is met, for a reader comparing bindings of the same port.",
             "type": "string"
           }
         },

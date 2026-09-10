@@ -13,6 +13,7 @@
       ]
     },
     "description": {
+      "description": "What this trigger lets in and what it fires, in one or two sentences.",
       "type": "string",
       "minLength": 1
     },
@@ -53,6 +54,7 @@
                 "$ref": "common.schema.json#/$defs/values"
               },
               "description": {
+                "description": "Why this policy is attached here, for a reader of the trigger.",
                 "type": "string"
               }
             },
@@ -69,6 +71,7 @@
       "type": "object",
       "properties": {
         "description": {
+          "description": "What firing this operation does, for a reader of the trigger.",
           "type": "string"
         },
         "label": {
