@@ -1,6 +1,6 @@
 # RFC 0011: Retry, idempotency and timeout as declared properties of an operation
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:core`, `area:engine` (the report's shape and one opaque tag; no behaviour), `area:compiler`, `area:runtime`, `area:plugin-http`, `area:plugin-blob`
 - **Tracking issue:** #13
 - **Depends on:** none to accept. One rule (G0n4) needs RFC 0004's atomic walk and lands after it; the per-attempt
