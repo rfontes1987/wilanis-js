@@ -69,8 +69,9 @@ describe('the scheduler', () => {
     const elapsed = Date.now() - began;
     expect(report.status).toBe('done');
     expect(report.output).toEqual({ a: 'slow', b: 'quick', c: 'mid' });
-    // The sum is 2300ms; concurrent, the graph is bounded by its longest node.
-    expect(elapsed).toBeGreaterThanOrEqual(1000);
+    // The sum is 2300ms; concurrent, the graph is bounded by its longest node. No lower bound on the
+    // elapsed time: `setTimeout` promises the timer's own clock, not `Date.now()`, so a 1000ms sleep can
+    // measure 999 and did on CI. What the nodes' own timestamps say below is the evidence either way.
     expect(elapsed).toBeLessThan(1500);
     // The report is the evidence: all three were in flight at once.
     const started = ['slow', 'quick', 'mid'].map(id => report.nodes[id].startedAt!);
