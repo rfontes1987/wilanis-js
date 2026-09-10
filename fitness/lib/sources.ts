@@ -4,7 +4,7 @@
  * question about it: which modules it imports, what it exports, and whether each export says what it answers.
  * The node types are derived from the parser's own return type, so `@babel/parser` is the only dependency.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, type Stats, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from '@babel/parser';
 
@@ -146,4 +146,29 @@ export function packageDirs(): string[] {
     .filter(entry => entry.isDirectory())
     .map(entry => `packages/${entry.name}`)
     .sort();
+}
+
+/** Whether a file is there, for a claim that asks what a package ships rather than what it says. */
+export function fileExists(path: string): boolean {
+  return statOf(path)?.isFile() ?? false;
+}
+
+/** Whether a directory is there, for a claim about where something lives. */
+export function dirExists(path: string): boolean {
+  return statOf(path)?.isDirectory() ?? false;
+}
+
+/** What the file system says about a path, or null where it says nothing. */
+function statOf(path: string): Stats | null {
+  try {
+    return statSync(path);
+  } catch {
+    return null;
+  }
+}
+
+/** The names a directory holds, sorted, or nothing where the directory is not there. */
+export function entriesOf(dir: string): string[] {
+  if (!dirExists(dir)) return [];
+  return readdirSync(dir).slice().sort();
 }
