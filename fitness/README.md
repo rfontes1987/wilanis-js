@@ -4,8 +4,7 @@ A decision about the TypeScript code of this workspace is one file in this direc
 index, and the file names read as sentences, because a file's name *is* the claim it holds:
 
 ```
-a-fitness-function-is-one-claim.fitness.ts    the claim: its header, and the one `it` that gathers
-a-fitness-function-is-one-claim.judge.ts      its judge: the pure function that decides
+a-fitness-function-is-one-claim.fitness.ts
 ```
 
 `CLAUDE.md` states the architecture in sentences -- which way dependencies point, what the engine may import,
@@ -16,7 +15,7 @@ one and still pass `npm test`. This directory is where a sentence becomes a test
 
 ## What one looks like
 
-The decision record *is* the test file. It opens with three lines, and holds one `it` whose title is the claim:
+The decision record *is* the file. It opens with three lines:
 
 ```ts
 /**
@@ -28,25 +27,46 @@ The decision record *is* the test file. It opens with three lines, and holds one
  */
 ```
 
-**Claim** is what holds, and is the test's title. **Why** names the principle it serves, in `CLAUDE.md`'s
-words where it can, and the fact about the code that makes the claim true today. **Retire when** says what
-would have to become true for the next reader to delete the file with a clear conscience; it is the line that
-decides whether a decision is outdated.
+**Claim** is what holds, and is the title the runner gives its test. **Why** names the principle it serves,
+in `CLAUDE.md`'s words where it can, and the fact about the code that makes the claim true today. **Retire
+when** says what would have to become true for the next reader to delete the file with a clear conscience;
+it is the line that decides whether a decision is outdated.
+
+Below the header, a fitness function is a **module, not a test**. It exports three names and registers
+nothing:
+
+```ts
+/** The claim this module holds, and the title the runner gives its `it`. */
+export const claim = 'the engine imports nothing';
+
+/** Every file under the engine's `src`, with its text. */
+export function gather(): SourceFile[] { ... }
+
+/** Every import the engine may not have, one sentence each, naming the file and the fix. */
+export function judge(files: SourceFile[]): string[] { ... }
+```
+
+`fitness/run.test.ts` is the suite's one runner and its only test file besides sabotage. It loads every
+`*.fitness.ts` with `import.meta.glob`, eagerly, and registers one `it` per module, titled with its `claim`,
+asserting that judging what was gathered leaves no violation. A module that does not export all three is
+failed by name rather than skipped.
+
+This is why `fitness/sabotage.test.ts` imports judges freely: nothing it imports is a test file, so no claim
+re-runs under the sabotage file's name. (Importing from a file that holds `describe`/`it` re-runs its tests
+in the importer -- which is what Biome's `noExportsInTest` exists to prevent, and why a claim registers
+nothing of its own.)
 
 ## How one is written
 
-- **One claim per file.** A file that needs a second `it` is two decisions, and the edit is a second file.
+- **One claim per file.** A file that needs a second `claim` is two decisions, and the edit is a second file.
 - **Facts are data, not branches.** The order of the packages, the one package tested through another, the
   rule table Biome must carry: a constant at the top of the file. Where a fact is already declared elsewhere,
   read it there -- dependency direction reads each `package.json`, the kinds read `KINDS` in
   `packages/core/src/model.ts`. Adding a package or a kind then changes a list, not a decision.
-- **Gathering is separate from judging, and so are their files.** A claim is two files: `<claim>.fitness.ts`
-  holds the header and the one `it`, which gathers; `<claim>.judge.ts` beside it exports the pure function
-  that decides. The split is Biome's doing and it is right: a file holding `describe` and `it` is a test file,
-  and a test file exports nothing (`noExportsInTest`), while `fitness/sabotage.test.ts` needs each judge by
-  name. `packages/runtime/test/example-harness.ts` is the same shape. The judge takes what was read and
-  returns one sentence per violation, so sabotage can hand it a minimal violating input and expect the
-  violation named -- a fitness function that has never failed is unproved.
+- **Gathering is separate from judging.** `gather` reads the repository and `judge` is pure: it takes what
+  was read and returns one sentence per violation, naming the offending file and the edit that fixes it. So
+  `fitness/sabotage.test.ts` can hand a judge a minimal violating input and expect the violation named --
+  a fitness function that has never failed is unproved.
 - **A failure reads like a refusal.** It names the offending file and the edit that fixes it, the way a
   checker refusal carries an `at` and a hint.
 - **The full house rules apply.** `biome.jsonc` includes `fitness/**/*.ts` with no override, so a fitness

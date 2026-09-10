@@ -1,64 +1,66 @@
 /**
  * Every fitness function, handed a minimal input that violates its claim. A fitness function that has never
  * failed is unproved: it may be reading the wrong directory, or judging nothing at all, and the suite would
- * still be green. So each claim's exported judge gets a violating input here, and the violation it names is
- * expected. One `it` per fitness function, in the order the directory lists them.
+ * still be green. So each claim's `judge` gets a violating input here and the violation it names is expected.
+ * The judges are imported by name and nothing re-runs, because a fitness module is a module: it exports
+ * `claim`, `gather` and `judge`, and registers no test of its own. One `describe` per fitness function.
  */
 import { describe, expect, it } from 'vitest';
-import { judge } from './a-fitness-function-is-one-claim.judge.js';
+import { judge } from './a-fitness-function-is-one-claim.fitness.js';
 
 const HEADER = ['Claim: a claim', 'Why: a reason', 'Retire when: a condition'];
+const EXPORTS = "export const claim = 'a claim';\nexport function gather() {}\nexport function judge() {}\n";
+const FILE = 'fitness/a-claim.fitness.ts';
 
-/** A fitness file's text, from its three header lines and the `it` titles it holds. */
-function fileText(header: string[], titles: string[]): string {
-  const lines = header.map(line => ` * ${line}`).join('\n');
-  const blocks = titles.map(title => `  it('${title}', () => {});`).join('\n');
-  return `/**\n${lines}\n */\nimport { describe, it } from 'vitest';\n\ndescribe('fitness', () => {\n${blocks}\n});\n`;
+/** A fitness module's text, from its header lines and the body that follows them. */
+function fileText(header: string[], body = EXPORTS): string {
+  return `/**\n${header.map(line => ` * ${line}`).join('\n')}\n */\n${body}`;
 }
 
-describe('sabotage', () => {
-  it('a fitness function is one claim: a missing header line is named', () => {
-    const text = fileText(['Claim: a claim', 'Why: a reason'], ['a claim']);
-    const faults = judge([{ file: 'fitness/a-claim.fitness.ts', text }]);
+describe('a fitness function is one claim', () => {
+  it('names a missing header line', () => {
+    const faults = judge([{ file: FILE, text: fileText(['Claim: a claim', 'Why: a reason']) }]);
     expect(faults).toEqual([
-      'fitness/a-claim.fitness.ts has no Retire when: in its header; open the file with Claim, Why and Retire when',
+      `${FILE} has no Retire when: in its header; open the file with Claim, Why and Retire when`,
     ]);
   });
 
-  it('a fitness function is one claim: a header out of order is named', () => {
-    const text = fileText(['Why: a reason', 'Claim: a claim', 'Retire when: a condition'], ['a claim']);
-    const faults = judge([{ file: 'fitness/a-claim.fitness.ts', text }]);
-    expect(faults).toEqual([
-      'fitness/a-claim.fitness.ts orders its header Why:, Claim:, Retire when:; write Claim, then Why, then Retire when',
+  it('names a header written out of order', () => {
+    const header = ['Why: a reason', 'Claim: a claim', 'Retire when: a condition'];
+    expect(judge([{ file: FILE, text: fileText(header) }])).toEqual([
+      `${FILE} orders its header Why:, Claim:, Retire when:; write Claim, then Why, then Retire when`,
     ]);
   });
 
-  it('a fitness function is one claim: a second it is named as a second decision', () => {
-    const text = fileText(HEADER, ['a claim', 'another claim']);
-    const faults = judge([{ file: 'fitness/a-claim.fitness.ts', text }]);
-    expect(faults).toEqual([
-      'fitness/a-claim.fitness.ts holds 2 it blocks; a fitness function is one claim, so split or join the file',
+  it('names the exports a fitness module owes the runner', () => {
+    const body = "export const claim = 'a claim';\n";
+    expect(judge([{ file: FILE, text: fileText(HEADER, body) }])).toEqual([
+      `${FILE} exports no gather, judge; a fitness module exports claim, gather and judge`,
     ]);
   });
 
-  it('a fitness function is one claim: a title that is not the claim is named', () => {
-    const text = fileText(HEADER, ['something else']);
-    const faults = judge([{ file: 'fitness/a-claim.fitness.ts', text }]);
-    expect(faults).toEqual([
-      'fitness/a-claim.fitness.ts titles its it "something else" but claims "a claim"; make the two one sentence',
+  it('names a claim that registers its own test', () => {
+    const body = `${EXPORTS}describe('fitness', () => {});\n`;
+    expect(judge([{ file: FILE, text: fileText(HEADER, body) }])).toEqual([
+      `${FILE} registers its own test; a fitness module holds no describe and no it`,
     ]);
   });
 
-  it('a fitness function is one claim: a name that is not the claim is named', () => {
-    const text = fileText(HEADER, ['a claim']);
-    const faults = judge([{ file: 'fitness/named-otherwise.fitness.ts', text }]);
-    expect(faults).toEqual([
-      'fitness/named-otherwise.fitness.ts claims "a claim"; name the file after the claim, as named otherwise is read',
+  it('names an exported claim that is not the stated one', () => {
+    const body = "export const claim = 'something else';\nexport function gather() {}\nexport function judge() {}\n";
+    expect(judge([{ file: FILE, text: fileText(HEADER, body) }])).toEqual([
+      `${FILE} exports the claim "something else" but its header states "a claim"; make the two one sentence`,
     ]);
   });
 
-  it('a fitness function is one claim: the suite as it stands is clean', () => {
-    const text = fileText(HEADER, ['a claim']);
-    expect(judge([{ file: 'fitness/a-claim.fitness.ts', text }])).toEqual([]);
+  it('names a file not named after its claim', () => {
+    const file = 'fitness/named-otherwise.fitness.ts';
+    expect(judge([{ file, text: fileText(HEADER) }])).toEqual([
+      `${file} states "a claim"; name the file after the claim, as named otherwise is read`,
+    ]);
+  });
+
+  it('passes a module in the shape it asks for', () => {
+    expect(judge([{ file: FILE, text: fileText(HEADER) }])).toEqual([]);
   });
 });
