@@ -130,6 +130,42 @@ function memberName(key: Key): string {
   return '<computed>';
 }
 
+/**
+ * Every identifier and every string literal a file's text holds, comments excluded, so a claim can hold a
+ * vocabulary rather than an import. A word in a comment is a reader explaining the design and not the code
+ * doing it, which is why a file may say in prose what it may not spell in an identifier.
+ */
+export function wordsOf(text: string): string[] {
+  const found: string[] = [];
+  walk(parse(text, { sourceType: 'module', plugins: ['typescript'] }).program, node => {
+    if (node.type === 'Identifier' && node.name !== undefined) found.push(node.name);
+    else if (node.type === 'StringLiteral' && node.value !== undefined) found.push(node.value);
+    else if (node.type === 'TSPropertySignature' || node.type === 'ObjectProperty') keyWord(node, found);
+  });
+  return found;
+}
+
+/** A property's key as a word, since a member named for the guard's business is spelled here and nowhere else. */
+function keyWord(node: object, found: string[]): void {
+  const key = (node as { key?: { type: string; name?: string; value?: string } }).key;
+  if (key?.type === 'Identifier' && key.name) found.push(key.name);
+  if (key?.type === 'StringLiteral' && key.value) found.push(key.value);
+}
+
+/** Every node of a parsed tree, comments left out because the parser keeps them off the tree by default. */
+function walk(node: unknown, visit: (node: { type: string; name?: string; value?: string }) => void): void {
+  if (!node || typeof node !== 'object') return;
+  if (Array.isArray(node)) {
+    for (const child of node) walk(child, visit);
+    return;
+  }
+  const typed = node as { type?: string };
+  if (typeof typed.type === 'string') visit(node as { type: string; name?: string; value?: string });
+  for (const [key, child] of Object.entries(node)) {
+    if (key !== 'loc') walk(child, visit);
+  }
+}
+
 /** Two directory entries in name order, for a stable walk over a file system that promises none. */
 function byName(one: { name: string }, other: { name: string }): number {
   return one.name < other.name ? -1 : 1;
