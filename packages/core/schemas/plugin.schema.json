@@ -13,6 +13,7 @@
       ]
     },
     "description": {
+      "description": "What this plugin is for, in one or two sentences, shown wherever a reader meets it.",
       "type": "string",
       "minLength": 1
     },
@@ -25,9 +26,11 @@
       "$ref": "common.schema.json#/$defs/inlineObject"
     },
     "grants": {
+      "description": "What the plugin grants a tree: everything effectful enters through one of these, and each is a file under the plugin's docs/ that a reader can open.",
       "type": "object",
       "properties": {
         "ports": {
+          "description": "The native ports it grants, by path. A tree names their operations from a graph and never binds them; the plugin implements them.",
           "type": "array",
           "items": {
             "$ref": "common.schema.json#/$defs/path"
@@ -35,6 +38,7 @@
           "uniqueItems": true
         },
         "triggerKinds": {
+          "description": "The trigger kinds it grants, by path. A trigger of one of these kinds fires a domain operation when something outside happens.",
           "type": "array",
           "items": {
             "$ref": "common.schema.json#/$defs/path"
@@ -42,6 +46,7 @@
           "uniqueItems": true
         },
         "connectionKinds": {
+          "description": "The connection kinds it grants, by path. A connection of one of these kinds says how to reach one outside system.",
           "type": "array",
           "items": {
             "$ref": "common.schema.json#/$defs/path"
@@ -49,6 +54,7 @@
           "uniqueItems": true
         },
         "codecs": {
+          "description": "The codecs it grants, by path. A codec reads a body into values and writes values back out.",
           "type": "array",
           "items": {
             "$ref": "common.schema.json#/$defs/path"
@@ -56,6 +62,7 @@
           "uniqueItems": true
         },
         "shapes": {
+          "description": "The shapes it grants, by path, for contracts and documents to name.",
           "type": "array",
           "items": {
             "$ref": "common.schema.json#/$defs/path"
@@ -73,6 +80,7 @@
           "$ref": "common.schema.json#/$defs/inlineObject"
         },
         "refuses": {
+          "description": "The reasons the guard refuses with on its own, by name, each with what it means. A trigger that gives it a credential must map them (T005).",
           "type": "object",
           "propertyNames": {
             "$ref": "common.schema.json#/$defs/ident"
@@ -82,6 +90,7 @@
           }
         },
         "credentials": {
+          "description": "What the guard verifies, by name -- a token, a challenge -- each with the type a trigger's policy attachment must give it.",
           "type": "object",
           "propertyNames": {
             "$ref": "common.schema.json#/$defs/ident"
@@ -93,6 +102,7 @@
                 "$ref": "common.schema.json#/$defs/type"
               },
               "yields": {
+                "description": "The context fields this credential yields once it verifies, which policies and resolvers may then read.",
                 "type": "array",
                 "items": {
                   "$ref": "common.schema.json#/$defs/ident"
@@ -101,6 +111,7 @@
                 "minItems": 1
               },
               "description": {
+                "description": "What this credential is, for a reader deciding which one a trigger should hand over.",
                 "type": "string"
               }
             },

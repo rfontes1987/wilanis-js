@@ -13,6 +13,7 @@
       ]
     },
     "description": {
+      "description": "What this scenario covers, in one or two sentences, so a reader knows why the recording is kept.",
       "type": "string",
       "minLength": 1
     },
@@ -26,10 +27,14 @@
       "$ref": "common.schema.json#/$defs/path"
     },
     "seed": {
+      "description": "The seed wilanis fuzz generated this run's input from, so the same input can be generated again.",
       "type": "integer"
     },
-    "in": {},
+    "in": {
+      "description": "The input the trigger was fired with, generated from the seed and recorded as it was."
+    },
     "request": {
+      "description": "The request the run read, for a trigger whose kind hands one; what fire.in and any policy read from.",
       "type": "object"
     },
     "stubs": {
@@ -38,26 +43,35 @@
       "additionalProperties": {}
     },
     "expect": {
+      "description": "The report this run produced, which wilanis regress replays against and diffs node by node.",
       "type": "object",
       "properties": {
         "status": {
+          "description": "How the run as a whole ended: done, failed, or blocked by a policy or the guard.",
           "enum": [
             "done",
             "failed",
             "blocked"
           ]
         },
-        "output": {},
+        "output": {
+          "description": "What the run answered, recorded as it was."
+        },
         "nodes": {
+          "description": "What each node did, by its dotted path, so a replay says which node first differs.",
           "type": "object",
           "additionalProperties": {
             "type": "object",
             "properties": {
               "status": {
+                "description": "How this node ended.",
                 "type": "string"
               },
-              "out": {},
+              "out": {
+                "description": "What this node answered, recorded as it was."
+              },
               "selected": {
+                "description": "For a switch, the rule it took, so a replay says when routing changed.",
                 "type": "string"
               }
             },

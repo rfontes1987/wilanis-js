@@ -6,12 +6,14 @@
   "type": "object",
   "properties": {
     "type": {
+      "description": "Marks this node a map: it runs one operation per element of a list.",
       "const": "@wilanis/node/map.schema.json"
     },
     "id": {
       "$ref": "../common.schema.json#/$defs/ident"
     },
     "description": {
+      "description": "What this node does, for a reader of the graph.",
       "type": "string"
     },
     "label": {
@@ -29,6 +31,7 @@
       "$ref": "../common.schema.json#/$defs/values"
     },
     "bind": {
+      "description": "Inputs taken from within each element, by name, each a dotted path into it or \"\" for the whole element. A name bound here may not also be given in in (G006).",
       "type": "object",
       "propertyNames": {
         "$ref": "../common.schema.json#/$defs/ident"
@@ -40,6 +43,7 @@
       }
     },
     "onItemFailure": {
+      "description": "What one element failing does: fail ends the node, collect keeps the successes. Absent: fail.",
       "enum": [
         "fail",
         "collect"

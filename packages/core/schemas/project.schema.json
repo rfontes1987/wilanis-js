@@ -13,6 +13,7 @@
       ]
     },
     "description": {
+      "description": "What this tree is for, in one or two sentences, shown wherever a reader meets the project.",
       "type": "string",
       "minLength": 1
     },
@@ -27,6 +28,7 @@
       "description": "The project name: kebab-case."
     },
     "aliases": {
+      "description": "Alias roots this tree may name, each mapping an @name to a folder path from the root. An alias may not collide with a plugin root or a reserved root (D007).",
       "type": "object",
       "propertyNames": {
         "$ref": "common.schema.json#/$defs/alias"
@@ -38,6 +40,7 @@
       }
     },
     "plugins": {
+      "description": "The plugins this tree uses, each named by the alias root it takes and the package that ships it. Everything effectful enters through one of these.",
       "type": "array",
       "items": {
         "type": "object",
@@ -83,6 +86,7 @@
             "minItems": 1
           },
           "description": {
+            "description": "Why this tree is included, for a reader deciding whether it is still wanted.",
             "type": "string"
           }
         },
@@ -111,6 +115,7 @@
         "type": "object",
         "properties": {
           "description": {
+            "description": "What this step starts, for a reader of wilanis start.",
             "type": "string"
           },
           "label": {
@@ -139,6 +144,7 @@
       }
     },
     "secrets": {
+      "description": "The secrets this tree reads, each mapping a name a setting may reference to the environment variable that holds it (C001).",
       "type": "object",
       "propertyNames": {
         "$ref": "common.schema.json#/$defs/ident"
@@ -150,6 +156,7 @@
       }
     },
     "profiles": {
+      "description": "Named sets of bindings, so one tree can be met differently in different places: development against a fake, live against the real thing.",
       "type": "object",
       "propertyNames": {
         "type": "string",
@@ -160,9 +167,11 @@
         "type": "object",
         "properties": {
           "description": {
+            "description": "What this profile is for, so a reader knows when to run under it.",
             "type": "string"
           },
           "bindings": {
+            "description": "Which binding meets each domain port under this profile. Every domain port needs exactly one (B002).",
             "type": "object",
             "propertyNames": {
               "description": "A domain port path (@...), bound to the binding document that meets it under this profile.",

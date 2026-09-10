@@ -13,6 +13,7 @@
       ]
     },
     "description": {
+      "description": "What this policy decides, in one or two sentences.",
       "type": "string",
       "minLength": 1
     },
@@ -26,6 +27,7 @@
       "type": "object",
       "properties": {
         "description": {
+          "description": "What the decision reads and asks, for a reader of the policy.",
           "type": "string"
         },
         "label": {
@@ -55,6 +57,7 @@
         "type": "object",
         "properties": {
           "effect": {
+            "description": "What this reason does: deny ends the run; challenge asks the guard to open a challenge and tells the caller how to answer it.",
             "enum": [
               "deny",
               "challenge"
@@ -66,6 +69,7 @@
             "minLength": 1
           },
           "description": {
+            "description": "What this reason means, shown to whoever is refused.",
             "type": "string"
           }
         },

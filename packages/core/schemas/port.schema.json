@@ -13,6 +13,7 @@
       ]
     },
     "description": {
+      "description": "What this port is for, in one or two sentences: the capability, not its implementation.",
       "type": "string",
       "minLength": 1
     },
@@ -22,6 +23,7 @@
       "minLength": 1
     },
     "operations": {
+      "description": "The operations this port offers, by name: what each accepts, what it returns, and whether it is pure.",
       "type": "object",
       "minProperties": 1,
       "propertyNames": {
@@ -31,6 +33,7 @@
         "type": "object",
         "properties": {
           "description": {
+            "description": "What this operation does, for a reader choosing between the port's operations.",
             "type": "string",
             "minLength": 1
           },

@@ -13,6 +13,7 @@
       ]
     },
     "description": {
+      "description": "What this feature is for, in one or two sentences.",
       "type": "string",
       "minLength": 1
     },
@@ -22,6 +23,7 @@
       "minLength": 1
     },
     "dependsOn": {
+      "description": "The other features this one may reference. A document may only name a document of its own feature or of one listed here.",
       "type": "array",
       "items": {
         "type": "string",
@@ -39,6 +41,7 @@
       "uniqueItems": true
     },
     "effects": {
+      "description": "The effectful operations this feature allows a binding to reach, each as path#operation. A delegation to one not listed here is refused (L003).",
       "type": "array",
       "items": {
         "$ref": "common.schema.json#/$defs/opRef"
