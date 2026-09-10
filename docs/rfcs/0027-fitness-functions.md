@@ -1,6 +1,6 @@
 # RFC 0027: Fitness functions: decisions about the code, held by the tests that record them
 
-- **Status:** accepted
+- **Status:** implemented
 - **Areas:** `area:process`
 - **Tracking issue:** #92
 - **Depends on:** none
