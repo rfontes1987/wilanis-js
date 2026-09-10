@@ -69,3 +69,21 @@ export function relocate(from: string, to: string): string[] {
     renameSync(join(dir, from), join(dir, to));
   });
 }
+
+/** Copy the example, write raw bytes over one file, and answer the refusal codes. */
+export function corrupt(file: string, bytes: string): string[] {
+  return codesAfter(dir => writeFileSync(join(dir, file), bytes));
+}
+
+/** Copy the example, delete one file, and answer the refusal codes. */
+export function without(file: string): string[] {
+  return codesAfter(dir => rmSync(join(dir, file), { force: true }));
+}
+
+/** Copy the example, add a document at a path it does not have, and answer the refusal codes. */
+export function planted(file: string, doc: unknown): string[] {
+  return codesAfter(dir => {
+    mkdirSync(dirname(join(dir, file)), { recursive: true });
+    writeFileSync(join(dir, file), JSON.stringify(doc));
+  });
+}
