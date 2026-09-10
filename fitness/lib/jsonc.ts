@@ -34,3 +34,20 @@ export function record(value: unknown): Record<string, unknown> | null {
 function reasons(errors: ParseError[]): string {
   return errors.map(error => `${printParseErrorCode(error.error)} at offset ${error.offset}`).join(', ');
 }
+
+/** A package's manifest as the direction claims read it: its name, and what each section names. */
+export interface Manifest {
+  name: string;
+  dependencies: string[];
+  devDependencies: string[];
+}
+
+/** The manifest of a package directory, with each dependency section as a sorted list of names. */
+export function manifestOf(dir: string): Manifest {
+  const value = record(readJson(`${dir}/package.json`)) ?? {};
+  return {
+    name: typeof value.name === 'string' ? value.name : dir,
+    dependencies: Object.keys(record(value.dependencies) ?? {}).sort(),
+    devDependencies: Object.keys(record(value.devDependencies) ?? {}).sort(),
+  };
+}

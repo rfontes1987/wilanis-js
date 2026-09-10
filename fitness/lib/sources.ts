@@ -132,3 +132,18 @@ function byName(one: { name: string }, other: { name: string }): number {
 export function fitnessFiles(): string[] {
   return sourceFiles('fitness').filter(file => file.endsWith('.fitness.ts'));
 }
+
+/** The bare package a specifier names -- `@scope/name` or `name` -- or null where it is relative. */
+export function packageOf(specifier: string): string | null {
+  if (specifier.startsWith('.')) return null;
+  const parts = specifier.split('/');
+  return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : (parts[0] ?? null);
+}
+
+/** Every directory under `packages/`, repository-relative and sorted, so a claim reads the workspace. */
+export function packageDirs(): string[] {
+  return readdirSync('packages', { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => `packages/${entry.name}`)
+    .sort();
+}

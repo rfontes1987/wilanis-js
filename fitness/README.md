@@ -96,8 +96,9 @@ rule exists to prevent, and why a claim registers nothing of its own.)
 `fitness/lib/` holds **how the repository is read, never what is judged**: a function there takes a path or a
 text and returns data. It never returns a violation, never imports vitest, and never knows a claim.
 `sources.ts` reads TypeScript as text with Babel's parser (import specifiers, exported declarations, the
-comments that lead them), and `jsonc.ts` reads `biome.jsonc` and the plain JSON of a `package.json` or a
-`tsconfig.json`.
+comments that lead them, the package a specifier names, the directories under `packages/`), and `jsonc.ts`
+reads `biome.jsonc`, the plain JSON of a `tsconfig.json`, and a package's manifest as its name and its
+dependency sections.
 
 ## Running them
 
