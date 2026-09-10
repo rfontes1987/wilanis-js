@@ -54,11 +54,12 @@ has one maintainer and GitHub does not let an author approve their own pull requ
 ## Guide-level explanation
 
 A **fitness function** is one file, `fitness/<claim>.fitness.ts`, and its name is the claim as a sentence in
-kebab case. The file opens with a block comment of three lines and exports exactly three things: `claim`, the
-sentence; `gather`, which reads the repository; and `judge`, the pure function from what was gathered to the
-violations, each naming the offending file and the edit that fixes it. It holds no `describe` and no `it`. A
-fitness file is a module, not a test, so another test can import its judge without registering its test a
-second time:
+kebab case. The file opens with a block comment of three lines and exports exactly four things: `claim`, the
+sentence; `gather`, which reads the repository; `judge`, the pure function from what was gathered to the
+violations, each naming the offending file and the edit that fixes it; and `sabotage`, the proof that the
+judge bites: a list of cases, each a minimal input that violates the claim and the violation it must name. It
+holds no `describe` and no `it`. A fitness file is a module, not a test; the decision, how it is read, how it
+is judged and what breaking it looks like are one file, and the file is self-proving:
 
 ```ts
 /**
@@ -81,16 +82,28 @@ export const judge = (files: ReturnType<typeof gather>): string[] =>
       .filter(spec => !spec.startsWith('.'))
       .map(spec => `${file} imports ${spec}; move the concern behind a handler or a source`),
   );
+
+export const sabotage = [
+  {
+    input: [{ file: 'packages/engine/src/kernel.ts', imports: ['node:fs', './spec.js'] }],
+    violation: 'packages/engine/src/kernel.ts imports node:fs; move the concern behind a handler or a source',
+  },
+];
 ```
 
 One runner, `fitness/run.test.ts`, loads every fitness file through an eager `import.meta.glob` and registers
-one test per file, titled with its claim, so the property "one claim, one test" holds for every file by
-construction:
+two tests per file: the claim, titled with its sentence, judging what was gathered; and the proof, "<claim>
+bites", judging every sabotage case and expecting its violation. "One claim, one test, one proof" then holds
+for every file by construction, and there is no central file of proofs to grow with the suite:
 
 ```ts
 const found = import.meta.glob<Fitness>('./*.fitness.ts', { eager: true });
 for (const [path, fitness] of Object.entries(found)) {
-  it(fitness.claim, () => expect(fitness.judge(fitness.gather()), `see fitness/${basename(path)}`).toEqual([]));
+  const file = `fitness/${basename(path)}`;
+  it(fitness.claim, () => expect(fitness.judge(fitness.gather()), `see ${file}`).toEqual([]));
+  it(`${fitness.claim} bites`, () => {
+    for (const { input, violation } of fitness.sabotage) expect(fitness.judge(input), `see ${file}`).toContain(violation);
+  });
 }
 ```
 
@@ -160,26 +173,30 @@ claim holds on `main` at the time of writing, which the implementing task confir
 | `a-plugin-grants-files-not-objects` | every `packages/plugin-*` has `docs/plugin.json` and lists `docs` in its `files` | none | holds |
 | `tests-live-beside-what-they-test` | every `packages/*/src` has a sibling `test/`, except the packages the table says are tested through another | `TESTED_THROUGH = { compiler: 'packages/runtime/test' }` | holds |
 | `a-refusal-code-is-made-where-its-family-lives` | under `src/` only, a string literal shaped `[A-Z]\d{3}` appears only in the directories its family letter names; tests carry codes of every family on purpose | `HOME = { D: core/src, runtime/src/project.ts; R L G P B T A C S: compiler/src/check; X: plugin-*/src }` | holds; the two `D` literals in the runtime's project loader (`badPlugin`, D006, and `badInclude`, D010, in `project.ts`) stay where they are and the table names them, since resolving an npm package is the runtime's knowledge, not the loader's |
-| `a-fitness-function-is-one-claim` | every `fitness/*.fitness.ts` opens with the three header lines in order, exports exactly `claim`, `gather` and `judge`, has a `claim` equal to the header's Claim line, and holds no `describe` or `it` | none | new |
+| `a-fitness-function-is-one-claim` | every `fitness/*.fitness.ts` opens with the three header lines in order, exports exactly `claim`, `gather`, `judge` and `sabotage`, has a `claim` equal to the header's Claim line, a `sabotage` with at least one case, and holds no `describe` or `it` | none | new |
 | `the-house-rules-hold-everywhere` | `biome.jsonc` carries every rule in the table at level `error` with its option; `files.includes` covers every `packages/*/src`, every `test/` and `fitness/`, with no negated pattern; the overrides are exactly the two the file justifies | `RULES` (complexity 10, 50 lines per function, 300 per file, 4 parameters, 3 nested callbacks, no nested ternary, no `!`, no `any`, names of 2 characters) | holds |
 | `no-house-rule-is-suppressed` | no `biome-ignore` comment under `packages/`, `libraries/` or `fitness/` | `ALLOWED = []` | holds |
 | `typescript-is-strict-in-every-package` | `tsconfig.base.json` has `strict: true`; every `packages/*/tsconfig.json` extends it and sets no `compilerOptions` but `rootDir` and `outDir`; every package is a reference of the root `tsconfig.json` | none | holds |
 
 Each function separates gathering from judging: reading files is `gather`, and `judge` is a pure function over
-what was gathered, so `fitness/sabotage.test.ts` can hand each judge a minimal violating input and expect the
-named violation. Because a fitness file is a module and never a test, importing it registers nothing; that is
-what lets the sabotage test import a judge, and it is the same reason Biome's `noExportsInTest` stands over
-`fitness/` with no override. A fitness function that has never failed is unproved.
+what was gathered, so its `sabotage` cases can hand it a minimal violating input and name the violation they
+expect. A fitness function that has never failed is unproved, and the proof lives in the file it proves. A
+fitness file is a module and never a test, which is why Biome's `noExportsInTest` stands over `fitness/` with
+no override. The house rules bound the file: one that passes 300 lines is two decisions, and the edit is a
+second file, or its reading is general and belongs in `lib/`.
 
 ### Tooling
 
 - **Parsing.** Two new devDependencies at the workspace root, both pure JavaScript: `@babel/parser`, for
   import specifiers, exported declarations and their leading comments, and `jsonc-parser`, for
   `biome.jsonc`. Neither is in the tree today. The installed `typescript` is the
-  native 7.x compiler and exposes no parsing API. Shared helpers live in `fitness/lib/`.
+  native 7.x compiler and exposes no parsing API. `fitness/lib/` holds how the repository is read, never
+  what is judged: a function there takes a path or a text and returns data. It never returns a violation,
+  never imports vitest, and never knows a claim. A builder for a fitness function's own sabotage inputs is an
+  unexported function inside that fitness file, not a helper in `lib/`.
 - **Runner.** A root `vitest.config.ts` declares two projects: `packages`, the existing default pattern, and
-  `fitness`, `fitness/**/*.test.ts`, which is `run.test.ts` and `sabotage.test.ts`; the fitness files are
-  modules the runner loads. `npm run fitness` runs the second project alone.
+  `fitness`, `fitness/**/*.test.ts`, which is `run.test.ts` alone; the fitness files are modules the runner
+  loads. `npm run fitness` runs the second project alone.
 - **Lint.** `biome.jsonc` adds `fitness/**/*.ts` to `files.includes` with no override: a fitness function
   is held to the full house rules, so one that grows past 50 lines is refused by the tool it defends.
 - **Hook.** `.githooks/commit-msg`, a POSIX shell script; `package.json` gains
@@ -225,19 +242,19 @@ None. No schema, document or IR changes. A consumer tree is unaffected; the suit
 
 ## Tests
 
-The fitness functions are the tests, one each, registered by `fitness/run.test.ts` under the file's claim.
-`fitness/sabotage.test.ts` proves each one bites: one `it` per fitness
-function, feeding its exported judge a minimal input that violates the claim (a file text importing
+The fitness functions are the tests, registered by `fitness/run.test.ts`: for each file, one test under the
+claim, and one proof, "<claim> bites", that feeds the judge every `sabotage` case (a file text importing
 `@wilanis/runtime` from a plugin's `src`, a `biome.jsonc` with `maxLines: 80`, an exported function without a
-comment) and expecting the violation named. `fitness/a-fitness-function-is-one-claim.fitness.ts` holds the
+comment) and expects the violation it names. `fitness/a-fitness-function-is-one-claim.fitness.ts` holds the
 suite to its own shape. The `commit-msg` hook is exercised by hand in the implementing pull request and its
 behaviour stated in `fitness/README.md`; the CI jobs are seen to run on that pull request.
 
 ## Implementation plan
 
-1. Scaffold: `vitest.config.ts` with the two projects, `fitness/run.test.ts`, `fitness/**/*.ts` in Biome's includes, the two
-   devDependencies, `fitness/lib/` with the source and JSONC readers, `fitness/README.md`, and
-   `a-fitness-function-is-one-claim`.
+1. Scaffold: `vitest.config.ts` with the two projects, `fitness/run.test.ts` registering the claim and the
+   proof of every fitness module, `fitness/**/*.ts` in Biome's includes, the two devDependencies,
+   `fitness/lib/` with the source and JSONC readers, `fitness/README.md` with the `lib/` rule, and
+   `a-fitness-function-is-one-claim` with its sabotage cases.
 2. The import claims: `dependencies-point-one-way`, `the-engine-imports-nothing`,
    `the-compiler-imports-only-core-and-engine`, with their sabotage cases.
 3. `every-public-function-says-what-it-answers`, and the doc comments on the 45 exports it finds.
@@ -314,4 +331,10 @@ comment, the viewer renders `graph` outside `renderDocPage`, and the refusal-cod
 Amended once task 1 began: a fitness file was first specified as a test file exporting its judge. Biome's
 `noExportsInTest` refused the first one, and rightly: importing a vitest test file registers its tests again
 in the importer. A fitness file is now a module exporting `claim`, `gather` and `judge`, and one runner
-registers the tests. One file per decision, no override, and the sabotage test imports nothing that runs.
+registers the tests. One file per decision, no override, and nothing imports a test file.
+
+Amended again before task 1 landed: the proofs were a central `fitness/sabotage.test.ts`, which at seven
+cases for the first claim was already 69 lines and would pass the 300-line house rule by the fourth claim,
+failing for the wrong reason, the suite's growth. Each fitness module now exports its `sabotage` cases as its
+fourth export and the runner registers the proof beside the claim. A fitness file that outgrows the page is
+two decisions or a reader that belongs in `lib/`, and `lib/` holds readers only.
