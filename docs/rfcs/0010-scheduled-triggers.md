@@ -1,7 +1,7 @@
 # RFC 0010: Scheduled triggers
 
-- **Status:** draft
-- **Areas:** a new plugin `@wilanis/plugin-schedule` (the kind, the scheduler, the cron parser, its X rules), `area:runtime` (the example, `describe`, `map`, the template), `area:view`, and `area:plugin-storage` for the lease a storage engine keeps. No change to core, the compiler or the engine.
+- **Status:** accepted
+- **Areas:** a new plugin `@wilanis/plugin-schedule` (the kind, the scheduler, the cron parser, its X rules), `area:core` (one optional field on the connection-kind schema: `leases`), `area:runtime` (the example, `describe`, `map`, the template), `area:view`, and `area:plugin-storage` for the lease keeper a storage engine registers. No change to the compiler or the engine.
 - **Tracking issue:** #12
 - **Depends on:** none to accept. RFC 0012 (the `deadlineMs` setting waits for `FireArgs.signal`; that step is marked in the plan). RFC 0002 (the lease that lets one instance of several fire a tick, and the memory of the last tick that `catchUp` needs, are a table in the storage engine's connection; that step is blocked on its implementation). RFC 0006's traces and RFC 0007's access invariants need nothing here and apply to a scheduled trigger as they apply to a route. RFC 0013 is what a process that runs *only* the schedule waits on (*Drawbacks*, first item). RFC 0009 is the neighbour: a tick that fans work out publishes messages, and this RFC says where the seam is.
 
@@ -134,15 +134,27 @@ X0n1  @features/monitor/edge/nightly-digest.trigger.json#settings/cron
 
 ### Documents and schemas
 
-No new document kind and no schema change. The `trigger` kind means what it means: `settings`, `in`, `out`,
-`policies`, `fire`. The `trigger-kind`, `port` and `plugin` schemas already say everything the documents below
-need. Placement is unchanged: a scheduled trigger is a trigger, `HOME` in `packages/core/src/placement.ts` puts it
-in `edge/`, and D008 refuses it elsewhere.
+No new document kind. One existing kind schema gains one optional field, compatible under RFC 0008 and following
+the precedent RFC 0002 set with `storage` and RFC 0009 with `delivery` on a connection kind:
+
+**`connection-kind.schema.json`** gains `leases` (boolean, optional): "True when a connection of this kind can
+keep a lease: a named hold one process of several takes for a while, and the record of what was last done under it.
+The plugin that grants the kind registers a lease keeper for it; the scheduler's `run` step names such a
+connection as its `lease` (X0n4). Absent: a connection of this kind keeps no lease (an HTTP upstream, a
+directory)." `ConnectionKindDoc` in `packages/core/src/model.ts` gains `leases?: boolean`. A plugin declares it on
+the kind it grants and fills the contract under *Lease keepers*; `@schedule` grants no kind, as `@queue` and
+`@storage` grant none. The marker is the kind's own word, so a Redis or etcd kind (RFC 0023) can be a keeper without
+being a store, and a store can decline to be one.
+
+The `trigger` kind means what it means: `settings`, `in`, `out`, `policies`, `fire`. The `trigger-kind`, `port`
+and `plugin` schemas already say everything the documents below need. Placement is unchanged: a scheduled trigger
+is a trigger, `HOME` in `packages/core/src/placement.ts` puts it in `edge/`, and D008 refuses it elsewhere.
 
 `packages/runtime/templates/CLAUDE.md`: the `trigger` row gains "a scheduled trigger says `cron` (five fields,
 in a `timezone`) or `everyMs`, reads the tick as `request.scheduled`, and fires only while a startup step names
-`@schedule/scheduler.port.json#run`"; the *What the tree starts* paragraph gains the step beside `listen` and
-`watch`; the X list gains `@schedule: X0n1 a schedule that is not one, X0n2 an in nothing fills, X0n3 catchUp with
+`@schedule/scheduler.port.json#run`"; the `connection` row gains "a connection whose kind declares `leases` can
+keep the scheduler's hold, so one instance of several fires a tick"; the *What the tree starts* paragraph gains the
+step beside `listen` and `watch`; the X list gains `@schedule: X0n1 a schedule that is not one, X0n2 an in nothing fills, X0n3 catchUp with
 nothing to remember by`. `wilanis new trigger` (`SCAFFOLDS` in `packages/runtime/src/scaffolds.ts`) gains
 `--kind @schedule/schedule.trigger-kind.json`, writing `settings: { cron: "0 3 * * *" }` and no `in`.
 
@@ -165,7 +177,7 @@ as the stub proposed, is under *Drawbacks*.
 
 | Operation | `holds` | Accepts | Returns |
 |---|---|---|---|
-| `run` | true | `lease` (string, optional, `static`: a connection document whose kind is marked `storage`, RFC 0002; absent: this process assumes it is alone) | `{ triggers: number, next?: string }` -- how many scheduled triggers the tree has and the earliest next tick, ISO 8601 |
+| `run` | true | `lease` (string, optional, `static`: a connection document whose kind declares `leases`; absent: this process assumes it is alone) | `{ triggers: number, next?: string }` -- how many scheduled triggers the tree has and the earliest next tick, ISO 8601 |
 
 `run` reads `env.serving` and `env.hold` exactly as `listen` in `packages/plugin-http/src/serve.ts` and `watchTree`
 in `packages/plugin-reload/src/index.ts` do, and throws the same way when run from a graph, which L008 has already
@@ -209,7 +221,8 @@ through `mismatch` and no X rule is needed -- unlike RFC 0009's `outcomes`, whos
 Codes are placeholders (`X0n1`); the implementing pull request takes the next free band of X codes as the tree
 stands when it lands, as RFC 0002 gave `@storage` one and RFC 0009 gives `@queue` one, and no number here should
 be read as reserved. Existing codes named (T001 to T004, A005, L008, B006, B007, D008, R001, I001) were checked
-against the source; I001 is RFC 0007's, X203 is RFC 0002's.
+against the source; I001 is RFC 0007's, and X203 (RFC 0002) is the precedent for reading a marker off a connection's
+kind.
 
 **No generic rule.** The T family already judges everything a scheduled trigger shares with a route: T001 the
 settings against the kind's contract (`overlap`'s enum among them), T002 `in` against `accepts` and `out` against
@@ -225,7 +238,7 @@ nothing, L008 a graph running `#run`, D008 the trigger outside `edge/`. The comp
 | X0n1 | `plugin-schedule/src/rules.ts`, at `settings/cron`, `settings/everyMs`, `settings/timezone` or `settings/deadlineMs` | a scheduled trigger's settings name both `cron` and `everyMs` or neither; `cron` does not parse (`parseCron` in `cron.ts` answers the reason: the field count, a value out of range, an unknown name); `everyMs` is not a whole number of 1000 or more; `timezone` is given with `everyMs`, or is not a zone `Intl.supportedValuesOf('timeZone')` knows; `deadlineMs` is not a whole number of 1 or more | `write five fields (for seconds, use everyMs), e.g. "0 3 * * *" for 03:00 every day` / `everyMs is a whole number of milliseconds, 1000 or more` / `a timezone is for a cron expression; an interval has none` / `name an IANA zone: Europe/Lisbon, UTC` |
 | X0n2 | same, at `in` | a scheduled trigger declares `in` and no `fire.in`: nothing arrives on a tick, so the input would be `request.body`, which the kind never hands, and every tick would be refused at the edge | `write fire.in reading request.scheduled, or fire an operation that takes nothing and drop in` |
 | X0n3 | same, at `settings/catchUp` | `catchUp: true` on a scheduled trigger while no startup step names `@schedule/scheduler.port.json#run` with a `lease`: no process can know what the last tick was | `give the run step a lease ({ "in": { "lease": "@connections/<store>.connection.json" } }), or drop catchUp` |
-| X0n4 | same, at `startup/<i>/in/lease` (against `project.json`) | the `run` step's `lease` names no connection document (R001 would, for a graph; a startup step's `in` is typed by B007 as a string and no more), or one whose kind is not marked `storage` (RFC 0002's marker, read as X203 reads it) | `a lease lives in a storage engine's connection; wilanis ls connection` -- blocked on RFC 0002 |
+| X0n4 | same, at `startup/<i>/in/lease` (against `project.json`) | the `run` step's `lease` names no connection document (R001 would, for a graph; a startup step's `in` is typed by B007 as a string and no more), or one whose kind does not declare `leases` (read off the kind as X203 reads `storage`) | `name a connection whose kind declares leases; wilanis ls connection-kind` |
 
 The same `plugin.check` also judges the plugin's own settings the way `@http`'s judges its throttle
 (`judgeThrottle` in `packages/plugin-http/src/rules.ts`): `leaseTtlMs` a whole number of 1000 or more, `timezone`
@@ -307,8 +320,9 @@ assumption and is kept: a digest run three times at deploy is wrong, and an auth
 handled has `request.missed` to fan the work out from. Without `catchUp` a tick that fell while no process ran is
 not fired, which is what cron does and what a tree without a store can do.
 
-**Leases** (`packages/plugin-schedule/src/leases.ts`, new). `@schedule` speaks no store's language. The contract
-and the table follow RFC 0002's `engines(env)` and RFC 0009's `brokers(env)` line for line:
+**Lease keepers** (`packages/plugin-schedule/src/leases.ts`, new). `@schedule` speaks no store's language. A lease
+keeper is the plugin that granted a connection kind declaring `leases`, filling one contract for the connections of
+that kind; the contract and the table follow RFC 0002's `engines(env)` and RFC 0009's `brokers(env)` line for line:
 
 ```ts
 /** What a storage engine does for the scheduler on one connection of the kind it registered; the connection is the canonical path. */
@@ -328,18 +342,22 @@ export interface Leases {
 export function leases(env: Record<string, unknown>): { register(kind: string, keeper: Leases): void; for(kind: string): Leases | undefined };
 ```
 
-A storage plugin registers from its `postLoad` -- `leases(ctx.env).register('@storage-postgres/postgres.connection-kind.json', tableLeases())`
+A keeper registers from its `postLoad` -- `leases(ctx.env).register('@storage-postgres/postgres.connection-kind.json', tableLeases())`
 -- and the table is a `WeakMap` keyed by `env` with a default, so plugin order in `project.json` cannot bite and a
-reload starts clean, for the reasons RFC 0002 gives at length. The postgres engine keeps one table
+reload starts clean, for the reasons RFC 0002 gives at length. The first keeper is the storage engine:
+`@wilanis/plugin-storage-postgres` (RFC 0002) declares `"leases": true` on its connection kind beside
+`"storage": true`, so a tree with a store needs no second service to schedule on several instances. The postgres
+engine keeps one table
 `wilanis_schedule` -- `name` (text, primary key: the trigger's canonical path), `holder` (text), `held_until`,
 `last_fired` (timestamptz) -- created by the engine's `ensure`; `acquire` is one statement,
 `INSERT … ON CONFLICT (name) DO UPDATE SET holder = $me, held_until = now() + $ttl WHERE (wilanis_schedule.held_until < now() OR wilanis_schedule.holder = $me) AND (wilanis_schedule.last_fired IS NULL OR wilanis_schedule.last_fired < $scheduled) RETURNING holder`,
 so two instances never both hold one trigger, and a tick that `last_fired` already covers is granted to nobody
 however late a clock asks for it. `markFired` sets `last_fired = greatest(last_fired, $scheduled)`; `release` sets
 `held_until = now()`. One row per trigger, whatever the number of ticks. This step is blocked on RFC 0002's implementation and marked so in the
-plan. `@wilanis/plugin-storage-memory` needs no keeper: one process is alone. Where `lease` names a connection
-whose kind registered no keeper, `run` throws before holding anything, naming the connection and the kind (X0n4
-has judged the tree; this message is for a plugin that did not load), and a startup step that throws stops the
+plan. Whether `@wilanis/plugin-storage-memory` declares `leases` too, with a keeper that always grants, is left to
+implementation (*Open questions*). Where `lease` names a connection whose kind registered no keeper, `run` throws
+before holding anything, naming the connection and the kind (X0n4 has judged the tree; this message is for a
+plugin that declared the marker and did not register, or did not load), and a startup step that throws stops the
 start (`runStartup`).
 
 **The trigger kind's runtime** (`packages/plugin-schedule/src/index.ts`): `TriggerRuntime.encode(trigger, report)`
@@ -401,10 +419,12 @@ reaches `@storage` and a broker reaches `@queue`. The guard is not consulted, ch
 
 ## Compatibility
 
-IR v1, unaffected. No schema changes: a scheduled trigger is a `trigger` document with settings its kind declares,
-and the kind, the port and the plugin manifest are documents under the new plugin's `docs/`. Every document written
-before this RFC validates and means what it meant. `@wilanis/plugin-schedule` is new and optional. This is one of
-the accepted RFCs that does not change a schema, and it does not move the 1.0 freeze (RFC 0008).
+IR v1, compatible. `connection-kind.schema.json` gains optional `leases`; `ConnectionKindDoc` gains one optional
+member. Every kind document written before this RFC validates and means what it meant: a kind without `leases`
+keeps no lease and no `run` step may name a connection of it (X0n4). Everything else is a `trigger` document with
+settings its kind declares, and the kind, the port and the plugin manifest are documents under the new plugin's
+`docs/`. `@wilanis/plugin-schedule` is new and optional. Until 1.0 is published, v1 may change in place
+(RFC 0008); this is one of the accepted RFCs that still changes a schema, and the freeze comes after it.
 
 ## Tests
 
@@ -417,7 +437,7 @@ Sabotage tests in `packages/runtime/test/sabotage.test.ts` and `sabotage-project
 | X0n1 | `settings.cron: "0 3 * * * *"` (six fields); `"61 3 * * *"`; `"0 3 * * mon-fry"`; `"@daily"`; both `cron` and `everyMs: 60000`; neither; `everyMs: 500`; `everyMs: 60000` with `timezone: "UTC"`; `timezone: "Mars/Olympus"`; `deadlineMs: 0`; the plugin's `settings.leaseTtlMs: 10` |
 | X0n2 | `in: "@monitor/edge/ListRequest.shape.json"` with no `fire.in` |
 | X0n3 | `settings.catchUp: true` with the example's `run` step as written (no `lease`) |
-| X0n4 | blocked on RFC 0002: `startup[2].in.lease: "@connections/monitor-api.connection.json"` (an http kind, not `storage`); `"@connections/nope.connection.json"` |
+| X0n4 | `startup[2].in.lease: "@connections/monitor-api.connection.json"` (an http kind, no `leases`); `"@connections/nope.connection.json"`; and none with a fake kind under `docsDir` declaring `"leases": true` |
 | T001 | `settings.overlap: "sometimes"`; `settings.cron: 3` |
 | T003 | `fire.in: { "before": "{{request.body.since}}" }` after adding `in` -- the kind hands no `body` |
 | T004 | `fire.run: "@monitor/domain/monitor.port.json#submit"` with `fire.in: { "url": "https://x.example/", "method": "GET" }` and the matching `in`: `record-entry.graph.json` reaches `create-row.graph.json`, which reads the `agent` resolver (`request.headers['user-agent']`), and the schedule kind hands no `headers` |
@@ -454,28 +474,33 @@ tests do in `packages/plugin-http/test/harness.ts`): the operation ran once with
 tick line, `stop` resolves. Postgres, in `packages/plugin-storage-postgres/test/leases.test.ts` behind
 `WILANIS_TEST_POSTGRES_URL` (blocked on RFC 0002): two `acquire`s of one name and tick, one holder; the holder's
 second `acquire` renews; an expired hold is taken over; after `markFired`, an `acquire` for that tick or an earlier
-one is refused to every holder and one for a later tick is granted; `lastFired` round-trips. Discoverability, in `packages/runtime/test/tools.test.ts`: `describe`
+one is refused to every holder and one for a later tick is granted; `lastFired` round-trips. Core, in
+`packages/core/test/validate.test.ts`: a connection kind with `leases: true` validates; `leases: "yes"` is refused
+by the schema. Discoverability, in `packages/runtime/test/tools.test.ts`: `describe`
 of the scheduled trigger prints the schedule; `map` prints the schedule line. View, in `packages/view/test`: the
 example's scheduled trigger page.
 
 ## Implementation plan
 
-1. **`@wilanis/plugin-schedule`** (`area:plugin-schedule`, new label): the package, `docs/` (plugin.json,
+1. **Schema and model** (`area:core`): `leases` on `connection-kind.schema.json`, the member in `model.ts`, the
+   baseline in `validate.test.ts`, the template's `connection` row. `good first issue`.
+2. **`@wilanis/plugin-schedule`** (`area:plugin-schedule`, new label): the package, `docs/` (plugin.json,
    scheduler.port.json, schedule.trigger-kind.json without `deadlineMs`), `cron.ts` with its table tests,
    `scheduler.ts` over a `Clock`, `leases.ts` with the contract and the table, `run.ts` (the handler), `rules.ts` with
-   X0n1 to X0n3, the trigger runtime, a README saying what a lease keeper implements. Workspace member; added to
-   `npm run release` after `plugin-auth`. The parser and its tests can be taken first and alone: `good first issue`.
-2. **The example** (`area:runtime`): `nightly-digest.trigger.json`, the plugin and the `run` step in `project.json`,
+   X0n1 to X0n4 (X0n4 reads step 1's marker), the trigger runtime, a README saying what a lease keeper implements.
+   Workspace member; added to `npm run release` after `plugin-auth`. The parser and its tests can be taken first and
+   alone: `good first issue`.
+3. **The example** (`area:runtime`): `nightly-digest.trigger.json`, the plugin and the `run` step in `project.json`,
    `example/README.md`'s paragraph; `PLUGINS` in `example-harness.ts`; the sabotage tests above.
-3. **Discoverability** (`area:runtime`, `area:view`): `describe`, `map`, the template's rows and X list, the
+4. **Discoverability** (`area:runtime`, `area:view`): `describe`, `map`, the template's rows and X list, the
    `wilanis new trigger --kind` scaffold, the viewer's trigger page and view model. `good first issue`.
-4. **`deadlineMs`** on the kind and the `AbortController` per tick: blocked on RFC 0012's `FireArgs.signal`.
-5. **Leases in the storage engine** (`area:plugin-storage`): `wilanis_schedule` in `ensure`, `tableLeases()`
-   registered from `postLoad`, the postgres test behind the environment variable, X0n4, and the example's `lease`
-   under its storage profile. Blocked on RFC 0002's implementation.
-6. **A process that runs only the schedule** (`area:runtime`): blocked on RFC 0013. See *Drawbacks*, first item.
-7. **`wilanis run --at`**: decided during implementation (*Open questions*); one small pull request either way.
-8. **README**: a paragraph beside "Every branch runs before you deploy" on the clock as a way in, and the roadmap's
+5. **`deadlineMs`** on the kind and the `AbortController` per tick: blocked on RFC 0012's `FireArgs.signal`.
+6. **The lease keeper in the storage engine** (`area:plugin-storage`): `"leases": true` on the postgres kind,
+   `wilanis_schedule` in `ensure`, `tableLeases()` registered from `postLoad`, the postgres test behind the
+   environment variable, and the example's `lease` under its storage profile. Blocked on RFC 0002's implementation.
+7. **A process that runs only the schedule** (`area:runtime`): blocked on RFC 0013. See *Drawbacks*, first item.
+8. **`wilanis run --at`**: decided during implementation (*Open questions*); one small pull request either way.
+9. **README**: a paragraph beside "Every branch runs before you deploy" on the clock as a way in, and the roadmap's
    M08 row updated with the example's nightly digest.
 
 ## Drawbacks and alternatives
@@ -484,7 +509,7 @@ example's scheduled trigger page.
 profile is a set of bindings and nothing else (`project.schema.json → profiles` has `bindings`; `runStartup` reads
 the one `project.doc.startup` for every profile), so every process that runs the tree runs every step. Two
 instances of the example behind a load balancer both run `run`, and without a `lease` both fire the digest at
-03:00. This RFC gives the honest answers in order: one instance, or the `lease` on the storage engine (step 5), or
+03:00. This RFC gives the honest answers in order: one instance, or the `lease` on the storage engine (step 6), or
 a startup list per profile once RFC 0013 says how, so that one process schedules and the others only listen. It
 adds no second way to say it. With the lease, a pod that comes up behind the balancer changes nothing: it names the
 same tick instants as the others (cron is wall clock, intervals are the epoch's), asks for each tick, and is
@@ -492,6 +517,17 @@ granted it only when nobody holds the trigger and nobody has fired that tick -- 
 double a tick, a rolling deploy does not double one, and a pod killed mid-run gives its tick up after
 `leaseTtlMs` to the next that asks. The manifest (RFC 0026) prints the scheduled triggers per profile so a reviewer sees
 what fires where.
+
+**The connection kind declares `leases`, not the scheduler and not the store.** The stub asked whether a lease
+in the storage plugin makes this RFC depend on RFC 0002. It does not, because the ability to keep a lease is the
+connection kind's own fact, declared by the plugin that knows, as `storage` (RFC 0002) and `delivery` (RFC 0009)
+are. Reading RFC 0002's `storage` marker instead would have made every store a keeper and nothing else one; a Redis
+kind from RFC 0023 is the obvious keeper that is not a store. The alternative of a lock the graphs could call -- a
+`@lock` port with `acquire` and `release` operations -- was considered and not taken: a hold across nodes is state
+the stateless engine cannot carry, a lock inside business logic is what RFC 0004's atomic graphs exist to make
+unnecessary for storage, and the scheduler is the one consumer, behind a `holds` step. A contract-only package for
+the interface was not taken either: it is not a plugin by this repository's definition (nothing under `docs/`), and
+every cross-plugin contract in the workspace lives with its consumer and is depended on by its implementers.
 
 **A package, not a plugin built into the runtime.** The stub put the kind beside `@std` and `@cli` because it
 carries no external dependency. Three facts moved it. The lease contract must be importable by a storage engine,
@@ -527,22 +563,23 @@ handling; it would also make the plugin's `check` depend on a package's idea of 
 behind a minute matcher. The parser here accepts the five-field form and nothing else, on purpose; a dialect an
 author wants is an edit to `cron.ts` with a table test.
 
-**Cost.** One package, one README, one entry in `npm run release`; one table in the storage engine when step 5
+**Cost.** One package, one README, one entry in `npm run release`; one table in the storage engine when step 6
 lands. The scheduler holds one timer and one blob scope per tick in flight. Nothing is buffered.
 
 ## Open questions
 
 Settled here, with the reasoning in the text: **overlap** is a setting, `skip` | `wait` | `concurrent`, default
 `skip`, judged by T001 through its enum, and `request.missed` counts what `skip` dropped (*Runtime behaviour*;
-*Drawbacks*, third item). **Missed ticks after downtime** are fired once with `request.missed` saying how many, and
+*Drawbacks*, fifth item). **Missed ticks after downtime** are fired once with `request.missed` saying how many, and
 only when `catchUp` says so and a lease store remembers the last tick (X0n3); without one, they are not fired, which
-is what cron does. **Multiple instances** are decided by a lease in the storage engine's connection, named by the
-`run` step's `lease`, through a contract `@schedule` exports and the engine fills from `postLoad` as RFC 0002's
-`engines(env)` and RFC 0009's `brokers(env)` are; the hold is for one tick of one trigger and is refused once that
+is what cron does. **Multiple instances** are decided by a lease on a connection whose kind declares `leases`, named by
+the `run` step's `lease`, through a contract `@schedule` exports and the kind's plugin fills from `postLoad` as
+RFC 0002's `engines(env)` and RFC 0009's `brokers(env)` are, the storage engine being the first keeper; the hold is
+for one tick of one trigger and is refused once that
 tick is recorded fired, so a tick is taken once whatever the clocks, and interval ticks are aligned to the epoch so
 every process names the same instants; this makes the *lease step* depend on RFC 0002 and leaves the RFC itself
-with no dependency to accept (*Runtime behaviour*, *Leases*; *Drawbacks*, first item). **Where the kind
-lives** is its own package, for the reasons under *Drawbacks*, second item.
+with no dependency to accept (*Runtime behaviour*, *Lease keepers*; *Drawbacks*, first and second items). **Where
+the kind lives** is its own package, for the reasons under *Drawbacks*, third item.
 
 Nothing else must be decided before `accepted`. Decided during implementation:
 
@@ -554,7 +591,7 @@ Nothing else must be decided before `accepted`. Decided during implementation:
    RFCs' question in one place.
 2. The exact log lines, and whether the tick line prints the answer whole, its first line, or nothing beyond the
    status.
-3. Whether the memory lease keeper (`@wilanis/plugin-storage-memory`) registers a `Leases` that always grants, so a
+3. Whether `@wilanis/plugin-storage-memory` declares `leases` and registers a keeper that always grants, so a
    tree written for a storage profile checks and runs under the memory profile with `lease` and `catchUp` set --
    X0n3 and X0n4 would then hold under both profiles -- or whether `lease` is simply absent under the memory profile.
 4. Whether `nextTick` honours `L` and `W` (last day, nearest weekday) or the parser stays at the five standard field
