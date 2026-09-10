@@ -29,9 +29,9 @@ as a devDependency, for its tests. A change that imports the runtime from `packa
 resolves, builds, lints and tests green; nothing reads `package.json` to say which section the import was
 allowed by. The same holds for `node:http` in `packages/compiler/src`, or `node:fs` in `packages/engine/src`.
 
-A sentence drifts without anyone deciding it should. Today 45 exported functions and arrow constants across
-`core`, `compiler`, `runtime`, `view` and `plugin-http` have no doc comment (`schemaRef`, `isRun`,
-`stubEffects`, `getPath`, `versionOf` among them). No one decided that rule was over; it was never held.
+A sentence drifts without anyone deciding it should. Today 87 exports across every package have no doc
+comment: 50 functions and arrow constants (`schemaRef`, `isRun`, `stubEffects`, `getPath`, `versionOf` among
+them), 15 classes and 22 public methods. No one decided that rule was over; it was never held.
 
 The enforcement itself is unguarded. Any pull request can raise `maxLines` in `biome.jsonc` from 50 to 80,
 add an override that switches `noExplicitAny` off for one package, or narrow `files.includes`, and the diff
@@ -168,7 +168,7 @@ claim holds on `main` at the time of writing, which the implementing task confir
 | `dependencies-point-one-way` | a file under `src/` imports only packages its `package.json` names under `dependencies`, a test only those plus `devDependencies`; among `@wilanis/*`, a package imports only packages earlier in the order; a `plugin-*` imports only `core` and `engine` | `ORDER = ['engine', 'core', 'compiler', 'runtime', 'view']` | holds |
 | `the-engine-imports-nothing` | `packages/engine/src` has no import from outside itself | none | holds |
 | `the-compiler-imports-only-core-and-engine` | `packages/compiler/src` imports nothing but `@wilanis/core`, `@wilanis/engine` and itself; no `node:` module | none | holds |
-| `every-public-function-says-what-it-answers` | every exported function, exported arrow constant and public class method under `src/` has a leading doc comment | none | 45 undocumented; the implementing task documents them |
+| `every-public-function-says-what-it-answers` | every exported function, exported arrow constant and public class method under `src/` has a leading doc comment | none | 87 undocumented; the implementing task documents them |
 | `a-kind-is-declared-once-and-mirrored` | every entry of `KINDS` has a schema file under `packages/core/schemas/`, a `case` in the viewer's `renderDocPage` unless the table names the function that renders it instead, and, unless a plugin ships it, a row in `packages/runtime/templates/CLAUDE.md` and a home in `HOME` or the top-level list | `SHIPPED_BY_PLUGINS = ['plugin', 'trigger-kind', 'connection-kind', 'codec']`, `TOP_LEVEL = ['project', 'feature']`, `RENDERED_BY = { graph: <the graph page's function> }` | holds; `graph` has its own page outside `renderDocPage` |
 | `a-plugin-grants-files-not-objects` | every `packages/plugin-*` has `docs/plugin.json` and lists `docs` in its `files` | none | holds |
 | `tests-live-beside-what-they-test` | every `packages/*/src` has a sibling `test/`, except the packages the table says are tested through another | `TESTED_THROUGH = { compiler: 'packages/runtime/test' }` | holds |
@@ -257,7 +257,7 @@ behaviour stated in `fitness/README.md`; the CI jobs are seen to run on that pul
    `a-fitness-function-is-one-claim` with its sabotage cases.
 2. The import claims: `dependencies-point-one-way`, `the-engine-imports-nothing`,
    `the-compiler-imports-only-core-and-engine`, with their sabotage cases.
-3. `every-public-function-says-what-it-answers`, and the doc comments on the 45 exports it finds.
+3. `every-public-function-says-what-it-answers`, and the doc comments on the 87 exports it finds.
    (`good first issue`: each comment says what the function answers, in one line.)
 4. The structure claims: `a-kind-is-declared-once-and-mirrored`, `a-plugin-grants-files-not-objects`,
    `tests-live-beside-what-they-test`, `a-refusal-code-is-made-where-its-family-lives`.
@@ -338,3 +338,9 @@ cases for the first claim was already 69 lines and would pass the 300-line house
 failing for the wrong reason, the suite's growth. Each fitness module now exports its `sabotage` cases as its
 fourth export and the runner registers the proof beside the claim. A fitness file that outgrows the page is
 two decisions or a reader that belongs in `lib/`, and `lib/` holds readers only.
+
+Amended once task 3 began: the count of undocumented exports was 45, which counted only the functions and
+arrow constants of five packages -- the figure this RFC's own table asks for is every exported function, arrow
+constant and public class method of every package, which is 87: 50 functions and constants, 15 classes and 22
+methods, `engine`, `plugin-auth` and `plugin-blob` among the packages the old figure passed over. The claim
+holds the table's rule; the motivation now states the same number.
