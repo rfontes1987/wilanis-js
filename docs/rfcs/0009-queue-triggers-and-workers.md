@@ -1,6 +1,6 @@
 # RFC 0009: Queue messages as triggers, and workers
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:core` (two optional fields on two kind schemas), `area:compiler` (two T rules), `area:runtime` (the example, `describe`, `map`), `area:view`, a new plugin `@wilanis/plugin-queue` with a development broker `@wilanis/plugin-queue-memory`, and `area:plugin-storage` for the table broker
 - **Tracking issue:** #11
 - **Depends on:** RFC 0011 (the word `idempotent` on an operation, which T0n1 reads: this RFC accepts after it, and its step 1 lands before step 2 here); RFC 0002 (the default broker is a table in the storage engine's connection, and the `storage` marker on a connection kind is the precedent for the `delivery` marker; the broker step is blocked on its implementation); RFC 0004 (a `publish` that joins the transaction of an atomic graph; that step is blocked on its implementation). RFC 0006's `correlation` and RFC 0007's access invariants need nothing here and apply to a queue trigger as they apply to a route. RFC 0013 is what a worker *process* waits on (below).

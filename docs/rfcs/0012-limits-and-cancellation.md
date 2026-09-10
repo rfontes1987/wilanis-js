@@ -1,6 +1,6 @@
 # RFC 0012: Resource limits, timeouts and cancellation of a run
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:engine`, `area:core`, `area:compiler`, `area:runtime`, `area:plugin-http`, `area:plugin-blob`, `area:view`
 - **Tracking issue:** #14
 - **Depends on:** none to accept. RFC 0011 names the seam this RFC takes (what the scheduler does when the run's
