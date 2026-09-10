@@ -31,7 +31,6 @@ const hash = (text: string) => {
   return hash_ >>> 0;
 };
 
-/** Every effectful native operation answers a generated value of its declared type, deterministic per seed and node path. */
 /** The type variables this call binds, read from the `type` inputs the operation declares. */
 function boundHere(info: EffectInfo, given: Record<string, unknown>, resolve: (ref: string) => Type) {
   const subst: Record<string, Type> = {};
@@ -57,6 +56,7 @@ function answerType(
   return substitute(returns, boundHere(info, given, resolve));
 }
 
+/** Every effectful native operation answers a generated value of its declared type, deterministic per seed and node path. */
 export function stubEffects(seed: number, record?: Record<string, unknown>, types?: Record<string, Type>) {
   return (info: EffectInfo): Handler =>
     async ({ in: input, ctx }) => {
@@ -70,6 +70,10 @@ export function stubEffects(seed: number, record?: Record<string, unknown>, type
     };
 }
 
+/**
+ * The embedder a loaded tree is run through: the real one, or -- where a seed is given -- one whose effects are
+ * stubbed and whose secrets come from a fake environment, so nothing leaves the process.
+ */
 export function embedderFor(
   load: LoadResult,
   opts: {
@@ -174,6 +178,10 @@ export function failedBelow(id: string, node: Report['nodes'][string]): FailedNo
   return (failed.sub && failedLeaf(failed.sub)) || { ...failed, id: `${id}.${at}` };
 }
 
+/**
+ * One run said in lines: how the graph ended, then every node's status, the route it took and what broke, with
+ * nested runs and a map's elements indented under the node that ran them.
+ */
 export function summarize(report: Report, indent = ''): string {
   const lines = [
     `${indent}${report.graph}: ${report.status}${report.needs?.length ? ` needs ${report.needs.join(', ')}` : ''}`,

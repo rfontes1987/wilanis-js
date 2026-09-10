@@ -16,7 +16,6 @@ export interface IndexedRef {
   opName?: string;
 }
 
-/** Every string in every document that names another document, with the JSON pointer it sits at. */
 /** The document a string names, and the operation it named on it, or undefined when it names none. */
 function referenceOf(scope: Scope, from: Loaded, text: string, at: string): IndexedRef | undefined {
   if (!text.startsWith('@') || text.startsWith('@wilanis/')) return undefined;
@@ -35,6 +34,7 @@ function below(value: unknown): [string, unknown][] {
   return Object.entries(value as Record<string, unknown>).filter(([key]) => key !== '$schema');
 }
 
+/** Every string in every document that names another document, with the JSON pointer it sits at. */
 export function referenceIndex(load: LoadResult, scope: Scope): IndexedRef[] {
   const out: IndexedRef[] = [];
   const walk = (from: Loaded, value: unknown, at: string) => {
@@ -49,10 +49,6 @@ export function referenceIndex(load: LoadResult, scope: Scope): IndexedRef[] {
   return out;
 }
 
-/**
- * Who names this document. A graph behind a binding operation is also reached by every node and every
- * trigger that runs the port operation the binding meets, so those are added with `via` naming the operation.
- */
 /**
  * Everyone who reaches a graph through one binding operation: every node and trigger that runs the port operation
  * this binding meets, with `via` naming it.
@@ -74,6 +70,10 @@ function throughBinding(reference: IndexedRef, index: IndexedRef[], scope: Scope
     }));
 }
 
+/**
+ * Who names this document. A graph behind a binding operation is also reached by every node and every
+ * trigger that runs the port operation the binding meets, so those are added with `via` naming the operation.
+ */
 export function callersOf(path: string, index: IndexedRef[], scope: Scope): VRef[] {
   const direct = index.filter(reference => reference.to === path);
   const out: VRef[] = direct.map(reference => ({

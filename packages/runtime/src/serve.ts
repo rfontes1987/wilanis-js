@@ -87,9 +87,11 @@ export class Served {
     readonly log: (line: string) => void,
     private readonly profile?: string,
   ) {}
+  /** The embedder of the tree being served now, so a swap is seen by whoever asks next. */
   get emb() {
     return this.current.emb;
   }
+  /** The tree being served now, so a swap is seen by whoever asks next. */
   get load() {
     return this.current.load;
   }
@@ -184,14 +186,9 @@ const BY_EXTENSION: Record<string, string> = {
   '.gif': 'image/gif',
   '.zip': 'application/zip',
 };
+/** The content type a file on disk is taken to have, read off its extension; anything unknown is a stream of bytes. */
 export const contentTypeOf = (file: string) => BY_EXTENSION[extname(file).toLowerCase()] ?? 'application/octet-stream';
 
-/**
- * Fire a trigger from the command line with a context built from flags and args. A real run (no seed)
- * runs postLoad first and its teardown after; a seeded run stubs every effect and skips the hooks. `--file`
- * streams a file into the blob registry and hands its handle as request.file; a blob answer is streamed to
- * `--out`, or to stdout, by `deliver`. The run's blobs are released once delivered.
- */
 /** What a run answers: what the trigger kind's runtime encodes, or the report's own output. */
 function encoded(load: LoadResult, trigger: Loaded<TriggerDoc>, report: Report) {
   const runtime = load.plugins
@@ -216,6 +213,12 @@ async function requestOf(
   return request;
 }
 
+/**
+ * Fire a trigger from the command line with a context built from flags and args. A real run (no seed)
+ * runs postLoad first and its teardown after; a seeded run stubs every effect and skips the hooks. `--file`
+ * streams a file into the blob registry and hands its handle as request.file; a blob answer is streamed to
+ * `--out`, or to stdout, by `deliver`. The run's blobs are released once delivered.
+ */
 export async function runTrigger(
   load: LoadResult,
   ref: string,

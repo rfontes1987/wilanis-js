@@ -50,12 +50,6 @@ function phrase(when: string): string {
   return `when ${when}`;
 }
 
-/**
- * The report. Grouped by the graph that makes each decision, because that is the document to open when
- * a branch is wrong -- a switch reached from two triggers is one decision, reported once.
- *
- * Answers whether the rehearsal passed: every branch settled, and none was left unreachable.
- */
 /** How a run with no branches ended. */
 function verdict(status: string): string {
   if (status === 'done') return 'answers';
@@ -141,6 +135,12 @@ function aside(run: { declared?: string; error?: string }): string {
   return run.error ? `: ${run.error}` : '';
 }
 
+/**
+ * The report. Grouped by the graph that makes each decision, because that is the document to open when
+ * a branch is wrong -- a switch reached from two triggers is one decision, reported once.
+ *
+ * Answers whether the rehearsal passed: every branch settled, and none was left unreachable.
+ */
 export function format(
   decisions: Decision[],
   plain: { trigger: string; graph: string; status: string; declared?: string; error?: string }[],
