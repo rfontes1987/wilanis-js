@@ -238,10 +238,16 @@ that needs enforcing and drifts, and an agent that trips the test would open a s
 The docstring cannot be separated from the check, and one file per decision matches one file per RFC and
 one module per rule family.
 
-**dependency-cruiser and the ArchUnit ports for TypeScript** express dependency rules well, but each turns
-a one-sentence claim into configuration or a fluent chain a reader learns before the claim, brings its own
-resolver, and carries no place for the why. Import direction here is the specifier and the directory, which
-is thirty lines over Babel's AST.
+**dependency-cruiser, `tsarch` and `archunit` (ArchUnitTS)** express dependency rules between folders well,
+and ArchUnitTS also finds import cycles inside a package. They were not adopted for three reasons. Both
+ArchUnit ports parse with the TypeScript compiler API and declare `typescript` as a dependency (`tsarch` 5.4.1
+pins `^3.8`, last published December 2024; `archunit` 2.4.0 pins `^5.9`), so either installs a second
+TypeScript beside the native 7.x this workspace builds with. They cover three of the twelve claims, the
+import rules; the other nine need a parser for comments, exports and configuration regardless, so Babel's
+parser is in the tree either way. And the direction rule here is data-driven from nine `package.json` files,
+which a fluent chain restates by hand, one pair at a time, when the RFC wants the fact read where it lives.
+A cycle check inside a package, should it be wanted, is a depth-first search over the same import graph and
+a thirteenth fitness function.
 
 **CODEOWNERS on `fitness/` with required code owner review** is the native gate and was the first
 proposal. With one maintainer it deadlocks: GitHub never lets an author approve their own pull request, so
