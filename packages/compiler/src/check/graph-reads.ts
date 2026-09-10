@@ -32,6 +32,10 @@ export interface GraphTable {
   constTypes: Record<string, Type>;
 }
 
+/**
+ * What a graph's values may read, typed: in, a constant, a resolver, or another node's answer (G003), with a
+ * path the routing switch proved present losing its optionality. It remembers every read, for G008 to judge.
+ */
 export class GraphReads {
   readonly readsIn = new Set<string>();
   readonly readsConst = new Set<string>();

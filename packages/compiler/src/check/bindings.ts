@@ -34,6 +34,11 @@ interface Contract {
   returns: Type | undefined;
 }
 
+/**
+ * The refusals for a binding: the domain port it implements (R001, B003, L005) from inside a feature (L007),
+ * every operation of that port bound and no other (B001), each met by a data graph or a delegation whose
+ * contract fits (B005) and whose effects the feature allows (L003).
+ */
 export function checkBinding(judge: Judge, binding: Loaded<BindingDoc>): void {
   const refuse = judge.refuser(binding.path);
   const port = judge.scope.get('port', binding.doc.port);

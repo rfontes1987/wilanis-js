@@ -57,6 +57,7 @@ export interface BlobHandle {
   size: number;
   filename?: string;
 }
+/** Whether a value is a blob handle rather than the bytes: an id, a content type and a size are there. */
 export const isBlobHandle = (value: unknown): value is BlobHandle =>
   typeof value === 'object' &&
   value !== null &&
@@ -77,6 +78,7 @@ const SCALARS: Record<string, Type> = {
   type: { kind: 'type' },
 };
 
+/** What resolving a type throws when the reference is not one, or names a shape the tree does not have. */
 export class TypeError_ extends Error {}
 
 /** Is the value a string in the type reference grammar? */
@@ -127,12 +129,17 @@ export class TypeResolver {
     return open === true ? UNKNOWN : this.ref(open);
   }
 
+  /**
+   * One declared field as a typed field: its type, its enum narrowing a string, and whether it must be
+   * there -- a field is required unless it says otherwise.
+   */
   field(field: Field): ObjField {
     let type = this.spec(field.type);
     if (field.enum && type.kind === 'string') type = { kind: 'string', enum: field.enum };
     return { type, required: field.required !== false, secret: field.secret };
   }
 
+  /** The type a spec names, written either way: a reference string, or an object spelled out inline. */
   spec(spec: TypeSpec): Type {
     return typeof spec === 'string' ? this.ref(spec) : this.inline(spec);
   }

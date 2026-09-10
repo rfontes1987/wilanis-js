@@ -39,6 +39,7 @@ function evaluateBinary(expr: Extract<Expr, { kind: 'bin' }>, values: Values): u
   return compare(expr.op, left, right);
 }
 
+/** What an expression comes to over one set of input values; a path that is not there reads as undefined. */
 export function evaluate(expr: Expr, values: Values): unknown {
   switch (expr.kind) {
     case 'lit':

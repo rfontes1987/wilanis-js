@@ -9,6 +9,7 @@ import { join } from 'node:path';
 
 const safe = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, '_');
 
+/** The records of one directory, each kind in its own folder: read one, write one whole, forget one, or list a kind. */
 export class Store {
   constructor(readonly dir: string) {}
   private path(kind: string, id: string) {

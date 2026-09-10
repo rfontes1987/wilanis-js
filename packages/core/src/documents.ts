@@ -33,6 +33,7 @@ export function readProject(dir: string, file: string): ProjectDoc | undefined {
   return !judged.refusals.length && judged.kind === 'project' ? (parsed.doc as ProjectDoc) : undefined;
 }
 
+/** The way into the registry: every document, a tree's or a plugin's, is judged and registered through here. */
 export class Documents {
   constructor(
     private readonly registry: Registry,

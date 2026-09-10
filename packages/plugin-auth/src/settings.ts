@@ -66,8 +66,11 @@ export function storeOf(env: Env): Store {
   return storeAt(isAbsolute(dir) ? dir : join(env.root ?? process.cwd(), dir));
 }
 
+/** The one clock the plugin reads, so every record it writes and every expiry it judges agrees on the time. */
 export const now = () => Date.now();
+/** The one way a moment is written into a record, so a stored time always reads back the same. */
 export const iso = (ms: number) => new Date(ms).toISOString();
+/** The one way a secret is kept: a refresh token or a code is stored as this digest, never as itself. */
 export const sha = (text: string) => createHash('sha256').update(text).digest('base64url');
 
 /** Whether two strings are equal, without saying where they first differ. */

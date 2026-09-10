@@ -38,6 +38,7 @@ const coerceFields = (fields: Record<string, unknown>, declared: Type | undefine
 };
 
 const buffered = (bytes: Buffer, contentType: string): Encoded => ({ body: bytes, contentType, length: bytes.length });
+/** The type a content-type header names, without its parameters or case, which is what the codec table is keyed by. */
 export const mediaType = (ct: string) => ct.split(';')[0].trim().toLowerCase();
 
 export const json: Codec = {

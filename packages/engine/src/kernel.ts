@@ -11,6 +11,7 @@
 import { Run } from './run.js';
 import type { Handlers, KernelSpec, Report, RunOptions } from './spec.js';
 
+/** Runs a spec against a fixed set of handlers and answers its report; stateless, so one kernel runs any spec. */
 export class Kernel {
   constructor(private readonly handlers: Handlers) {}
 

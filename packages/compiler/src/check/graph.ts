@@ -27,6 +27,12 @@ import { checkInputs } from './inputs.js';
 import { type Effects, type Judge, RESERVED, type Refuser, type ShapeLayer } from './judge.js';
 import { resolversFor } from './resolvers.js';
 
+/**
+ * Every refusal a graph can earn, in the role its layer gives it: unique ids (G001), operations the role and
+ * the feature may run (L002, L003, L008), reads that resolve (G003), inputs that fit their contracts, switches
+ * and maps (G004, G006, G009, G011, G012), conforming constants (G013), and the whole (G007, G008, G010).
+ * A domain graph that only forwards its input to one port operation is refused as boilerplate (L007).
+ */
 export function checkGraph(judge: Judge, graph: Loaded<GraphDoc>, role: GraphRole): void {
   new GraphCheck(judge, graph, role).run();
 }

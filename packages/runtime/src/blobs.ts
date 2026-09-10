@@ -18,6 +18,7 @@ const ID = /^[0-9a-f-]{36}$/;
 /** A directory named against a root, unless it is already absolute. */
 const absoluteOr = (root: string, dir: string) => (isAbsolute(dir) ? dir : resolve(root, dir));
 
+/** The tree's blob registry on disk: the one place a blob's bytes live, held once and streamed, never as a value. */
 export class FileBlobStore implements BlobStore {
   /** Every handle this store holds, by id: the size counted as it was written. */
   private held = new Map<string, BlobHandle>();
@@ -29,6 +30,7 @@ export class FileBlobStore implements BlobStore {
     mkdirSync(this.dir, { recursive: true });
   }
 
+  /** The handle for bytes streamed into the registry: a fresh id, the content type given, and the size as written. */
   async put(source: Readable | Buffer | string, meta: { contentType: string; filename?: string }): Promise<BlobHandle> {
     const id = randomUUID();
     let size = 0;
@@ -49,16 +51,19 @@ export class FileBlobStore implements BlobStore {
     return handle;
   }
 
+  /** The bytes behind a handle, as a stream; a handle this store does not hold opens nothing but throws. */
   open(handle: BlobHandle): Readable {
     if (!ID.test(handle.id) || !this.held.has(handle.id)) throw new Error(`no blob '${handle.id}' in the registry`);
     return createReadStream(join(this.dir, handle.id));
   }
 
+  /** Forget a handle and delete its file; dropping what this store never held is no error. */
   async drop(handle: BlobHandle): Promise<void> {
     if (!this.held.delete(handle.id)) return;
     await unlink(join(this.dir, handle.id)).catch(() => undefined);
   }
 
+  /** A view of this store for one run: the same bytes, and a `release` that drops only what that run put in. */
   scope(): BlobScope {
     const mine: BlobHandle[] = [];
     const parent = this;

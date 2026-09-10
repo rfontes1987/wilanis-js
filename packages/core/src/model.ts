@@ -46,7 +46,9 @@ export const WILANIS = '@wilanis';
  * document written against it keeps validating under for as long as that version is read.
  */
 export const SCHEMA_BASE = 'https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas';
+/** The short `$schema` a kind's documents carry, the form a reader writes: `@wilanis/graph.schema.json`. */
 export const schemaRef = (kind: Kind) => `${WILANIS}/${kind}.schema.json`;
+/** Where a kind's schema is fetched from, so an editor or an agent can resolve what the short form names. */
 export const schemaUrl = (kind: Kind) => `${SCHEMA_BASE}/${kind}.schema.json`;
 const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 const KIND_OF_SCHEMA = new RegExp(`^(?:${escapeRe(WILANIS)}|${escapeRe(SCHEMA_BASE)})/([a-z-]+)\\.schema\\.json$`);
@@ -235,8 +237,11 @@ export interface MapNode {
   onItemFailure?: 'fail' | 'collect';
 }
 export type Node = RunNode | SwitchNode | MapNode;
+/** Whether a graph node is the one that calls an operation, narrowed so its `run` and `in` may be read. */
 export const isRun = (node: Node): node is RunNode => node.type === NODE_RUN;
+/** Whether a graph node is the one that routes on its rules, narrowed so its cases may be read. */
 export const isSwitch = (node: Node): node is SwitchNode => node.type === NODE_SWITCH;
+/** Whether a graph node is the one that runs per element, narrowed so its `over` and binding may be read. */
 export const isMap = (node: Node): node is MapNode => node.type === NODE_MAP;
 
 export interface GraphDoc extends Envelope {
@@ -265,6 +270,7 @@ export interface PolicyUse {
   description?: string;
 }
 export type PolicyRef = string | PolicyUse;
+/** The policy a trigger's entry names, whether it was written as a bare path or as an object with inputs. */
 export const policyPath = (ref: PolicyRef) => (typeof ref === 'string' ? ref : ref.policy);
 /**
  * `policies`: what gates this trigger, in order -- the first that does not allow answers, and the trigger maps each reason

@@ -7,12 +7,17 @@ import type { ConnectionDoc, Loaded, Operation, PortDoc, ShapeDoc } from '@wilan
 import type { Judge } from './judge.js';
 import { mismatch } from './typing.js';
 
+/** The refusals for a shape: its fields resolve (R001) and name only shapes of its own layer, visibly (L001, L005). */
 export function checkShape(judge: Judge, shape: Loaded<ShapeDoc>): void {
   const spec = { fields: shape.doc.fields, open: shape.doc.open };
   judge.type(spec, shape.path, 'fields');
   judge.checkLayer({ spec, from: shape, at: 'fields', layer: shape.doc.layer, what: `shape '${shape.path}'` });
 }
 
+/**
+ * The refusals for a port: every operation's accepts and returns resolve (R001), and a domain port's speak
+ * core shapes it may see (L001, L005) and fix no value of their own (L006).
+ */
 export function checkPort(judge: Judge, port: Loaded<PortDoc>): void {
   for (const [name, op] of Object.entries(port.doc.operations)) {
     judge.fieldsType(op.accepts, port.path, `operations/${name}/accepts`);
@@ -43,6 +48,10 @@ function checkDomainOperation(judge: Judge, port: Loaded<PortDoc>, name: string,
   }
 }
 
+/**
+ * The refusals for a connection: the kind it names exists (R001), its settings read secrets only (C001) and
+ * fit what that kind declares (C002).
+ */
 export function checkConnection(judge: Judge, connection: Loaded<ConnectionDoc>): void {
   const refuse = judge.refuser(connection.path);
   const kind = judge.scope.get('connection-kind', connection.doc.kind);

@@ -18,6 +18,10 @@ export function targetsOf(node: SwitchNode): string[] {
   return [...node.rules.map(rule => rule.to), node.else];
 }
 
+/**
+ * The refusals for a switch: each rule is a boolean expression over its typed inputs (G011), and every route
+ * names a node of this graph other than itself, routed by no one else (G009).
+ */
 export function checkSwitch(site: NodeSite, node: SwitchNode, read: Reader): void {
   const inputs: Record<string, Read> = {};
   for (const [name, value] of Object.entries(node.in)) {

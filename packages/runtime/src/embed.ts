@@ -65,6 +65,7 @@ function take(
   }
 }
 
+/** What every trigger kind fires a tree through: the gate, the compiled graph, the kernel, and the answer judged. */
 export class Embedder {
   private compiler: Compiler;
   private compiled = new Map<string, Compiled>();
@@ -108,6 +109,7 @@ export class Embedder {
     (this.env as Record<string, unknown>).serving = served.serving();
   }
 
+  /** The compiled form of one graph, compiled the first time it is asked for and kept for every run after. */
   graph(ref: string): Compiled {
     const path = this.scope.canon(ref);
     let found = this.compiled.get(path);
@@ -282,6 +284,11 @@ export class Embedder {
     return bad ? { error: bad } : { input };
   }
 
+  /**
+   * The report of one trigger's run: the gate's answer where it ends the run, else the port operation's, with the
+   * output pruned to what a closed out shape declares and judged against it. This is where the domain's value
+   * becomes the edge's.
+   */
   async fire(
     trigger: TriggerDoc,
     input: unknown,

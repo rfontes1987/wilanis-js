@@ -66,6 +66,11 @@ function collectMap(id: string, node: KMap, results: ElementResult[]): unknown[]
   throw new Error(`map '${id}' element ${index}: ${failed.error}`);
 }
 
+/**
+ * One run of one spec: it fires every node the instant its sources have settled, all of them concurrently,
+ * routes and cancels the branches a switch did not choose, and answers at quiescence -- failed with the node
+ * that broke or refused, done with the first output candidate that settled, or blocked on what was never supplied.
+ */
 export class Run {
   private readonly values = new Map<string, unknown>();
   private readonly reports: Record<string, NodeReport> = {};

@@ -18,6 +18,7 @@ import {
 
 // ---- discovery --------------------------------------------------------------------------------------
 
+/** Every document one tree holds, one line each, sorted by kind then path, and saying which are not the tree's own. */
 export function ls(load: LoadResult, kind?: Kind): string[] {
   return load.registry.files
     .filter(file => !kind || file.kind === kind)
@@ -251,6 +252,7 @@ function grantLine(doc: { native?: string; included?: string }, from: string | u
   return doc.included ? [`included from  ${doc.included}`] : [];
 }
 
+/** One document said in full: where it lives, who granted it, what it describes, and what its kind adds. */
 export function describe(load: LoadResult, ref: string): string {
   const scope = new Scope(load.registry, load.resolve);
   const { path } = splitOp(ref.includes('#') ? ref : `${ref}#`);

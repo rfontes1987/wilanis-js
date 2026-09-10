@@ -46,6 +46,7 @@ function operatorAt(src: string, index: number): Step {
   return { token: { kind: 'op', value: op }, next: index + op.length };
 }
 
+/** The tokens an expression is made of, in order, with whitespace dropped; throws on a character none begins. */
 export function lex(src: string): Token[] {
   const out: Token[] = [];
   let index = 0;

@@ -66,8 +66,10 @@ function sessionOf(env: Env, id: unknown): SessionRecord {
   return session;
 }
 
+/** The attributes a session carries; it throws when the session is unknown. */
 export const sessionGet: Handler = async ({ in: input, ctx }) => sessionOf(ctx.env as Env, input.session).attributes;
 
+/** The attributes after merging these values in, once the session shape has accepted the whole of them. */
 export const sessionSet: Handler = async ({ in: input, ctx }) => {
   const env = ctx.env as Env;
   const session = sessionOf(env, input.session);
@@ -78,6 +80,7 @@ export const sessionSet: Handler = async ({ in: input, ctx }) => {
   return session.attributes;
 };
 
+/** The attributes after dropping these keys, once the session shape has accepted what is left. */
 export const sessionRemove: Handler = async ({ in: input, ctx }) => {
   const env = ctx.env as Env;
   const session = sessionOf(env, input.session);
@@ -89,6 +92,7 @@ export const sessionRemove: Handler = async ({ in: input, ctx }) => {
   return session.attributes;
 };
 
+/** Forget the session, and whether there was one to forget. */
 export const sessionEnd: Handler = async ({ in: input, ctx }) => {
   const store = storeOf(ctx.env as Env);
   const had = Boolean(store.get('sessions', String(input.session)));

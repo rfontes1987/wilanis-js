@@ -23,4 +23,5 @@ export type Expr =
 export const COMPARISONS: readonly Comparison[] = ['==', '!=', '<=', '>=', '<', '>'];
 export const ORDERINGS: readonly Comparison[] = ['<', '<=', '>', '>='];
 
+/** What an expression that cannot be lexed, parsed or typed throws; a rule turns it into a refusal. */
 export class ExprError extends Error {}

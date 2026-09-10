@@ -48,6 +48,11 @@ function placeholderObject(value: string): Type {
   return { kind: 'object', fields, open: false };
 }
 
+/**
+ * What a reader of the tree may ask of it: a reference resolved through the project's aliases, an operation
+ * addressed by path#operation, the binding a port is met by, the layer a graph belongs to, and the type of
+ * any value a document writes. The checker and the compiler share one, so both read the tree the same way.
+ */
 export class Scope {
   readonly types: TypeResolver;
   readonly project: ProjectDoc | undefined;
@@ -62,10 +67,12 @@ export class Scope {
 
   // ---- lookups -------------------------------------------------------------------------------
 
+  /** The document a reference names, as written by a reader: an alias resolved first, and the kind insisted on. */
   get<K extends Kind>(kind: K, ref: string): Loaded<DocByKind[K]> | undefined {
     return this.registry.get(kind, this.canon(ref));
   }
 
+  /** The document a reference names whatever its kind, so a rule can say what was found where it wanted another. */
   any(ref: string): Loaded | undefined {
     return this.registry.any(this.canon(ref));
   }
@@ -96,6 +103,7 @@ export class Scope {
 
   // ---- bindings and profiles ----------------------------------------------------------------
 
+  /** Every binding that says how a port is met -- none, one, or the several a profile must then choose between. */
   bindingsFor(portPath: string): Loaded<BindingDoc>[] {
     return this.registry.all('binding').filter(binding => this.canon(binding.doc.port) === portPath);
   }
@@ -114,6 +122,7 @@ export class Scope {
     return `port '${portPath}' has ${all.length} bindings (${all.map(binding => binding.path).join(', ')}) -- choose one in a project profile`;
   }
 
+  /** The names of the profiles the project declares: the sets of choices a tree may be checked or run under. */
   profiles(): string[] {
     return Object.keys(this.project?.profiles ?? {});
   }
