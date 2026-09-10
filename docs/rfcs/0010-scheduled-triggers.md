@@ -47,7 +47,8 @@ and the watcher. And it does not add a `job` kind: a trigger fires a port, and a
 
 **A tick** is one instant a schedule names. **A scheduled trigger** is a trigger of kind
 `@schedule/schedule.trigger-kind.json`. Its settings say when: a five-field `cron` expression in a `timezone`, or
-an interval `everyMs` counted from the moment the scheduler started. Its context hands `request.scheduled` (the
+an interval `everyMs`, whose ticks are the multiples of the interval since the Unix epoch, so every process names
+the same instants whenever it started. Its context hands `request.scheduled` (the
 tick's instant, ISO 8601 in UTC), `request.fired` (when the run began, which is later when the process was busy)
 and `request.missed` (how many ticks since the last run were not fired, and why below); its `fire` runs a domain
 port operation with inputs read from that context, exactly as a route's does. Its `out`, where the operation
@@ -158,7 +159,7 @@ as the stub proposed, is under *Drawbacks*.
 | Setting | Type | Meaning |
 |---|---|---|
 | `timezone` | string, optional | the zone a `cron` trigger is read in when it names none; absent: `UTC` |
-| `leaseTtlMs` | number, optional | how long a lease taken before a tick is held without renewal; absent: 30000 |
+| `leaseTtlMs` | number, optional | how long a hold taken for a tick lasts without renewal, so a process that dies mid-run lets go of the tick; absent: 30000 |
 
 `docs/scheduler.port.json`, what a startup step names:
 
@@ -176,11 +177,11 @@ refused. B006 admits it in a startup step because it is a native `holds` operati
 {
   "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/trigger-kind.schema.json",
   "label": "Schedule",
-  "description": "Fired by the clock while a startup step names @schedule/scheduler.port.json#run: at every instant a five-field cron expression names in its timezone, or every everyMs milliseconds from the moment the scheduler started. The context hands the tick's instant, when the run actually began, and how many ticks since the last run were not fired; the trigger's input mapping picks what the graph gets. Nobody is calling: the trigger gives the guard nothing, so a policy reading the caller is refused (A005), and the answer is judged against out and logged, never delivered. A refusal is logged with its reason. A tick that finds the previous run still going is skipped, waits, or runs beside it, as overlap says. A tick that fell while no process ran is not fired unless catchUp says so, which needs a lease to remember the last tick by.",
+  "description": "Fired by the clock while a startup step names @schedule/scheduler.port.json#run: at every instant a five-field cron expression names in its timezone, or at every multiple of everyMs milliseconds since the Unix epoch. The context hands the tick's instant, when the run actually began, and how many ticks since the last run were not fired; the trigger's input mapping picks what the graph gets. Nobody is calling: the trigger gives the guard nothing, so a policy reading the caller is refused (A005), and the answer is judged against out and logged, never delivered. A refusal is logged with its reason. A tick that finds the previous run still going is skipped, waits, or runs beside it, as overlap says. A tick that fell while no process ran is not fired unless catchUp says so, which needs a lease to remember the last tick by.",
   "settings": {
     "fields": {
       "cron": { "type": "string", "required": false, "description": "five fields: minute hour day-of-month month day-of-week; *, lists, ranges, steps, and month and weekday names. One of cron and everyMs" },
-      "everyMs": { "type": "number", "required": false, "description": "an interval in milliseconds, 1000 or more, counted from the scheduler's start; never with a timezone. One of cron and everyMs" },
+      "everyMs": { "type": "number", "required": false, "description": "an interval in milliseconds, 1000 or more; a tick is every multiple of it since the Unix epoch, the same instants on every process; never with a timezone. One of cron and everyMs" },
       "timezone": { "type": "string", "required": false, "description": "the IANA zone the cron expression is read in; absent: the plugin's settings.timezone, and UTC when that is absent too" },
       "overlap": { "type": "string", "enum": ["skip", "wait", "concurrent"], "required": false, "description": "what a tick does when the previous tick's run is still going: skip (default) drops it and counts it in missed; wait fires it once that run ends, one tick waiting at most; concurrent fires it beside the running one" },
       "catchUp": { "type": "boolean", "required": false, "description": "whether a tick that fell while no process ran is fired once at start, as the most recent such tick, with the earlier ones counted in missed; default false. Needs the run step's lease: without a store there is nothing to remember the last tick by (X0n3)" },
@@ -259,15 +260,19 @@ reader is not left to guess.
 
 1. Read `serving.triggers('@schedule/schedule.trigger-kind.json')` afresh, so a reload is seen
    (`Served.serving()` in `packages/runtime/src/serve.ts` routes every member through `current`). For each trigger,
-   the next tick: from `nextTick` for a `cron`, from `startedAt + n * everyMs` for an interval, `n` the first that
-   lands after now. Interval ticks count from the moment the step ran, never aligned to the wall clock; cron ticks
-   are wall clock.
+   the next tick: from `nextTick` for a `cron`, and `(floor(now / everyMs) + 1) * everyMs` for an interval. Both
+   are wall clock, and neither depends on when this process started: two processes with clocks in step name the
+   same instants, which is what lets a lease say "this tick, once" below. The first interval tick after a start is
+   the next multiple, never "now".
 2. Sleep until the earliest of them, or one minute, whichever is first, and go to 1. The minute is cron's own
    resolution and is what makes a trigger added or edited by a reload seen without the scheduler being told: a
    reload changes the set the next wake-up reads. `serving.reload` notifies no one, and this RFC adds no observer
    for it.
-3. At a tick: if `lease` was given, `leases(env).for(kind).acquire(connection, triggerPath, leaseTtlMs)`; a process
-   that does not hold it logs nothing and goes on (the holder fires). Then `overlap`: `skip` when a run of this
+3. At a tick: if `lease` was given, `leases(env).for(kind).acquire(connection, triggerPath, scheduled, leaseTtlMs)`.
+   The hold is for *this tick of this trigger*, and the keeper grants it only when no other process holds the
+   trigger unexpired and no run of this tick or a later one has been recorded as fired -- so a tick is taken once,
+   by whichever process's clock reaches it first, and a process whose clock runs two minutes slow finds its 03:00
+   already done and logs nothing. A process that does not get the hold goes on (the holder fires). Then `overlap`: `skip` when a run of this
    trigger is in flight -- count it, log `→ skipped (previous run still going)`, go on; `wait` -- keep at most one
    tick waiting, fire it when the run ends, count any further tick as skipped; `concurrent` -- fire. The context is
    `{ scheduled, fired: now, missed }`; `serving.inputFor(trigger, request)` builds and judges the input (`fire.in`
@@ -278,8 +283,14 @@ reader is not left to guess.
    credentials and adds nothing, and the policy decides.
 4. After the run: the log line, `schedule <trigger> <scheduled> → done (<ms>, <op>) <answer>` or
    `→ refused <reason> (…)` or `→ failed (…)`, through the kind's `encode`; the lease's `markFired(connection,
-   triggerPath, scheduled)` when a lease is held, else an in-memory last-tick per trigger; the lease renewed while
-   a run is in flight past `leaseTtlMs`, and released at stop.
+   triggerPath, scheduled)` when a hold is held -- whatever the run's status: a refusal is the tree's answer to
+   that tick, and a tick is not refired for it -- else an in-memory last-tick per trigger; the hold renewed every
+   `leaseTtlMs / 2` while a run is in flight (`acquire` again, same tick, same holder), and released when the run
+   has answered and at stop. A process killed hard mid-run neither marks nor releases: its hold expires after
+   `leaseTtlMs`, and the tick, never recorded as fired, is taken by the next process to ask for it -- another
+   instance whose clock reaches the same instant after the expiry, or a process starting with `catchUp` -- and run
+   again. That is the one case a tick runs twice, it is a crash, and it is why the fired operation must be safe to
+   repeat (*Guide*, a tick with much to do publishes).
 5. `env.hold({ label: 'schedule', stop })`: `stop` aborts the sleep, takes no further tick, and resolves once every
    run in flight has answered. The runtime stops holds in reverse (`bye` in `start`), so `run` listed before `listen`
    drains after the socket closed. `run` answers `{ triggers, next }` and logs
@@ -302,8 +313,12 @@ and the table follow RFC 0002's `engines(env)` and RFC 0009's `brokers(env)` lin
 ```ts
 /** What a storage engine does for the scheduler on one connection of the kind it registered; the connection is the canonical path. */
 export interface Leases {
-  /** Try to hold `name` until now + ttlMs: true when this process holds it, freshly or renewed; false when another holder's has not expired. */
-  acquire(connection: string, name: string, ttlMs: number): Promise<boolean>;
+  /**
+   * Try to hold `name` for the tick `scheduled` until now + ttlMs: true when this process holds it, freshly or renewed
+   * (same holder, same tick); false when another holder's hold has not expired, or when a tick at or after `scheduled`
+   * has already been marked fired -- a tick is taken once, whichever process's clock reaches it first.
+   */
+  acquire(connection: string, name: string, scheduled: string, ttlMs: number): Promise<boolean>;
   release(connection: string, name: string): Promise<void>;
   /** The tick last recorded as fired for `name`, ISO 8601, or nothing. */
   lastFired(connection: string, name: string): Promise<string | undefined>;
@@ -316,9 +331,12 @@ export function leases(env: Record<string, unknown>): { register(kind: string, k
 A storage plugin registers from its `postLoad` -- `leases(ctx.env).register('@storage-postgres/postgres.connection-kind.json', tableLeases())`
 -- and the table is a `WeakMap` keyed by `env` with a default, so plugin order in `project.json` cannot bite and a
 reload starts clean, for the reasons RFC 0002 gives at length. The postgres engine keeps one table
-`wilanis_schedule` -- `name` (text, primary key), `holder` (text), `held_until`, `last_fired` (timestamptz) --
-created by the engine's `ensure`; `acquire` is one `INSERT … ON CONFLICT (name) DO UPDATE … WHERE held_until < now() OR holder = $me RETURNING holder`,
-so two instances never both hold one name. This step is blocked on RFC 0002's implementation and marked so in the
+`wilanis_schedule` -- `name` (text, primary key: the trigger's canonical path), `holder` (text), `held_until`,
+`last_fired` (timestamptz) -- created by the engine's `ensure`; `acquire` is one statement,
+`INSERT … ON CONFLICT (name) DO UPDATE SET holder = $me, held_until = now() + $ttl WHERE (wilanis_schedule.held_until < now() OR wilanis_schedule.holder = $me) AND (wilanis_schedule.last_fired IS NULL OR wilanis_schedule.last_fired < $scheduled) RETURNING holder`,
+so two instances never both hold one trigger, and a tick that `last_fired` already covers is granted to nobody
+however late a clock asks for it. `markFired` sets `last_fired = greatest(last_fired, $scheduled)`; `release` sets
+`held_until = now()`. One row per trigger, whatever the number of ticks. This step is blocked on RFC 0002's implementation and marked so in the
 plan. `@wilanis/plugin-storage-memory` needs no keeper: one process is alone. Where `lease` names a connection
 whose kind registered no keeper, `run` throws before holding anything, naming the connection and the kind (X0n4
 has judged the tree; this message is for a plugin that did not load), and a startup step that throws stops the
@@ -418,7 +436,10 @@ Unit tests in `packages/plugin-schedule/test/`, no clock and no sleep:
 | the scheduler over a fake clock | a `cron` trigger fires at its tick with `scheduled` the tick and `fired` the clock's now; an `everyMs: 60000` trigger fires at start + 60 s, + 120 s, counted from the step, not aligned |
 | `overlap` | a run that takes three intervals: `skip` fires ticks 1 and 4 with `missed` 2 on the fourth; `wait` fires 1 then 2 as soon as 1 ends, ticks 3 skipped, 4 fired with `missed` 1; `concurrent` fires all four |
 | `missed` and `catchUp` | without a lease: first tick after start has `missed` 0; with a fake `Leases` whose `lastFired` is three ticks back and `catchUp: true`: one immediate fire, `scheduled` the most recent past tick, `missed` 2; `catchUp` absent: no immediate fire |
-| a lease decides who fires | two schedulers over one fake `Leases`: each tick is fired by exactly one; the holder's lease is renewed past `leaseTtlMs` while its run is in flight; the other takes over once the holder's expires |
+| interval ticks are the epoch's | `everyMs: 60000` with the fake clock at 10:07:13 fires at 10:08:00.000, then 10:09:00.000; two schedulers started at 10:07:13 and 10:07:41 name the same instants |
+| a lease decides who fires | two schedulers over one fake `Leases`: each tick is fired by exactly one; the holder's hold is renewed past `leaseTtlMs` while its run is in flight and the other never takes it meanwhile |
+| a tick is taken once | two schedulers whose fake clocks differ by two minutes: the fast one fires 03:00 and marks it; the slow one's 03:00 asks, is refused, logs nothing; `missed` on the next tick is 0 for both |
+| a crash lets the tick go | the holder's clock stops mid-run (no renewal, no `markFired`); after `leaseTtlMs` the other scheduler's ask for the same tick is granted and the operation runs again; with `markFired` done before the stop, it is not |
 | a reload is seen | `serving.triggers` answers a new set after the fake clock passes a minute; the new trigger's tick fires; the removed one's does not |
 | stop drains | `stop()` during a run resolves after that run's outcome; no tick fires after `stop()` began |
 | the gate runs on a tick | a tick-only policy (its decision reads `request.scheduled`) allows on one instant and refuses on another, and the refusal is logged with its reason; `can-record` attached is A005 at check, never reached |
@@ -431,8 +452,9 @@ End to end, in `packages/plugin-schedule/test/start.test.ts`, one real second: a
 and the `run` step, served through `start` from `@wilanis/runtime` (a devDependency for tests only, as the http
 tests do in `packages/plugin-http/test/harness.ts`): the operation ran once within two seconds, the log carries the
 tick line, `stop` resolves. Postgres, in `packages/plugin-storage-postgres/test/leases.test.ts` behind
-`WILANIS_TEST_POSTGRES_URL` (blocked on RFC 0002): two `acquire`s of one name, one holder; an expired hold is taken
-over; `markFired` then `lastFired` round-trips. Discoverability, in `packages/runtime/test/tools.test.ts`: `describe`
+`WILANIS_TEST_POSTGRES_URL` (blocked on RFC 0002): two `acquire`s of one name and tick, one holder; the holder's
+second `acquire` renews; an expired hold is taken over; after `markFired`, an `acquire` for that tick or an earlier
+one is refused to every holder and one for a later tick is granted; `lastFired` round-trips. Discoverability, in `packages/runtime/test/tools.test.ts`: `describe`
 of the scheduled trigger prints the schedule; `map` prints the schedule line. View, in `packages/view/test`: the
 example's scheduled trigger page.
 
@@ -464,7 +486,11 @@ the one `project.doc.startup` for every profile), so every process that runs the
 instances of the example behind a load balancer both run `run`, and without a `lease` both fire the digest at
 03:00. This RFC gives the honest answers in order: one instance, or the `lease` on the storage engine (step 5), or
 a startup list per profile once RFC 0013 says how, so that one process schedules and the others only listen. It
-adds no second way to say it. The manifest (RFC 0026) prints the scheduled triggers per profile so a reviewer sees
+adds no second way to say it. With the lease, a pod that comes up behind the balancer changes nothing: it names the
+same tick instants as the others (cron is wall clock, intervals are the epoch's), asks for each tick, and is
+granted it only when nobody holds the trigger and nobody has fired that tick -- so clocks a little apart do not
+double a tick, a rolling deploy does not double one, and a pod killed mid-run gives its tick up after
+`leaseTtlMs` to the next that asks. The manifest (RFC 0026) prints the scheduled triggers per profile so a reviewer sees
 what fires where.
 
 **A package, not a plugin built into the runtime.** The stub put the kind beside `@std` and `@cli` because it
@@ -512,8 +538,10 @@ Settled here, with the reasoning in the text: **overlap** is a setting, `skip` |
 only when `catchUp` says so and a lease store remembers the last tick (X0n3); without one, they are not fired, which
 is what cron does. **Multiple instances** are decided by a lease in the storage engine's connection, named by the
 `run` step's `lease`, through a contract `@schedule` exports and the engine fills from `postLoad` as RFC 0002's
-`engines(env)` and RFC 0009's `brokers(env)` are; this makes the *lease step* depend on RFC 0002 and leaves the RFC
-itself with no dependency to accept (*Runtime behaviour*, *Leases*; *Drawbacks*, first item). **Where the kind
+`engines(env)` and RFC 0009's `brokers(env)` are; the hold is for one tick of one trigger and is refused once that
+tick is recorded fired, so a tick is taken once whatever the clocks, and interval ticks are aligned to the epoch so
+every process names the same instants; this makes the *lease step* depend on RFC 0002 and leaves the RFC itself
+with no dependency to accept (*Runtime behaviour*, *Leases*; *Drawbacks*, first item). **Where the kind
 lives** is its own package, for the reasons under *Drawbacks*, second item.
 
 Nothing else must be decided before `accepted`. Decided during implementation:
