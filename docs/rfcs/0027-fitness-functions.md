@@ -175,8 +175,9 @@ violating input and expect the named violation. A fitness function that has neve
   list of required status checks, beside `lint, build, test` and `branch name`: unlisted, a failed `fitness`
   or a waiting `decision` is a badge the merge button ignores; listed, the pull request cannot merge until the
   check succeeds. GitHub counts a skipped required job as satisfied, which is why `decision` must exist on
-  every run rather than be filtered out by path. Listing them is the maintainer's step, after each has run
-  once on the repository, since GitHub offers only check names it has seen.
+  every run rather than be filtered out by path. Both are required: without it the approval is a notice, and
+  the point of the design is that a change of decision is never merged past. Listing them is the maintainer's
+  step, after each has run once on the repository, since GitHub offers only check names it has seen.
 - **Template.** `.github/PULL_REQUEST_TEMPLATE.md` gains a line: `**Decision:** none` or the same sentence
   the commit carries. The commits are the record and the `decision` job reads them alone; the body line is a
   summary for the reader and is checked against nothing.
@@ -227,7 +228,8 @@ behaviour stated in `fitness/README.md`; the CI jobs are seen to run on that pul
 6. The gate: `.githooks/commit-msg` and the `prepare` script, the `fitness` and `decision` jobs, the
    pull request template line, the `CLAUDE.md` entry and the `CONTRIBUTING.md` paragraph.
 7. Maintainer's steps, not a pull request: create the `decisions` environment with themselves as required
-   reviewer; add `fitness` and `decision` to the ruleset's required checks once both have run on `main`.
+   reviewer; add `fitness` and `decision` to the ruleset's required status checks once both have run on
+   `main`, beside `lint, build, test` and `branch name`.
 
 Tasks 2 to 5 depend on 1 and are independent of each other.
 
@@ -281,5 +283,5 @@ outside any agent's reach.
 
 ## Decided during implementation
 
-1. Whether `fitness` and `decision` join the ruleset's required status checks, or stay advisory. The
-   maintainer's step, task 7, once both have run on the repository.
+None. Every question this RFC raised was settled before acceptance: commits are the record of a decision,
+the runtime's two `D` literals stay where they are, and both jobs are required status checks.
