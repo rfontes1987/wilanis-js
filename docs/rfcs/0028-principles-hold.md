@@ -1,6 +1,6 @@
 # RFC 0028: The principles hold: four sentences of `CLAUDE.md` that nothing held, and the two claims not to write
 
-- **Status:** accepted
+- **Status:** implemented
 - **Areas:** `area:process`, `area:core`, `area:compiler`
 - **Tracking issue:** #111
 - **Depends on:** RFC 0027
