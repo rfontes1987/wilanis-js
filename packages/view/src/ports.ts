@@ -11,13 +11,10 @@ import { labelOf, readable } from './types.js';
 /** The port that stands for a whole value, rather than one of its fields. */
 export const WHOLE = '';
 
+/** A place in words, for a label the page reads aloud: 1st, 2nd, 3rd, 11th. */
 export const ordinal = (place: number) =>
   `${place}${['th', 'st', 'nd', 'rd'][place % 100 > 10 && place % 100 < 14 ? 0 : Math.min(place % 10, 4) % 4] ?? 'th'}`;
 
-/**
- * Make sure a node offers the port a read names, opening every level of a deep path as an attribute under
- * its parent: `body.id` sits under `body`. A parent that is not there yet (a key of an open object) is added too.
- */
 /** Where an attribute port sits: after its parent and after every attribute already under it, else at the end. */
 function insertAt(outputs: VPort[], parent: string | undefined): number {
   if (parent === undefined) return outputs.length;
@@ -28,6 +25,10 @@ function insertAt(outputs: VPort[], parent: string | undefined): number {
   return at;
 }
 
+/**
+ * Make sure a node offers the port a read names, opening every level of a deep path as an attribute under
+ * its parent: `body.id` sits under `body`. A parent that is not there yet (a key of an open object) is added too.
+ */
 export function attributePorts(node: VNode, name: string, typeAtPath: (path: string[]) => Type | undefined) {
   if (node.outputs.some(port => port.name === name)) return;
   const segments = name.split('.');
@@ -101,13 +102,13 @@ function markBound(scope: Scope, target: VTarget, port: string, opName: string) 
   if (first) target.implementation = first.graph ?? first.path;
 }
 
+/** A document's bare name, for a label when it declares none: the last segment without its kind or `.json`. */
 export const stemOf = (path: string) =>
   path
     .slice(path.lastIndexOf('/') + 1)
     .replace(/\.json$/, '')
     .replace(/\.[a-z-]+$/, '');
 
-/** How one input value was written: a literal, text with reads, or a whole read (no annotation). */
 /** How a string was written: a whole read (no annotation), text with reads in it, or a literal that may name a document. */
 function writtenText(scope: Scope, text: string): Pick<VPort, 'literal' | 'text' | 'ref'> {
   if (WHOLE_TEMPLATE.test(text)) return {};
@@ -116,6 +117,7 @@ function writtenText(scope: Scope, text: string): Pick<VPort, 'literal' | 'text'
   return { literal: JSON.stringify(text), ...(target ? { ref: target.path } : {}) };
 }
 
+/** How one input value was written: a literal, text with reads, or a whole read (no annotation). */
 export function written(scope: Scope, value: unknown): Pick<VPort, 'literal' | 'text' | 'ref'> {
   if (value === undefined) return {};
   if (typeof value === 'string') return writtenText(scope, value);
@@ -181,13 +183,13 @@ export function resultType(scope: Scope, op: Operation | undefined, given: Value
   }
 }
 
-/** The output ports: the whole value first, then the fields of the result when it is an object. */
 /** The type of the whole answer: resolved where it resolves, else the spec the contract wrote. */
 function wholeType(resolved: Type | undefined, returns: unknown): string | undefined {
   if (resolved) return show(resolved);
   return typeof returns === 'string' ? returns : undefined;
 }
 
+/** The output ports: the whole value first, then the fields of the result when it is an object. */
 export function outputPorts(result: Type | undefined, op: Operation | undefined): VPort[] {
   if (!op?.returns) return [];
   return [{ name: WHOLE, type: wholeType(result, op.returns) }, ...fieldPorts(result)];
@@ -217,10 +219,6 @@ function readsIn(value: unknown, into: Set<string> = new Set()): Set<string> {
   return into;
 }
 
-/**
- * Data edges: every {{root.path}} read in a node's inputs becomes an edge from the root's port to the input.
- * A read through a resolver leaves the request node at the path the resolver names.
- */
 /** Where one read leaves: the node it names, or the request node at the path its resolver names. */
 function leaves(read: string, resolvers: Map<string, { path: string[] }>) {
   const [root, ...path] = splitPath(read);
@@ -230,6 +228,10 @@ function leaves(read: string, resolvers: Map<string, { path: string[] }>) {
   return { from: 'request', fromPort: [...resolver.path, ...path].join('.') };
 }
 
+/**
+ * Data edges: every {{root.path}} read in a node's inputs becomes an edge from the root's port to the input.
+ * A read through a resolver leaves the request node at the path the resolver names.
+ */
 export function wire(
   edges: VEdge[],
   to: string,

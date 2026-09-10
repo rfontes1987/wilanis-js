@@ -8,6 +8,7 @@ export interface ThrottleSettings {
   perSecond?: number;
 }
 
+/** One connection's gate: it holds back a request until both limits allow it, and lets waiting ones through in turn. */
 export class Throttle {
   private inFlight = 0;
   /** Requests waiting for a slot, woken one at a time as slots free up. */
@@ -58,8 +59,9 @@ export class Throttle {
   }
 }
 
-/** The gate of one connection under one environment: built on first use, rebuilt when its settings change. */
+/** Every gate in play, per environment then per connection, so a gate outlives the calls that share it. */
 const gates = new WeakMap<object, Map<string, Throttle>>();
+/** The gate of one connection under one environment: built on first use, rebuilt when its settings change. */
 export function throttleFor(env: object, connection: string, settings: ThrottleSettings | undefined): Throttle {
   let byConn = gates.get(env);
   if (!byConn) {

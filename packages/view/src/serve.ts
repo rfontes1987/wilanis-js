@@ -42,7 +42,6 @@ function schemaFile(rel: string): string | undefined {
   }
 }
 
-/** A fingerprint of every JSON file under root: paths and modification times. Changes when the tree does. */
 /** Every JSON file under a directory, deepest last, as a path and the time it changed. */
 function stamps(dir: string, into: string[] = []): string[] {
   for (const name of readdirSync(dir).sort()) {
@@ -55,6 +54,7 @@ function stamps(dir: string, into: string[] = []): string[] {
   return into;
 }
 
+/** A fingerprint of every JSON file under root: paths and modification times. Changes when the tree does. */
 export function versionOf(root: string): string {
   let hash = 2166136261;
   for (const stamp of stamps(root))

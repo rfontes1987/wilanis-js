@@ -8,11 +8,6 @@ import { type Domain, fits } from './domains.js';
 // ---- from demands to stubs --------------------------------------------------------------------------
 
 /**
- * A value satisfying a domain, built by patching what the seed generated. The generated value is kept
- * wherever the domain says nothing, so a branch case differs from an ordinary rehearsal only in the
- * fields its rule actually reads.
- */
-/**
  * Whether two numbers say the same thing about an outcome. HTTP statuses come in families -- any 2xx is a
  * success -- so excluding one 2xx and generating another leaves the branch testing the opposite of what
  * its rule describes.
@@ -196,6 +191,7 @@ export function setPath(root: unknown, path: string[], value: unknown): unknown 
   return base;
 }
 
+/** The value `path` names inside `root`, walking objects and list indices; undefined where the way runs out. */
 export function getPath(root: unknown, path: string[]): unknown {
   let cur = root;
   for (const seg of path) {

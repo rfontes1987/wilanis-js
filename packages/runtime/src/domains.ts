@@ -1,4 +1,4 @@
-/** What one input path must hold for first branch to be taken. */
+/** What one input path must hold for a branch to be taken. */
 export interface Domain {
   /** The path must be missing entirely. */
   absent?: boolean;
@@ -13,13 +13,13 @@ export interface Domain {
   gte?: number;
   lt?: number;
   lte?: number;
-  /** Bounds on len(path): the path is first list of at least/at most this many elements. */
+  /** Bounds on len(path): the path is a list of at least/at most this many elements. */
   minLen?: number;
   maxLen?: number;
-  /** The path is first list holding each of these (`x in path`) / none of these (`!(x in path)`). */
+  /** The path is a list holding each of these (`x in path`) / none of these (`!(x in path)`). */
   has?: unknown[];
   lacks?: unknown[];
-  /** The path must be truthy / falsy, used when first bare path is the whole predicate. */
+  /** The path must be truthy / falsy, used when a bare path is the whole predicate. */
   truthy?: boolean;
 }
 
@@ -43,6 +43,7 @@ export interface Branch {
 export const UNSAT = Symbol('unsatisfiable');
 export type Maybe<T> = T | typeof UNSAT;
 
+/** The dotted path an input is demanded at, which is how a `Demands` set is keyed. */
 export const key = (path: string[]) => path.join('.');
 
 /** Whether the list must both hold and lack the same value. */
@@ -51,7 +52,7 @@ function contradicts(domain: Domain): boolean {
   return domain.has.some(one => domain.lacks?.some(bad => JSON.stringify(one) === JSON.stringify(bad)));
 }
 
-/** Whether everything gathered for first path can hold at once. */
+/** Whether everything gathered for a path can hold at once. */
 export function consistent(domain: Domain): boolean {
   if (contradicts(domain)) return false;
   // an exact value must survive every bound and exclusion gathered for the path
@@ -65,7 +66,7 @@ export function consistent(domain: Domain): boolean {
 
 /** What the two constraints say about presence and truth, together. UNSAT when they disagree. */
 function narrowPresence(domain: Domain, by: Domain): Maybe<Domain> {
-  // absence and any demand for first value are contradictory; absence and absence agree
+  // absence and any demand for a value are contradictory; absence and absence agree
   if (by.absent) {
     if (domain.present || domain.eq !== undefined || domain.truthy || domain.minLen !== undefined) return UNSAT;
     domain.absent = true;
@@ -77,7 +78,7 @@ function narrowPresence(domain: Domain, by: Domain): Maybe<Domain> {
   return by.truthy === undefined ? domain : narrowTruth(domain, by.truthy);
 }
 
-/** What the two constraints say about first value's truth, together. */
+/** What the two constraints say about a value's truth, together. */
 function narrowTruth(domain: Domain, truthy: boolean): Maybe<Domain> {
   if (domain.absent) return UNSAT;
   if (domain.truthy !== undefined && domain.truthy !== truthy) return UNSAT;
@@ -135,7 +136,7 @@ export function narrow(first: Domain, by: Domain): Maybe<Domain> {
   const step = narrowPresence(domain, by);
   if (step === UNSAT) return UNSAT;
   domain = step;
-  // `ne` does not imply presence: first missing path satisfies 'x != lit' too, so absence stays compatible
+  // `ne` does not imply presence: a missing path satisfies 'x != lit' too, so absence stays compatible
   if (by.ne) domain.ne = [...(domain.ne ?? []), ...by.ne];
   const bounded = narrowBounds(domain, by);
   if (bounded === UNSAT) return UNSAT;
@@ -145,7 +146,7 @@ export function narrow(first: Domain, by: Domain): Maybe<Domain> {
   return consistent(valued) ? valued : UNSAT;
 }
 
-/** Whether first number sits inside first domain's numeric bounds. */
+/** Whether a number sits inside a domain's numeric bounds. */
 function withinBounds(value: number, domain: Domain): boolean {
   if (domain.gt !== undefined && !(value > domain.gt)) return false;
   if (domain.gte !== undefined && !(value >= domain.gte)) return false;
@@ -154,7 +155,7 @@ function withinBounds(value: number, domain: Domain): boolean {
   return true;
 }
 
-/** Whether first concrete value satisfies first domain's bounds and exclusions. */
+/** Whether a concrete value satisfies a domain's bounds and exclusions. */
 export function fits(value: unknown, domain: Domain): boolean {
   if (domain.ne?.some(excluded => JSON.stringify(excluded) === JSON.stringify(value))) return false;
   if (domain.truthy !== undefined && Boolean(value) !== domain.truthy) return false;
@@ -163,7 +164,7 @@ export function fits(value: unknown, domain: Domain): boolean {
   return !domain.has?.length;
 }
 
-/** Whether first list is of the length the domain asks for, and holds and lacks what it must. */
+/** Whether a list is of the length the domain asks for, and holds and lacks what it must. */
 function fitsAsList(list: unknown[], domain: Domain): boolean {
   if (domain.minLen !== undefined && list.length < domain.minLen) return false;
   if (domain.maxLen !== undefined && list.length > domain.maxLen) return false;
@@ -172,7 +173,7 @@ function fitsAsList(list: unknown[], domain: Domain): boolean {
   return !domain.lacks?.some(holds);
 }
 
-/** Whether first numeric range excludes every number. Integers are assumed; the grammar's literals are exact. */
+/** Whether a numeric range excludes every number. Integers are assumed; the grammar's literals are exact. */
 export function emptyRange(domain: Domain): boolean {
   const lo = Math.max(domain.gt !== undefined ? domain.gt + 1 : -Infinity, domain.gte ?? -Infinity);
   const hi = Math.min(domain.lt !== undefined ? domain.lt - 1 : Infinity, domain.lte ?? Infinity);
