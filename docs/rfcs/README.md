@@ -32,7 +32,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0024](0024-cloud-deployment.md) | Cloud deployment integrations | stub | Ecosystem |
 | [0025](0025-ai-provider-integrations.md) | AI model calls as an effect | stub | Ecosystem |
 | [0026](0026-application-manifest.md) | The application manifest | stub | The AI advantage |
-| [0027](0027-fitness-functions.md) | Fitness functions: decisions about the code, held by the tests that record them | draft | none |
+| [0027](0027-fitness-functions.md) | Fitness functions: decisions about the code, held by the tests that record them | accepted | none |
 
 The order of the milestones is the order of the work: *A credible backend* (storage, atomic graphs,
 externalized state, traces, invariants), *1.0: published* (freeze IR v1, publish, the security model),
