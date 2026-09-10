@@ -128,7 +128,11 @@ Decision: retires fitness/the-engine-imports-nothing.fitness.ts because RFC 00NN
 ```
 
 The line is the maintainer's to write, in their own words; no tool adds it, and it is the one exception to
-`CLAUDE.md`'s "no generated trailers". A `commit-msg` hook refuses a commit that lacks it, and in CI a
-`decision` job checks the same line and then waits for the maintainer's approval in an Actions environment
-named `decisions`. The hook and the job arrive with step 6 of RFC 0027; until then the line is written by
-hand and checked by eye.
+`CLAUDE.md`'s "no generated trailers". Two things hold it. `.githooks/commit-msg`, switched on by
+`npm install` through the `prepare` script, refuses the commit without it -- and prints which files under
+`fitness/` the commit stages, so the message can be written from what is in front of you. `git commit
+--no-verify` skips the hook, as it skips any hook; the `decision` job in CI is what binds: it checks every
+commit of the pull request that touches `fitness/`, then waits in an Actions environment named `decisions`
+for the maintainer to approve the run. The job is always present and skips itself when the pull request
+changes no decision, because GitHub counts a skipped required check as satisfied and a job filtered out by
+path never reports at all.
