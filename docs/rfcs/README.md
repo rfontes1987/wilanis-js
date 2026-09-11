@@ -19,7 +19,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0011](0011-effect-semantics-retry-idempotency-timeout.md) | Retry, idempotency and timeout as declared properties of an operation | accepted |
 | [0012](0012-limits-and-cancellation.md) | Resource limits, timeouts and cancellation of a run | accepted |
 | [0013](0013-deployment-and-profiles.md) | A deployment model: profiles, environments and what a tree needs to run | stub |
-| [0014](0014-outcome-semantics.md) | Outcome semantics: refusals, failures and faults, end to end | draft |
+| [0014](0014-outcome-semantics.md) | Outcome semantics: refusals, failures and faults, end to end | accepted |
 | [0015](0015-tenant-and-resource-scoping.md) | Tenant and resource scoping as a provenance rule | draft |
 | [0016](0016-capability-aware-compilation.md) | Capability-aware compilation: what a tree requires against what an environment permits | stub |
 | [0017](0017-migration-planner.md) | Migrations derived from store declarations | draft |
