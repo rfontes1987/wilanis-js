@@ -63,8 +63,8 @@ shared across processes; a shared kind is the last step and comes when a tree on
 **Cache.** A word on a `run` or `map` node of a data graph, on a data graph, or on an operation in a port a plugin
 grants: `"cache": { "ttlMs": <number>, "key"?: <text> }`, or `false`. It means: before calling, ask the tree's cache
 for what this call answered last time, under this key; if it knows, answer that; otherwise call, and remember the
-answer for `ttlMs`. The key is the operation, its inputs and its lifetime unless `key` says otherwise; who called is not in it, so two
-sites that ask the same thing share one entry. A site inherits the `cache` of
+answer for `ttlMs`. The key is the operation, its inputs and its lifetime unless `key` says otherwise; who called is not
+in it, so two sites that ask the same thing share one entry. A site inherits the `cache` of
 the operation it runs when the port declared one, and writes `"cache": false` to decline it.
 
 **One cache per tree.** `project.json → cache` names the connection, once:
@@ -177,7 +177,8 @@ C0n1  project.json#cache
 **`common.schema.json`** gains `$defs/cache`: `false`, or an object with `ttlMs` (integer, at least 1: "how long an
 answer stands, in milliseconds; a cache entry without a lifetime is a store, RFC 0002") and `key` (string, optional: "the
 key the answer is kept under, text with `{{in.*}}` reads; absent: the operation, every input, every resolver value a
-cached graph reads, and `ttlMs`, canonicalised; never the caller. Name it where a write elsewhere must `remove` it"). `additionalProperties: false`.
+cached graph reads, and `ttlMs`, canonicalised; never the caller. Name it where a write elsewhere must `remove` it").
+`additionalProperties: false`.
 
 **`node/run.schema.json`** and **`node/map.schema.json`** gain `cache` (`$ref` to `$defs/cache`, optional): "Remember what
 this node answers, under its inputs or `key`, for `ttlMs`, over the connection `project.json → cache` names; `false`
@@ -262,9 +263,9 @@ source `{ op: <opRef>, in: <the same sources as the node's in>, ttlMs }`, which 
 graph with a `cache`, does the same around `graph:<path>`, with `{ graph: <path>, in, reads, ttlMs }` where `reads` holds
 every resolver value the graph's nodes read, each lowered as the source it lowers to inside the graph: the compiler knows
 them from the graph's `resolvers` reference and its templates, and nothing request-dependent is left out of the key. The
-caller -- the graph and node the site sits in -- is in no default key. `$` is a character no `ident` allows, so `$key` collides with no
-field an author writes, and the report shows the key it used under `in.$key` -- redacted where an input it reads is
-marked `secret`, as `redactFor` redacts today. The engine is untouched: `KCall`, `KSwitch`, `KMap`, `KernelSpec` and
+caller -- the graph and node the site sits in -- is in no default key. `$` is a character no `ident` allows, so `$key`
+collides with no field an author writes, and the report shows the key it used under `in.$key` -- redacted where an input
+it reads is marked `secret`, as `redactFor` redacts today. The engine is untouched: `KCall`, `KSwitch`, `KMap`, `KernelSpec` and
 `Run` are what they are, and the nested plan is a `KernelSpec` like a binding's.
 
 **The nested plan.** `cached` calls the cache port's `get` with `connection` (the project's, a literal), `key`
