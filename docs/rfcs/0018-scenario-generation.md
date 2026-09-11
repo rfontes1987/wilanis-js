@@ -1,6 +1,6 @@
 # RFC 0018: Scenario generation from the branch solver
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:core`, `area:compiler`, `area:runtime`, `area:view`
 - **Tracking issue:** #20
 - **Depends on:** none. RFC 0006 (accepted) adds `handler` to a scenario's `expect.nodes`; the two compose, and
@@ -170,13 +170,13 @@ it. The recorded file is now stale as well as failing, and the second command sa
 ```
 $ wilanis rehearse example --check
 stale    scenarios/rehearsed/get-entry/monitor.get-row.route.missing.scenario.json
-missing  scenarios/rehearsed/get-entry/monitor.get-row.route.missing.1.scenario.json
-2 file(s) differ from what the solver writes for this tree -- run wilanis rehearse --record and review the diff
+1 file(s) differ from what the solver writes for this tree -- run wilanis rehearse --record and review the diff
 ```
 
 `--check` runs the solver, renders every file it would write, and compares bytes: it never writes. In CI it is the
-step that keeps `scenarios/rehearsed/` honest; the diff it asks for is the pull request's, where a reviewer sees that
-the 404 branch is gone and a 410 branch has appeared, in two files named after them.
+step that keeps `scenarios/rehearsed/` honest; the diff it asks for is the pull request's, where a reviewer sees, in the one file named after the target, that the
+rule now reads `status == 410` and the stub answers it. The file is named by its target (Naming, below), so a
+threshold that moves is a diff in place, not a rename.
 
 **A branch nothing reaches.** Reorder `list-rows`'s rules so `status >= 200` comes before `status == 200 &&
 has(body)`, as `packages/runtime/test/example.test.ts` does to provoke `NEVER RUN`. The rehearsal fails, as today, and
@@ -330,10 +330,11 @@ scenario that was edited by hand is caught there, and only there.
 ### Runtime behaviour
 
 **The record.** `rehearse` in `packages/runtime/src/rehearse.ts` gains `record?: string` (a directory, relative to
-the root; `scenarios/rehearsed` by default when the flag is bare) and `check?: boolean` in its options. The writing
-lives in a new module, `packages/runtime/src/record.ts`, so `rehearse.ts` keeps to the walk: `record.ts` exports
-`scenarioOf(run: RecordedRun): ScenarioDoc` (pure, from one run's inputs and report to the document), `fileOf(run):
-string` (pure, the path below), `writeRecorded(root, dir, docs)` (writes every file, removes every
+the root; `scenarios/rehearsed` by default when the flag is bare) and `check?: boolean` in its options. With either
+set, the walk runs under seed 1 and `opts.seed` is not read: the directory is a function of the tree alone (below).
+The writing lives in a new module, `packages/runtime/src/record.ts`, so `rehearse.ts` keeps to the walk: `record.ts`
+exports `scenarioOf(run: RecordedRun): ScenarioDoc` (pure, from one run's inputs and report to the document),
+`fileOf(run): string` (pure, the path below), `writeRecorded(root, dir, docs)` (writes every file, removes every
 `*.scenario.json` under `dir` it did not write, answers the paths written) and `checkRecorded(root, dir, docs)`
 (renders each document as `writeRecorded` would and compares bytes to what is on disk; answers `{ stale, missing,
 extra }` and never writes).
@@ -370,9 +371,12 @@ report it once, as `gather` does today.
 touches nothing outside it, so a renamed branch leaves no orphan and a hand-written scenario one level up is safe.
 `--check` lists `stale` (on disk, different bytes), `missing` (would be written, not on disk) and `extra` (on disk
 under the directory, not written), exits 1 on any, and prints the one hint. Determinism holds because every value in a
-scenario is a function of the tree and the seed: stubs come from `generate(type, rng(seed ^ hash(nodePath)))`, the
-input from `generate(types.in, rng(seed))`, the case's patches from `satisfy`, and `pick` drops the report's
-`startedAt` and `endedAt`. `packages/runtime/test/tools.test.ts` already relies on this when it replays every fuzz
+scenario is a function of the tree and one fixed seed: `--record` and `--check` always solve under seed 1, so a
+recorded directory never depends on a number two machines must agree on; stubs come from
+`generate(type, rng(1 ^ hash(nodePath)))`, the input from `generate(types.in, rng(1))`, the case's patches from
+`satisfy`, and `pick` drops the report's `startedAt` and `endedAt`. Each file still carries `seed: 1`, as the schema
+describes the field: the record of what its incidental values were drawn from. `--seed n` belongs to the plain walk,
+where a different seed is harmless and proves nothing new, and is refused beside either flag. `packages/runtime/test/tools.test.ts` already relies on this when it replays every fuzz
 scenario as `same`; the record test below asserts it byte for byte.
 
 **`fuzz --edges`.** `packages/core/src/generate.ts` gains `edges(type: Type): { at: string[]; name: string; value:
@@ -414,7 +418,10 @@ any `DIFF`, and the empty-directory message becomes `no scenarios -- run wilanis
 **`run --seed`, `start`, the embedder, the engine, plugins**: unchanged.
 
 **The CLI.** `packages/runtime/src/cli.ts`: `rehearse [root] [--seed n] [-v] [--record [dir]] [--check]`; `fuzz [root]
-[--runs n] [--edges] [--check] [--out dir]`; `regress` as today. `--record` and `--check` together is `--check`.
+[--runs n] [--edges] [--check] [--out dir]`; `scenarios [root] --check`, which runs `rehearse --check` and
+`fuzz --edges --check` over the directories they own and exits 1 when either does -- the one CI step, and the one
+envelope RFC 0019's `--json` of staleness reads; `regress` as today. `--record` and `--check` together is `--check`;
+`--seed` beside either is refused with `the recorded directory is solved under seed 1: drop --seed`.
 USAGE's three lines are rewritten to the sentences above.
 
 ### Discoverability
@@ -490,7 +497,8 @@ three branchless runs under its own `scenarios/rehearsed/` (its own triggers, th
    `expect.unreachable` and the `unreachable` status; the validate baseline; the template row. (`good first issue`)
 2. Runtime: `pick` and `diffOf` carry and compare `expect.reason`; `fuzz` writes `generated: 'fuzz'` under
    `scenarios/fuzz/`. Test. (`good first issue`)
-3. Compiler: `check/scenarios.ts` with S001 moved and S0n2, S0n3 added; `judgeTree` calls it; sabotage tests.
+3. Compiler: `check/scenarios.ts` with S001 moved and S0n2, S0n3 added; `judgeTree` calls it; sabotage tests; the
+   "A new rule" line of this repository's `CLAUDE.md` lists `scenarios.ts` (S) beside `triggers.ts` (T).
 4. Runtime: `record.ts` -- `scenarioOf`, `fileOf`, `writeRecorded`, `checkRecorded`; `branchOf` and `wholeOf` hand
    back their reports and records; `rehearse` takes `record` and `check`; the CLI flags. The completeness,
    determinism, passing-suite, routing-change, renamed-target and ownership tests.
@@ -498,7 +506,8 @@ three branchless runs under its own `scenarios/rehearsed/` (its own triggers, th
    policy scenarios recorded under `policies/`. Test.
 6. Runtime: `switchesReached` factored out of `rehearseTrigger`; unreachable branches recorded; `regress` re-solves
    them. Test.
-7. Core and runtime: `edges` in `generate.ts`; `fuzz --edges` and its `--check`. Tests.
+7. Core and runtime: `edges` in `generate.ts`; `fuzz --edges` and its `--check`; `wilanis scenarios --check` in
+   `cli.ts`, dispatching to both checks. Tests.
 8. Runtime and viewer: `scenarioLines`, the `ls` marks, the trigger's `scenarios` line; the viewer's scenario page
    fixed and extended. Tests. (`good first issue`)
 9. The trees: `example/scenarios/rehearsed/` and `example/scenarios/edges/` committed; `libraries/access/scenarios/rehearsed/`
@@ -546,18 +555,20 @@ three branchless runs under its own `scenarios/rehearsed/` (its own triggers, th
 
 ## Open questions
 
-Settled here, with the reasoning in the text: naming by target with an index only on collision; recorded rehearsals
-beside fuzz, each in its own owned directory; an include records its own and the host records what it reaches;
-unreachable branches are recorded and re-solved; a policy's decision is a scenario naming the policy and an attaching
-trigger; staleness is `--check`'s and not a checker rule.
+None open. Settled in the text: naming by target with an index only on collision; recorded rehearsals beside fuzz,
+each in its own owned directory; an include records its own and the host records what it reaches; unreachable
+branches are recorded and re-solved; a policy's decision is a scenario naming the policy and an attaching trigger;
+staleness is `--check`'s and not a checker rule.
 
-To decide during implementation:
+Settled at acceptance, with the edits in the text above:
 
-1. Whether `--check` is one flag on `rehearse` and `fuzz`, as written, or one command (`wilanis scenarios --check`)
-   over every owned directory at once, which CI would prefer and which would be the natural home for RFC 0019's
-   `--json` of staleness.
-2. The `long` string's length (256 as written) and whether an `enum` of many members caps its edges.
-3. Whether the template's `wilanis init` hooks run `regress` on every graph or binding edit, as its step 3 tells the
-   agent to, or leave it to the agent; the loop is faster with the hook and noisier.
-4. Whether a scenario's `description` is regenerated with the file (as written: it names the branch and the outcome)
-   or kept when a person edits it, which would make the description the one field `--check` ignores.
+1. **One CI step.** `--check` stays a flag on `rehearse` and on `fuzz --edges`, each over the directory it owns, and
+   `wilanis scenarios --check` runs both: one step for CI, and one envelope for RFC 0019's `--json` of staleness.
+2. **Edges are fixed.** `long` is 256 characters, and an `enum` yields one edge per member with no cap: the members
+   are declared and finite, and a cap would make which of them is proved depend on how many there are.
+3. **No hook.** `wilanis init` writes no hook that runs `regress`; the template's step 3 tells the agent when to run
+   it, and a hook that runs a tool on an edit is RFC 0019's to propose.
+4. **`description` is regenerated** with the rest of the file. A field `--check` ignored would be the one place a
+   hand edit survives, and the rule is simpler when a generated file is bytes.
+5. **One seed.** `--record` and `--check` solve under seed 1 and refuse `--seed`; the flag belongs to the plain walk.
+   The directory is a function of the tree, as the Summary says, not of a number every machine must agree on.

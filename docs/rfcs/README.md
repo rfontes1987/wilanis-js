@@ -23,7 +23,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0015](0015-tenant-and-resource-scoping.md) | Tenant and resource scoping as a provenance rule | accepted |
 | [0016](0016-capability-aware-compilation.md) | Capability-aware compilation: what a tree requires against what an environment permits | stub |
 | [0017](0017-migration-planner.md) | Migrations derived from store declarations | draft |
-| [0018](0018-scenario-generation.md) | Scenario generation from the branch solver | draft |
+| [0018](0018-scenario-generation.md) | Scenario generation from the branch solver | accepted |
 | [0019](0019-diagnostics-for-repair-loops.md) | Diagnostics designed for an agent's repair loop | draft |
 | [0020](0020-security-model.md) | The security model: what is guaranteed, what is enforced, what is the application's | stub |
 | [0021](0021-higher-level-constructs.md) | Higher-level constructs: state machines and resources | draft |
