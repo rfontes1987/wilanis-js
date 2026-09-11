@@ -1,6 +1,6 @@
 # RFC 0014: Outcome semantics: refusals, failures and faults, end to end
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:engine`, `area:core`, `area:compiler`, `area:runtime`, `area:plugin-http`, `area:view`
 - **Tracking issue:** #16
 - **Depends on:** none to accept. The run id a fault's answer quotes is RFC 0006's `Fired.id`, and the span statuses
@@ -34,14 +34,17 @@ fault" -- and each of them stops at the same sentence: what a fault means to a `
 
 What the writing finds, read against the code:
 
-- **The distinction lives in one optional field and is re-derived four times.** `Report.status` in
+- **The distinction lives in one optional field and is re-derived seven times.** `Report.status` in
   `packages/engine/src/spec.ts` is `'done' | 'failed' | 'blocked'`; a refusing node and a broken node are both
   `failed`, and the one difference is `NodeReport.reason`, set by `noteRefusal` in `run.ts` when the thrown error
   is `instanceof Refusal`. `refusalOf` in `kernel.ts` reads it for the kinds; `failureOf` in
   `packages/runtime/src/serve.ts` reads it again for the startup runner; `whyFailed` in `rehearse.ts` a third time,
   and distinguishes a refusal that arrived from a nested graph; `encodeTrouble` in
-  `packages/plugin-http/src/answer.ts` a fourth. They do not agree on which node ended the run: `refusalOf` takes
-  the first `failed` node in declaration order, `failedLeaf` in `stubbing.ts` recurses into `sub`.
+  `packages/plugin-http/src/answer.ts` a fourth. Three more find "the first `failed` node" for themselves:
+  `nestedFailure` in `compiler.ts` to name what a nested run broke in, `wholeOf` in `rehearse.ts` for a trigger
+  with no switch under it, and `challenged` in `embed.ts` to carry the guard's challenge on the node that denied.
+  They do not agree on which node ended the run: `refusalOf` takes the first `failed` node in declaration order,
+  `failedLeaf` in `stubbing.ts` recurses into `sub`.
 - **A fault cannot be routed.** A failed node never enters the run's values, never settles, and `Run.fail` cancels
   everything pending; a `switch` downstream of it never runs. So `@monitor/data/get-row.graph.json` decides what a
   404 and a 500 from the upstream mean and cannot decide what *no answer at all* means: `fetch` rejecting, a
@@ -260,7 +263,7 @@ this RFC (G005, G009, G010, G011, L002, T005, T006, A002, A003, S001) were check
 | G0n2 | `check/graph-nodes.ts`, `checkSwitch`, at `nodes/<reader>/in` | a node other than the catching switch reads a caught node and is not routed, directly or through the nodes it depends on, by that switch | `a reader of a node whose fault is caught runs only where the switch routes: move it behind the switch, or drop catch` |
 | G0n3 | `check/graph-nodes.ts`, `checkSwitch`, at `nodes/<target>/in/<field>` | the node a `catch` routes to reads the caught node, in any input or template | `say it without the value; the report and the trace carry what <node> threw` |
 | G0n4 | `check/graph-nodes.ts`, `checkSwitch`, at `nodes/<switch>/catch/<id>` | the caught node runs a `pure` operation, an operation marked `refuses`, or is a switch | `nothing here breaks but a bug, which rehearse reports as BROKE; delete catch` |
-| G0n5 | `check/graph-nodes.ts`, beside G005, at `nodes/<id>/in/message` | a `refuse` node's `message` reads a path whose field is marked `secret` (the same field walk `redactFor` in `compiler.ts` makes for the report) | `a refusal's message is said to the caller; say it without the secret` |
+| G0n5 | `check/inputs.ts`, beside G005, at `nodes/<id>/in/message` | a `refuse` node's `message` reads a path whose field is marked `secret` (the same field walk `redactFor` in `compiler.ts` makes for the report) | `a refusal's message is said to the caller; say it without the secret` |
 | L0n1 | `check/graph.ts`, `checkOperationFits`, at `nodes/<switch>/catch` | a switch of a domain graph declares `catch` | `the domain says what is done; what an effect breaking means is the data layer's: catch it in the data graph that runs the effect` |
 | S0n1 | `check/triggers.ts`, `checkScenario`, beside S001 | a scenario's `expect.nodes.<id>` carries `reason` with a `status` other than `failed` | `a reason belongs to a node that refused; drop it, or let wilanis fuzz write the scenario again` |
 
@@ -305,8 +308,9 @@ export function outcomeOf(report: Report): Outcome;
 fault, the first `failed` node carrying none and not marked `caught` (below); a nested run's ending has already
 reached the node that ran it through `nestedFailure` in `compiler.ts`, so the top level answers for the run, as
 `refusalOf` says today. `refusalOf` stays, as the `refused` case of `outcomeOf`, since RFC 0009 and RFC 0010 name
-it. `failureOf` in `serve.ts`, `whyFailed` in `rehearse.ts` and `encodeTrouble` in `answer.ts` are rewritten over
-`outcomeOf` and their own reading of `reason` goes; `rehearse` keeps its `propagated` case, which is not an ending
+it. `failureOf` in `serve.ts`, `whyFailed` and `wholeOf` in `rehearse.ts`, `challenged` in `embed.ts`,
+`nestedFailure` in `compiler.ts` and `encodeTrouble` in `answer.ts` are rewritten over `outcomeOf` and their own
+search for the first `failed` node goes; `rehearse` keeps its `propagated` case, which is not an ending
 but a credit -- a refusal that arrived from a graph this one calls -- and reads `failedBelow` for it as today.
 
 **The discriminator.** `noteRefusal` tests `error instanceof Refusal`. A plugin depends on `@wilanis/engine` and
@@ -339,8 +343,9 @@ in its report. RFC 0012's cancellation: once the run is `ending`, nothing starts
 deadline is caught -- the node is marked -- but the switch never runs, and the run is `cancelled`. RFC 0004's atomic
 graph: a caught fault does not end the run, so `settle` is not called for it; a statement that broke inside a
 transaction has aborted the transaction, and RFC 0004's rule refusing a non-transactional effect inside an atomic graph (its L0n1) already refuses the http request that would be the
-usual thing to catch. Whether `catch` inside an atomic graph should be refused outright is RFC 0004's to say when
-it lands; this RFC adds no rule for it.
+usual thing to catch. Whether `catch` inside an atomic graph is refused outright is left to RFC 0004, whose L0n1
+already refuses the effects one would catch there; a rule here would judge that RFC's kind of graph from this one.
+This RFC adds no rule for it.
 
 **The map.** `collectMap` in `run.ts` is unchanged: under `fail`, an element that refused refuses the map with its
 reason and an element that broke is the map's fault, and either reaches the map node as today -- so a `catch` on a
@@ -438,7 +443,9 @@ pinned a fault would make `regress` hold the tree to breaking. `regress` is othe
 before this RFC has no `reason` on any node and replays as it did.
 
 **Traces (RFC 0006).** `traceOf` gains: a `run` node or map element marked `caught` has status `failed (caught)`
-and its error at `full`; the catching switch's span carries `wilanis.caught` beside `wilanis.selected`; the root
+and its error at `full`; the catching switch's span carries `wilanis.caught` at `summary`, beside
+`wilanis.selected`, which is at `summary` today -- both are node ids the tree's author wrote, and nothing a node
+carried can leak through one; the root
 span's status gains `blocked` beside `refused`, `denied`, `challenged`, `failed`, `cancelled` and `ok`, so the
 trace, the log line and `outcomeOf` say the same words. Nothing else in 0006 changes: the rule that `summary`
 carries a reason and never a message is this RFC's rule seen from the trace.
@@ -454,6 +461,9 @@ exists; a fault a switch caught is not a fault of the run, so `onFault` does not
   `catches asked → unreachable` after its rules.
 - `wilanis describe <port>#<op>` is unchanged: `(refuses on purpose)` already marks a refusing operation.
 - `wilanis describe <trigger-kind>` prints the kind's description, which now says how a fault is answered.
+- `wilanis describe <trigger>` prints one closing line after its refusal table, the same sentence the viewer's
+  trigger page closes with: the kind's fixed answers (`a fault: 500`, `cancelled: 504`) are what a reader of that
+  table needs next, and leaving them to `describe <trigger-kind>` asks a second command for the other half.
 - `wilanis map` is unchanged: an outcome is not a document.
 - The viewer (`packages/view/client/index.html`, `renderDocPage`; `packages/view/src/model.ts`): a graph page draws
   a `catch` as an edge from the switch to its target labelled `<node> broke`, dashed, beside the rule edges, and the
@@ -548,16 +558,19 @@ Viewer, in `packages/view/test/view.test.ts`: the example's `get-row` view carri
 ## Implementation plan
 
 1. Engine: `Outcome`, `outcomeOf`, `isRefusal`; `refusalOf` as the `refused` case; `noteRefusal`, `collectMap` and
-   `nestedFailure` read `isRefusal`. Tests. (`good first issue`)
+   `nestedFailure` read `isRefusal`, and `nestedFailure` names the faulted node through `outcomeOf`. Tests.
+   (`good first issue`)
 2. Engine: `KSwitch.catch`, `NodeReport.caught`, `catchers`, the readiness and `fail` changes, `runSwitch` routing
    a caught node. `run.ts` stands at the file limit: this lands on whichever of RFC 0011's report split or RFC
    0012's `map.ts` split has landed, or makes RFC 0011's if neither has.
 3. Core and compiler: `catch` on `SwitchNode` and its schema; `lowerNode` lowers it; G0n1, G0n2, G0n3, G0n4 in
    `check/graph-nodes.ts` and L0n1 in `check/graph.ts`, with the sabotage tests; `Narrowing` proves nothing for a
    catch target.
-4. Compiler: G0n5, a `refuse` message that reads a secret, with its sabotage test. (`good first issue`)
-5. Runtime: `failureOf`, `whyFailed`, `encodeTrouble` over `outcomeOf`; `runStartup`'s words and index; `postLoad`
-   inside `start`'s `try`, named, and teardowns that go on. Tests.
+4. Compiler: G0n5 in `check/inputs.ts`, a `refuse` message that reads a secret, with its sabotage test.
+   (`good first issue`)
+5. Runtime: `failureOf`, `whyFailed`, `wholeOf`, `challenged` and `encodeTrouble` over `outcomeOf`, so no consumer
+   searches for the first `failed` node itself; `runStartup`'s words and index; `postLoad` inside `start`'s `try`,
+   named, and teardowns that go on. Tests.
 6. Http: `encode` over `outcomeOf`, the `{ error: 'fault' }` body, the log line's outcome words and the edge's
    answers logged; `http.test.ts` rewritten where it pinned the message. After RFC 0006's step 3: `run` in the body
    and `run=` on the line.
@@ -571,8 +584,9 @@ Viewer, in `packages/view/test/view.test.ts`: the example's `get-row` view carri
     an upstream that is down); `outcome.port.json`, `http.trigger-kind.json`, `templates/CLAUDE.md`; the README's
     "Anything you did not name goes to `failed`" paragraph gains one sentence on `catch`, and its rehearsal listing
     the fourth line.
-11. Viewer: the catch edge and the caught node's panel; the trigger page's closing line; `viewOf` carries the two
-    fields. Test.
+11. Viewer and `describe`: the catch edge and the caught node's panel; the trigger page's closing line and the
+    same line from `wilanis describe <trigger>`; a switch's `catches` line in `nodeLines`; `viewOf` carries the
+    two fields. Test.
 12. After RFC 0006: `traceOf`'s `failed (caught)`, `wilanis.caught` and the root's `blocked`.
 
 ## Drawbacks and alternatives
@@ -612,11 +626,9 @@ reads nothing of the broken node; a fault's message never enters a kind's fixed 
 `error` is the author's typed answer; `fuzz` writes no scenario of a fault; `blocked` is answered as a fault and
 placed as a wiring hole.
 
-To decide during implementation:
+Settled on acceptance, with the reasoning in the text: `catch` inside an atomic graph is RFC 0004's to refuse
+or allow, and this RFC adds no rule for it; the trace carries `wilanis.caught` at `summary`, beside
+`wilanis.selected`; and `wilanis describe <trigger>` closes its refusal table with the kind's fixed answers, the
+sentence the viewer's trigger page closes with.
 
-1. Whether `catch` inside an atomic graph (RFC 0004) is refused as a rule of that RFC or left to its existing
-   refusal of the effects one would catch there.
-2. Whether the trace at `summary` carries `wilanis.caught` (a node id, not a message; nothing in it can leak) or
-   only `full` does.
-3. Whether `wilanis describe <trigger>` should print the kind's fixed answers (`a fault: 500`, `cancelled: 504`)
-   after the refusal table, or leave them to the kind's description, which `describe <trigger-kind>` prints.
+None left open.
