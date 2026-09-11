@@ -75,7 +75,7 @@ Draws on RFC 0013, RFC 0016, RFC 0024 and RFC 0026.
 ## M11 Tenants by construction
 
 A second tenant in the example. Feeding the tenant field from the request body is a refusal with a hint.
-Draws on RFC 0015.
+Draws on RFC 0029, the `reads` header the store binds its scope with, and RFC 0015.
 
 ## M12 Change the schema, get the plan
 
