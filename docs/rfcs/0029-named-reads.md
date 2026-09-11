@@ -1,8 +1,8 @@
 # RFC 0029: `reads`: a document names each read it takes from the request
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:core`, `area:compiler`, `area:runtime`, `area:view`
-- **Tracking issue:** to be opened when this RFC is proposed
+- **Tracking issue:** #198
 - **Depends on:** none. RFC 0015 is written in this grammar and depends on it; RFC 0005 and RFC 0009 name the
   header this RFC replaces and are amended in the same pull request.
 
@@ -111,7 +111,7 @@ Keep an entry the body never reads:
 ```
 P005  @features/monitor/data/create-row.graph.json#reads/tenant
     'tenant' is used by no value of this graph
-    → read it as {{tenant}}, or drop the entry: using is exactly what this document reads
+    → read it as {{tenant}}, or drop the entry: reads is exactly what this document reads
 ```
 
 Give a read a name a node already has:
@@ -126,7 +126,7 @@ Read `{{tenant}}` without naming it:
 
 ```
 G003  @features/monitor/data/create-row.graph.json#nodes/saved/in/record/tenant
-    'tenant' is not in, const, a node that runs before this one, or a name under using
+    'tenant' is not in, const, a node that runs before this one, or a name under reads
     → to read the request, bind the name: "reads": { "tenant": "@monitor/edge/request.resolvers.json#tenant" }
 ```
 
@@ -166,7 +166,7 @@ only: a domain graph never reads the request (L002)." **`resolvers.schema.json`*
 `{{name}}`"; the rules are unchanged.
 
 `GraphDoc` and `BindingDoc` in `packages/core/src/model.ts`: `resolvers?: string` becomes
-`using?: Record<string, string>`. `splitOp` in `packages/core/src/registry.ts` is renamed `splitRef` and its doc
+`reads?: Record<string, string>`. `splitOp` in `packages/core/src/registry.ts` is renamed `splitRef` and its doc
 comment says what `#` now addresses -- an operation of a port, or a resolver of a resolvers document -- with `splitOp`
 kept as an alias until its callers are renamed in the same pull request. `Kind` and `HOME` are unchanged: no new
 document kind, no placement change.
@@ -192,9 +192,9 @@ document's); the implementing pull request takes what is free when it lands.
 | Code | Where it lives | Refuses when | Hint |
 |---|---|---|---|
 | P004 | `check/resolvers.ts`, `resolversFor`, at `reads/<name>` | a `reads` value is not `path#name` (the schema refuses most; this refuses what it cannot); its path names no resolvers document (R001, as today at `resolvers`); the document is another feature's and not visible (L005 through `judge.visible`, as today); or the document declares no resolver of that name | `wilanis describe <resolvers doc> lists its resolvers: <names>` |
-| P005 | `check/graph.ts` after the nodes are judged; `check/bindings.ts` after the operations are | a `reads` name that no value of the document reads (`Scope.templateReads` over every node's values, or every delegation's `in`, has no read rooted at it) | `read it as {{<name>}}, or drop the entry: using is exactly what this document reads` |
+| P005 | `check/graph.ts` after the nodes are judged; `check/bindings.ts` after the operations are | a `reads` name that no value of the document reads (`Scope.templateReads` over every node's values, or every delegation's `in`, has no read rooted at it) | `read it as {{<name>}}, or drop the entry: reads is exactly what this document reads` |
 | P006 | `check/graph.ts`, at `reads/<name>` | a `reads` name is a node's id, or is in `RESERVED` (`in`, `const`, `request`, `secrets`) | `rename the read: "reads": { "<name>By": "...#<resolver>" }` / `in, const, request and secrets are roots; pick another name` |
-| G003 (existing) | `check/graph-reads.ts`, `rootReadRaw` | unchanged in what it refuses; the message names `reads`: `'<root>' is not in, const, a node that runs before this one, or a name under using`, and the hint writes the entry | `to read the request, bind the name: "reads": { "<root>": "@<feature>/edge/<file>.resolvers.json#<root>" }` |
+| G003 (existing) | `check/graph-reads.ts`, `rootReadRaw` | unchanged in what it refuses; the message names `reads`: `'<root>' is not in, const, a node that runs before this one, or a name under reads`, and the hint writes the entry | `to read the request, bind the name: "reads": { "<root>": "@<feature>/edge/<file>.resolvers.json#<root>" }` |
 | L002 (existing) | `check/resolvers.ts`, `resolversFor` | a domain graph has `reads` (today: has `resolvers`); the `at` is `reads` | unchanged |
 | B-family (existing) | `check/bindings.ts`, `rootRead` | a delegation's value reads a root that is neither an input nor a `reads` name; the message lists the `reads` names where it lists the resolvers today | unchanged |
 
@@ -267,7 +267,9 @@ this grammar. No other RFC names the header.
 3. Compiler: P005 and P006, with sabotage tests.
 4. Runtime: `describe` blocks for graph, binding and the resolvers document. (`good first issue`)
 5. Viewer: the `resolvers` map from `reads`, per-port `opens`. Test.
-6. Documents: amend RFC 0005 and RFC 0009; RFC 0015 is written in this grammar already; the README index.
+
+RFC 0005 and RFC 0009 are amended, RFC 0015 is written in this grammar and the index row is added in the pull request
+that proposes this RFC; no task carries them.
 
 ## Drawbacks and alternatives
 
@@ -287,20 +289,23 @@ this grammar. No other RFC names the header.
 - **A document per resolver.** `@monitor/edge/tenant.resolver.json` would make every reference a plain path with no
   `#`. It multiplies files, breaks "one resolvers document per feature says what the feature takes from the request",
   and adds a document kind for what `#name` already expresses on a port.
-- **`reads` instead of `reads`.** `reads` is the tree's word for what a resolver is, and `"reads": { ... }` would say
-  so. `reads` says what the document does with them and reads well against `run`, `in`, `out`. The name is the
-  maintainer's; this RFC uses `reads` and nothing else depends on the word.
+- **`using` instead of `reads`.** `using` was the first word: it says the document depends on the resolvers, reads
+  like an import, and has no neighbour to be confused with. `reads` was chosen because it is the tree's word for what
+  a resolver is -- "a resolver is a read, never an operation"; `Read`, `templateReads`, `resolverReads` in the code --
+  and because every other key that states a contract is a third-person verb: `proves`, `accepts`, `returns`,
+  `refuses`, `holds`, `binds`, `includes`, `resolves`. `using` would have been the grammar's one participle. The cost
+  is a neighbour: a resolvers document has `read` on each entry, holding a `request.*` path, and an author may write
+  such a path under `reads` on a graph. The schema refuses it, since a value must be `@path#name`, and P004's hint
+  says where the path belongs; the refusal teaches the layer rule, which is what a refusal is for.
 - **A shorthand `"reads": "@doc"` for every name of a document** was considered and rejected: it is the implicit
   binding again, and P005 could not judge it.
 
 ## Open questions
 
-To decide before `accepted`:
-
-1. The word: `reads` or `reads`.
-2. Whether P005 (an entry nothing reads) is a refusal, as written, or a note `describe` prints; a refusal keeps
-   `reads` exactly the read set, which is what makes the walk a map and what a small model can be held to.
+Settled on acceptance: the word is `reads`, for the reasons under *Drawbacks*; and an entry nothing reads is a
+refusal (P005), not a note -- `reads` is exactly the read set, which is what makes the walk a map and what a small
+model can be held to.
 
 To decide during implementation:
 
-3. Whether `splitOp` is removed once renamed, or stays as the port-specific alias.
+1. Whether `splitOp` is removed once renamed, or stays as the port-specific alias.

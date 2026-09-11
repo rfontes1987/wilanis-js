@@ -20,7 +20,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0012](0012-limits-and-cancellation.md) | Resource limits, timeouts and cancellation of a run | accepted |
 | [0013](0013-deployment-and-profiles.md) | A deployment model: profiles, environments and what a tree needs to run | stub |
 | [0014](0014-outcome-semantics.md) | Outcome semantics: refusals, failures and faults, end to end | accepted |
-| [0015](0015-tenant-and-resource-scoping.md) | Tenant and resource scoping as a provenance rule | draft |
+| [0015](0015-tenant-and-resource-scoping.md) | Tenant and resource scoping as a provenance rule | accepted |
 | [0016](0016-capability-aware-compilation.md) | Capability-aware compilation: what a tree requires against what an environment permits | stub |
 | [0017](0017-migration-planner.md) | Migrations derived from store declarations | draft |
 | [0018](0018-scenario-generation.md) | Scenario generation from the branch solver | draft |
@@ -34,7 +34,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0026](0026-application-manifest.md) | The application manifest | stub |
 | [0027](0027-fitness-functions.md) | Fitness functions: decisions about the code, held by the tests that record them | implemented |
 | [0028](0028-principles-hold.md) | The principles hold: four sentences of `CLAUDE.md` that nothing held, and the two claims not to write | implemented |
-| [0029](0029-named-reads.md) | `reads`: a document names each read it takes from the request | draft |
+| [0029](0029-named-reads.md) | `reads`: a document names each read it takes from the request | accepted |
 
 Which milestone first shows an RFC is said once, in [`../roadmap.md`](../roadmap.md); the tracking issue
 carries it as GitHub's milestone. Where this list and the outside assessment that seeded it differ, the

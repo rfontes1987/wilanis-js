@@ -1,6 +1,6 @@
 # RFC 0015: Tenant and resource scoping as a provenance rule
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:core`, `area:compiler`, `area:plugin-storage`, `area:plugin-auth`, `area:runtime`, `area:view`
 - **Tracking issue:** #17
 - **Depends on:** RFC 0002 (the `store` kind, `@storage/store.port.json`, the `resolves` channel) and RFC 0003
@@ -216,7 +216,7 @@ does not bind:
 
 ```
 C0n1  @features/monitor/data/entries.store.json#collections/entries/scoped/tenant
-    "acme" is not a read; a scope is exactly one resolver the store binds under using
+    "acme" is not a read; a scope is exactly one resolver the store binds under reads
     → write "scoped": { "tenant": "{{tenant}}" } and bind tenant: "reads": { "tenant": "@monitor/edge/request.resolvers.json#tenant" }
 ```
 
@@ -271,7 +271,7 @@ collection entry, two shapes it may take beside RFC 0002's and RFC 0003's fields
   operation over it must attach (A0n2). A view declares neither `of`, `key`, `unique`, `refs`, `defaults` nor
   `scoped`: it has the viewed collection's." `description` stays optional.
 
-`StoreDoc` in `packages/core/src/model.ts` gains `using?: Record<string, string>`; `StoreCollection` gains
+`StoreDoc` in `packages/core/src/model.ts` gains `reads?: Record<string, string>`; `StoreCollection` gains
 `scoped?: Record<string, string>`, `view?: string`, `behind?: string`. The schema makes the two shapes exclusive:
 a collection with `view` has `behind` and nothing of a collection with `of`.
 
