@@ -1,20 +1,22 @@
 # RFC 0019: Diagnostics designed for an agent's repair loop
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:core`, `area:compiler`, `area:runtime`, `area:view`
 - **Tracking issue:** #21
 - **Depends on:** none. RFC 0018 restructures what `rehearse` and `regress` answer (a recorded branch, a scenario's
   `reason`); this RFC prints whatever they answer as JSON, so whichever lands second adds its fields to the other's
-  envelope. RFC 0026's manifest is a separate command that this RFC's output does not embed; the two share the
-  stability promise written here. RFC 0014 gives a *run's* refusal its word; this RFC is about the *checker's*
-  refusals, and says so under *Words*.
+  envelope; `scenarios --check --json` reads RFC 0018's `wilanis scenarios --check` and lands after it. RFC 0026's
+  manifest is a separate command that this RFC's output does not embed; the two share the stability promise written
+  here. RFC 0014 gives a *run's* refusal its word; this RFC is about the *checker's* refusals, and says so under
+  *Words*.
 
 ## Summary
 
-`wilanis check --json` prints every refusal of a tree as one sorted JSON object, and `rehearse --json` and `regress
---json` print what those commands already compute -- decisions and branches, scenarios and diffs -- instead of the
-lines they render from it. A refusal in that output is the `Refusal` the checker makes today (`code`, `file`, `at`,
-`message`, `hint`) plus its `family`, a `url` to a page about the code, and, where the rule can prove the edit, `fixes`:
+`wilanis check --json` prints every refusal of a tree as one sorted JSON object, and `rehearse --json`, `regress
+--json` and `scenarios --check --json` print what those commands already compute -- decisions and branches, scenarios
+and diffs, the stale files RFC 0018's check finds -- instead of the lines they render from it. A refusal in that
+output is the `Refusal` the checker makes today (`code`, `file`, `at`, `message`, `hint`) plus its `family`, a `url`
+to a page about the code, and, where the rule can prove the edit, `fixes`:
 one or more alternative edits against the JSON document -- `set`, `add`, `remove` a value at a path, or `move` a file --
 that an agent applies without reading the message. Three rules carry fixes in the first cut: L003 adds the effect the
 feature does not allow, R001 sets a misspelled operation name to the nearest one, D008 moves a document into the one
@@ -224,8 +226,19 @@ words it prints, kept because an agent reads prose well and a diff of two transc
 "results": [ { "scenario": "@scenarios/get-entry.1.scenario.json", "same": true, "diffs": [] } ]
 ```
 
-When the tree is refused, none of the three commands runs, and every one prints the same envelope `check` would, with
-`command` set to what was asked and `ok: false`.
+`scenarios --check --json` -- the one CI step RFC 0018 adds, `rehearse --check` and `fuzz --edges --check` over the
+directories they own -- prints the same envelope with `"command": "scenarios"` and, beside `lines`, the three lists
+its `--check` already computes:
+
+```json
+"stale": ["@scenarios/rehearsed/get-entry/monitor.get-row.route.missing.scenario.json"], "missing": [], "extra": []
+```
+
+`ok` is whether all three are empty. Nothing is added to what `--check` knows: the words it prints and these lists
+come from the one comparison of bytes.
+
+When the tree is refused, none of the four commands runs, and every one prints the same envelope `check` would, with
+`command` set to what was asked and `ok: false` -- never an error of a shape of its own, so one parser serves them all.
 
 **The promise.** From 1.0 (RFC 0008's line, when `schemas-v1` is cut), a reader of the envelope may rely on: a code
 names one rule, and a rule that changes what it is about gets a new code while the old one is retired and never
@@ -345,17 +358,18 @@ the same way; none does in this RFC.
 
 ### Runtime behaviour
 
-**`--json`.** `packages/runtime/src/cli.ts` reads a bare `--json` flag on `check`, `rehearse` and `regress`
-(`parse` already gives a flag with no value the string `'true'`). Under it a command prints one JSON object to stdout
-and nothing to stderr, and exits as it does today: 1 when the tree is refused or the rehearsal or regression fails, 0
-otherwise. A missing `project.json` is not a diagnostic about a tree and stays what it is: a line on stderr and exit 2.
-USAGE gains `--json` on the three lines.
+**`--json`.** `packages/runtime/src/cli.ts` reads a bare `--json` flag on `check`, `rehearse`, `regress` and
+`scenarios --check` (`parse` already gives a flag with no value the string `'true'`). Under it a command prints one
+JSON object to stdout and nothing to stderr, and exits as it does today: 1 when the tree is refused, the rehearsal or
+regression fails or a recorded directory is stale, 0 otherwise. A missing `project.json` is not a diagnostic about a
+tree and stays what it is: a line on stderr and exit 2. USAGE gains `--json` on the four lines.
 
 **The envelope** is built by a new module, `packages/runtime/src/diagnostics.ts`, exported from `tools.ts` so it is
 callable without the CLI:
 
 - `diagnosticsOf(load: LoadResult, refusals: RefusalList, how: { command, root }): Diagnostics` -- pure. `format` is
-  the literal `1`; `runtime` the runtime package's version, read once from its `package.json`; `command` what was
+  the literal `1`; `runtime` the runtime package's version alone, read once from its `package.json` -- it is the
+  package that prints, and its version implies every sibling's through the workspace; `command` what was
   asked; `root` as given on the command line; `ok` whether `refusals` is empty; `documents` the registry's file
   count; `refusals` sorted by `file`, then `at` (absent first), then `code`, then `message`, each carrying
   `family` (the code's first letter) and `url`.
@@ -363,23 +377,27 @@ callable without the CLI:
   repository base: `https://github.com/wilanis/wilanis-js/blob/main/docs/refusals/<CODE>.md`, for the ten checker
   families and for the X codes of the plugins this workspace ships. Any other code (a plugin from elsewhere) has no
   `url`; how such a plugin names its pages is an open question below.
-- `withRehearsal(diag, rehearsal)` and `withRegression(diag, regression)` add `seed`, `decisions`, `plain`, `lines`
-  and `results`, `lines` respectively; `ok` becomes the command's.
+- `withRehearsal(diag, rehearsal)`, `withRegression(diag, regression)` and `withStaleness(diag, checked)` add `seed`,
+  `decisions`, `plain`, `lines`; `results`, `lines`; and `stale`, `missing`, `extra`, `lines` respectively; `ok`
+  becomes the command's.
 
 **`rehearse`** in `rehearse.ts` answers `Rehearsal` with two more members it already has in hand: `decisions:
 Decision[]` and `plain: PlainRun[]` (the `settledGraphs` array, given a name and exported from `rehearsal-report.ts`
 beside `Decision`). `format` is unchanged; `lines` stays. **`regress`** in `fuzz.ts` answers `results: { scenario:
 string; same: boolean; diffs: string[] }[]` beside `ok` and `lines`; `diffOf`'s strings are the diffs, and RFC 0018
-structures them further if it lands after this.
+structures them further if it lands after this. **`scenarios --check`** (RFC 0018's command; this part of the RFC
+lands after it) answers what `checkRecorded` computes for the two directories, the three lists merged, each path
+`@`-rooted and sorted.
 
 **The check the commands share.** `check()` in `cli.ts` takes the `json` flag: on a refused tree under `--json` it
 prints `diagnosticsOf(...)` and exits 1, so `rehearse --json` on a broken tree prints refusals with `command:
-"rehearse"`, never text.
+"rehearse"`, never text and never an error object of its own: the check envelope is the one shape a consumer parses.
 
 **Determinism.** Two runs of `check --json` on the same tree print the same bytes: the sort above, and
 `JSON.stringify` with two-space indentation and no timestamps. `rehearse --json` under the same seed likewise --
 `Settled` carries no time; `regress --json` likewise, since `diffOf` reads a report `pick` has already stripped of
-`startedAt` and `endedAt`. This is what makes a transcript diffable.
+`startedAt` and `endedAt`; `scenarios --check --json` likewise, since a recorded directory is a function of the tree
+under seed 1. This is what makes a transcript diffable.
 
 **The embedder, the engine, `start`, `run`, `fuzz`, plugins**: unchanged.
 
@@ -405,8 +423,9 @@ applies it), and X codes of the workspace's plugins get pages and a `url` like e
 
 IR v1, compatible: no schema under `packages/core/schemas/` changes; every document validates and means what it did.
 `Refusal` gains an optional member; `Refuser`'s last parameter widens; every existing call compiles. The text output
-of `check`, `rehearse` and `regress` is byte-identical to today's with one exception: a D001 inside a graph reports
-`nodes/<id>/…` where it reported `nodes/<index>/…`, which is the grammar the checker's own refusals already use.
+of `check`, `rehearse`, `regress` and `scenarios --check` is byte-identical to today's with one exception: a D001
+inside a graph reports `nodes/<id>/…` where it reported `nodes/<index>/…`, which is the grammar the checker's own
+refusals already use.
 The envelope is new, `format: 1`; its stability, like the codes', is promised from 1.0 and not before, and RFC 0008's
 gate (`npm run release` refuses without the `schemas-v1` tag) is when the promise begins. The manifest (RFC 0026)
 takes the same promise when it lands and is not embedded here.
@@ -440,6 +459,7 @@ only the codes) and `applyFix(dir, fix)` -- `set`, `add`, `remove` on the parsed
 | the untouched tree | `ok: true`, `refusals: []`, `documents: 140` and no other member |
 | `rehearse --json` | `decisions` has 15 entries and 37 branches in all, `plain` the four branchless runs, `ok: true`, `seed: 1`; every `settled` has `status` and `blocked` |
 | `regress --json` | after `fuzz` on a copy, `results` has one entry per scenario with `same: true`; the `missing` rule changed to 410, the `get-entry` entries have `same: false` and non-empty `diffs` |
+| `scenarios --check --json` | on a copy with its directories recorded, `ok: true` and the three lists empty; with the `missing` rule's threshold moved, `stale` names the recorded `missing` scenario and `ok: false`; `missing` and `extra` after a deleted and a hand-added file |
 | the CLI | `wilanis check <copy> --json` exits 1, writes nothing to stderr, and stdout parses to the envelope; `wilanis rehearse <copy> --json` on the refused copy prints `command: 'rehearse'` with the refusals and exits 1; on the good copy exits 0 with `decisions` |
 
 **Viewer**, `packages/view/test/view.test.ts`: the document view of a refused graph lists its refusals with `url`, and
@@ -468,7 +488,9 @@ the four sections.
 3. Compiler: `nearest.ts`; R001's fix in `Judge.opAt`; its tests.
 4. Core: D008's fixes in `placement.ts`; their tests through `relocate` and `sabotage`.
 5. Runtime: `diagnostics.ts` and `diagnostics.schema.json`; `Rehearsal.decisions` and `plain`; `regress`'s `results`;
-   `--json` on the three commands and in `check()`; USAGE; the runtime and CLI tests.
+   `--json` on `check`, `rehearse` and `regress` and in `check()`; USAGE; the runtime and CLI tests.
+   `scenarios --check --json` (`withStaleness`, its schema members, its test) follows once RFC 0018's step 7 has landed
+   `wilanis scenarios --check`.
 6. Docs: `docs/refusals/README.md` with the promise, the index and the page template; the pages, one pull request per
    family, each written from the rule, its message and hint and the test that proves it. The X pages correct X104
    to X103 in the template, `session.port.json` and `write-theme.graph.json`. (`good first issue`, per family)
@@ -517,12 +539,19 @@ the four sections.
 
 ## Open questions
 
-Before `accepted`:
+None open. Settled at acceptance, with the edits in the text above:
 
-- Does a refused tree under `rehearse --json` or `regress --json` print the check envelope (this RFC) or an error?
-  The proposal is the envelope, so one parser serves the three commands.
-- Is `runtime` in the envelope the runtime package's version alone, or every package's? The proposal is the runtime's:
-  it is the one that prints, and its version implies the rest through the workspace.
+1. **One shape.** A refused tree under `rehearse --json`, `regress --json` or `scenarios --check --json` prints the
+   check envelope with `command` set to what was asked, never an error of another shape: one parser serves every
+   command.
+2. **`runtime` is the runtime's version alone.** It is the package that prints, and the workspace pins its siblings;
+   a map of every package's version would spell what one number already implies.
+3. **The manifest is not embedded.** RFC 0026's stub said `check --json` may embed it; it does not. The manifest is
+   its own command's output and takes the stability promise written here when it lands. The stub is amended to say so.
+4. **`scenarios --check --json`.** RFC 0018 expects this RFC's `--json` on the one CI step and hands it the question of
+   a hook that runs a tool on an edit. The flag is added above and lands after RFC 0018's step 7; no hook is proposed:
+   the template's `CLAUDE.md` stays prose, as step 9 says, and a hook that rewrites or re-checks a tree on an edit
+   is a decision about what a tool may touch, like `--fix`, and deserves an RFC of its own if one is wanted.
 
 During implementation:
 

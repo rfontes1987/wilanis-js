@@ -24,7 +24,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0016](0016-capability-aware-compilation.md) | Capability-aware compilation: what a tree requires against what an environment permits | stub |
 | [0017](0017-migration-planner.md) | Migrations derived from store declarations | draft |
 | [0018](0018-scenario-generation.md) | Scenario generation from the branch solver | accepted |
-| [0019](0019-diagnostics-for-repair-loops.md) | Diagnostics designed for an agent's repair loop | draft |
+| [0019](0019-diagnostics-for-repair-loops.md) | Diagnostics designed for an agent's repair loop | accepted |
 | [0020](0020-security-model.md) | The security model: what is guaranteed, what is enforced, what is the application's | stub |
 | [0021](0021-higher-level-constructs.md) | Higher-level constructs: state machines and resources | draft |
 | [0022](0022-storage-engines.md) | More storage engines: SQLite, MySQL, and declared capabilities | draft |
