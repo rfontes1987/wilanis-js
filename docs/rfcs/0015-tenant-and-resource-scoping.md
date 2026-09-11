@@ -1,7 +1,7 @@
 # RFC 0015: Tenant and resource scoping as a provenance rule
 
 - **Status:** draft
-- **Areas:** `area:core`, `area:compiler`, `area:plugin-storage`, `area:runtime`, `area:view`
+- **Areas:** `area:core`, `area:compiler`, `area:plugin-storage`, `area:plugin-auth`, `area:runtime`, `area:view`
 - **Tracking issue:** #17
 - **Depends on:** RFC 0002 (the `store` kind, `@storage/store.port.json`, the `resolves` channel) and RFC 0003
   (`checkStore`, the plugin's rules over a call site, `ensure` and `drift`): this RFC extends both and lands after
@@ -12,14 +12,18 @@
 ## Summary
 
 A store's collection says which of its rows a caller may see: `"scoped": { "tenant": "tenant" }` names a column the
-store keeps and the resolver that feeds it, a read of what the guard established about the caller
-(`request.principal.tenant`). Every storage operation over the collection then carries `"scope": { "tenant":
-"{{tenant}}" }`, and the checker refuses the operation that does not: one that leaves `scope` out, one that feeds it a
-literal, `{{in.tenant}}`, a field of the body, or a resolver of another document. The domain shape never names the
-tenant; the store's engine adds the column, writes it on every `put`, and puts `tenant = $1` on every statement. A
-collection that must see every tenant is declared as a `view` of the scoped one, `behind` a policy every trigger
-reaching it attaches. Resource ownership is the same rule with the resolver reading `request.principal.subject`.
-"The agent forgot the tenant filter" is a refusal with a hint, and there is no document in which to forget it.
+store keeps and the resolver that feeds it, a read of what the guard established about the caller:
+`request.session.attributes.tenant`, an attribute the sign-in graph wrote into the session, of the shape the project
+names under the guard's `settings.session`. Every storage operation over the collection then carries `"scope": {
+"tenant": "{{tenant}}" }`, and the checker refuses the operation that does not: one that leaves `scope` out, one that
+feeds it a literal, `{{in.tenant}}`, a field of the body, or a resolver of another document; and the guard's plugin
+refuses the graph that would write the attribute again after sign-in. The domain shape never names the tenant; the
+store's engine adds the column, writes it on every `put`, and puts `tenant = $1` on every statement. A collection that
+must see every tenant is declared as a `view` of the scoped one, `behind` a policy every trigger reaching it attaches.
+Resource ownership is the same rule with the resolver reading `request.principal.subject`. The guard learns no word of
+the business: what a caller is scoped by is a session attribute the project declared, and `@wilanis/plugin-auth`
+signs, verifies and hands what it hands today. "The agent forgot the tenant filter" is a refusal with a hint, and there
+is no document in which to forget it.
 
 ## Motivation
 
@@ -49,16 +53,27 @@ What the code says about how far the tree is from that:
   tolerating `{{ in.name }}` makes unsound. A false negative in L007 misses boilerplate; a false negative here is
   another tenant's rows.
 - **A resolver is erased at lowering.** `lowerRef` in `packages/compiler/src/lower.ts` turns `{{tenant}}` into
-  `{ ref: 'request', path: ['principal', 'tenant'] }`, and the engine's `KSource` has no resolver arm
+  `{ ref: 'request', path: ['session', 'attributes', 'tenant'] }`, and the engine's `KSource` has no resolver arm
   (`packages/engine/src/sources.ts` knows `in`, `const`, `request`). The stub said the checker "walks the sources the
   way `sources.ts` does at run time"; it cannot, because by then a resolver read and a hand-written
-  `{{request.principal.tenant}}` are the same bytes. The proof is static, over document values, or it is nothing.
+  `{{request.session.attributes.tenant}}` are the same bytes. The proof is static, over document values, or it is nothing.
 - **The stub's location was wrong.** A006 is `checkRequestReach` and `checkNeed` in `check/triggers.ts`; `access.ts`
   mentions it in a comment. The walk both lean on, `opNeeds` in `check/resolvers.ts`, translates a resolver's name
   into its `request.*` path at once (`requestNeedsOf`), so the name `tenant` is gone before A006 sees it.
 - **Nothing describes a resolver.** `wilanis describe` on a resolvers document prints the envelope and stops:
   `kindBody` in `packages/runtime/src/discovery.ts` has no case for it. A rule whose hint says "read the resolver
   `tenant`" points at a document the command cannot lay out.
+- **The guard already hands a carrier the project types, and the first full draft did not use it.** `guard.context`
+  in `packages/plugin-auth/docs/plugin.json` hands `session.attributes` as `$Session`, which `settings.session` binds to
+  a shape of the project's (`guardBinds` in `packages/core/src/scope.ts`, so a read of an attribute has the field's
+  type); `token.port.json#issue` writes the attributes at sign-in from whatever the sign-in graph composed; X103 in
+  `packages/plugin-auth/src/rules.ts` judges every later write against the shape. The draft read the scope from
+  `request.principal.tenant` instead, which would have made the plugin learn the word: a field of `guard.context`, a
+  claim in `issueTokens` (`tokens.ts`), a lift in `fromToken` (`guard.ts`), a column of `SessionRecord`
+  (`settings.ts`) -- five edits to the one plugin whose `plugin.json` says it identifies callers and never decides what
+  they may do, and the next tree, scoped by an organisation or a workspace, would ask for the same five again. The
+  value has one typed home already; this revision reads it there, and the plugin's token, guard and records are
+  unchanged.
 - **RFC 0002 and RFC 0003 are not implemented.** No `store` kind, no `packages/plugin-storage`; this RFC is written
   against their accepted text and lands after them.
 
@@ -76,9 +91,11 @@ call site is exempt": an operation that crosses tenants is a view, declared, beh
 ## Guide-level explanation
 
 **The words.** A **scope** is a column a store keeps beside a collection's records, fed from one read of who is
-calling, that every operation over the collection is held to. The domain never sees it: `Entry.shape.json` has no
-`tenant`, a data graph never makes one, a caller never sends one. Where the record is kept is the data layer's
-business, and so is under which tenant.
+calling, that every operation over the collection is held to. Who is calling is what the guard hands: the principal
+it verified, and the session it opened at sign-in, whose attributes are the shape the project names. A tenant is such
+an attribute: the sign-in graph wrote it, from what the directory said, and nothing writes it again. The domain never
+sees it: `Entry.shape.json` has no `tenant`, a data graph never makes one, a caller never sends one. Where the record
+is kept is the data layer's business, and so is under which tenant.
 
 **Declaring it.** The store names the resolvers document its feature reads, the way a data graph does, and the
 collection names a column and the resolver that feeds it. The monitor's store, once its entries belong to tenants:
@@ -87,7 +104,7 @@ collection names a column and the resolver that feeds it. The monitor's store, o
 {
   "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/store.schema.json",
   "label": "Entries",
-  "description": "Observed calls, one row each, kept per tenant: a caller sees the rows of the tenant the guard put in their token, and nothing else. every-entry is the support desk's view across tenants.",
+  "description": "Observed calls, one row each, kept per tenant: a caller sees the rows of the tenant their sign-in wrote into the session, and nothing else. every-entry is the support desk's view across tenants.",
   "connection": "@connections/entries.connection.json",
   "resolvers": "@monitor/edge/request.resolvers.json",
   "collections": {
@@ -112,22 +129,56 @@ and the resolver, in the feature's one `edge/` document that reads the request:
 {
   "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/resolvers.schema.json",
   "label": "Request context",
-  "description": "What this feature reads from the request beyond its body and route: the caller's user agent, and the tenant the guard put in the token, which scopes the entry store.",
+  "description": "What this feature reads from the request beyond its body and route: the caller's user agent, and the tenant the sign-in wrote into the caller's session, which scopes the entry store.",
   "resolvers": {
     "agent": { "read": "request.headers['user-agent']", "description": "absent when the caller sent none" },
     "tenant": {
-      "read": "request.principal.tenant",
+      "read": "request.session.attributes.tenant",
       "required": true,
-      "description": "the caller's tenant, established at sign-in and carried in the token; every row of entries belongs to one"
+      "description": "the caller's tenant, written into the session at sign-in from what the directory said; every row of entries belongs to one"
     }
   }
 }
 ```
 
 `tenant` is `required`, so it is read as present, and A006 already holds every trigger reaching a graph that reads
-it to attaching a policy that proves `request.principal`. `GET /monitor/{id}` is public today; once its data graph
-reads `{{tenant}}`, the checker asks for `signed-in`, or any policy that proves the principal, and the trigger
-gains it. Nothing else about the trigger changes: it fires `monitor.port.json#get` with the id, as before.
+it to attaching a policy that proves `request.session`. `GET /monitor/{id}` is public today; once its data graph
+reads `{{tenant}}`, the checker asks for `signed-in`, or any policy that proves the session, and the trigger gains
+it. Nothing else about the trigger changes: it fires `monitor.port.json#get` with the id, as before. The read has a
+type because the guard's `settings.session` names `Session.shape.json` and the checker substitutes it for `$Session`:
+`tenant` is a `string` there, and a tree that names no session shape reads `unknown`, which C0n1 refuses.
+
+**Where the tenant comes from.** The session shape declares the attribute, and the sign-in graph writes it once, in
+the same node that opens the session:
+
+```json
+"tenant": {
+  "type": "string",
+  "description": "written at sign-in from what the directory said about the account; scopes the entry store, and nothing writes it again"
+}
+```
+
+in `Session.shape.json`, and in the `issued` node of `sign-in-customer.graph.json`:
+
+```json
+"attributes": {
+  "displayName": "{{checked.identity.name}}",
+  "realm": "{{const.realm}}",
+  "tenant": "{{checked.identity.attributes.tenant}}"
+}
+```
+
+The directory said it (*Ports, operations and kinds granted*: what a directory hands beside the subject, name and
+groups, typed by a shape the sign-in names); the guard keeps it with the session and hands it back, as
+`request.session.attributes.tenant`, on every call the token verifies. It is not in the token, and the guard does not
+know it is a tenant. The employee sign-in writes the operator's own tenant from a constant, the way it writes the
+realm. A graph that would write the attribute again, however it came by the value, meets the guard's plugin:
+
+```
+X1n1  @features/access/data/write-theme.graph.json#nodes/saved/in/values/tenant
+    set writes 'tenant', which @monitor/data/entries.store.json scopes entries by; a scope is written at sign-in and never again
+    → drop it: a scoped attribute is what the sign-in graph gave token.port.json#issue, and only that
+```
 
 **Writing the operation.** Every storage operation over `entries` says its scope, and says it one way:
 
@@ -196,7 +247,8 @@ store  @monitor/data/entries.store.json  (Entries)
   collection entries: @monitor/domain/Entry.shape.json
     key         id
     unique      [url, method]  (within the scope)
-    scoped by   tenant ← {{tenant}}  (request.principal.tenant, required; guaranteed at 5 trigger(s) by signed-in, employees-only, can-record)
+    scoped by   tenant ← {{tenant}}  (request.session.attributes.tenant: string, required; guaranteed at 5 trigger(s) by signed-in, employees-only, can-record)
+                written at sign-in by @access/domain/sign-in-customer.graph.json#issued, @access/domain/sign-in-employee.graph.json#issued
     read by     @monitor/data/get-record.graph.json#asked (get), @monitor/data/list-records.graph.json#asked (find)
     written by  @monitor/data/create-record.graph.json#saved (put), @monitor/data/delete-record.graph.json#gone (remove)
   collection every-entry: view of entries, behind @access/edge/employees-only.policy.json
@@ -227,7 +279,9 @@ shapes it may take beside RFC 0002's and RFC 0003's fields:
 a collection with `view` has `behind` and nothing of a collection with `of`.
 
 **`resolvers.schema.json`**: unchanged. **`graph.schema.json`, `binding.schema.json`**: unchanged; `resolvers` on
-each is the path it is today.
+each is the path it is today. **`plugin.schema.json`**, and the guard's `plugin.json`: unchanged. A scope attribute is a
+field of the shape the guard's `settings.session` names, `required` there, and the tree that scopes a store declares
+it in its own session shape; no kind, schema or plugin document learns the word `tenant`.
 
 **`packages/runtime/templates/CLAUDE.md`**: the `store` row gains "a collection may be `scoped` by columns the store
 keeps, each fed from one `required` resolver reading what the guard hands, and a `view` of a scoped collection sees
@@ -240,7 +294,8 @@ are keys an author adds.
 
 ### Ports, operations and kinds granted
 
-No new port, operation, kind or codec. One document of `@wilanis/plugin-storage` changes:
+No new port, operation, kind or codec. One document of `@wilanis/plugin-storage` changes, and two of
+`@wilanis/plugin-auth` -- neither of them the token, the guard or its context:
 
 **`packages/plugin-storage/docs/store.port.json`**: `get`, `find`, `count`, `put`, `patch` and `remove` gain one
 optional input, `scope` (`unknown`, like `where`): "The caller's scope over a scoped collection: an object with one
@@ -256,19 +311,37 @@ never changes one.
 `@storage-memory` and `@storage-postgres` grant what they grant; how each keeps a scope is under *Runtime
 behaviour*.
 
+**`packages/plugin-auth/docs/identity.port.json`**: `verify` gains one optional input, `type` (`type`, binds `$I`):
+"The shape of what the directory says about an account beside its subject, name and groups. A directory connection's
+account carries them under `attributes`; an OIDC identity token carries them as claims of the same names. The handler
+reads them, judges them against this shape as a session write is judged against the session shape, and fails the node
+when they do not fit: a directory that does not say what the tree asks of it is misconfigured, not a bad credential."
+**`packages/plugin-auth/docs/Identity.shape.json`** gains `attributes`, typed `$I`: bound where `verify` is called
+with `type`, `unknown` where it is not, so a sign-in that names no shape reads what it read before.
+**`packages/plugin-auth/docs/Account.shape.json`** gains `attributes` (object, open, optional): what the development
+directory says about the account, in the connection. This is the one change the plugin takes, and it is a mechanism,
+not a word: a directory hands attributes -- LDAP and OIDC do -- and which ones is the project's shape, bound the way
+the session's is. `guard.context`, `token.port.json`, `session.port.json` and the records in `settings.ts` are as they
+are: what the directory said reaches the session through the sign-in graph, which composes `issue.attributes` from it,
+and comes back as `request.session.attributes`, the one carrier.
+
 ### Checker rules
 
-Codes are placeholders (`C0nn`, `A0n1`, `X2n1`); the implementing pull request takes the next free code of each
-family as the tree stands when it lands -- the X band continues RFC 0003's, which ends at X211 -- and no number here
-should be read as reserved. Existing codes named in this RFC (P001, P002, P003, A001, A005, A006, B008, L002, L005,
+Codes are placeholders (`C0nn`, `A0n1`, `X1n1`, `X2n1`); the implementing pull request takes the next free code of
+each family as the tree stands when it lands -- the storage plugin's X band continues RFC 0003's, which ends at X211,
+and the auth plugin's continues its own, which ends at X103 -- and no number here should be read as reserved. Existing codes named in this RFC (P001, P002, P003, A001, A005, A006, B008, L002, L005,
 L007, R001, T004, X202, X204, X206, I001) were checked against the source or the accepted RFC that adds them.
 
-**Two judges, as RFC 0003 draws the line.** The compiler judges the store document against what it names and the
+**Three judges, as RFC 0003 draws the line.** The compiler judges the store document against what it names and the
 triggers against what they reach -- C and A. The storage plugin judges every call site of `@storage/store.port.json`
-against the collection it names -- X -- because which operation takes `scope` and what a scope means to a statement
-is the plugin's semantics, judged where X206 to X209 judge `where` and `changes`. Neither computes what the other has:
-the plugin reads the store through `scope.get('store', path)` (RFC 0003) and the graph's or binding's `resolvers`
-through the registry, and classifies a value with the one helper below.
+against the collection it names -- X2nn -- because which operation takes `scope` and what a scope means to a
+statement is the plugin's semantics, judged where X206 to X209 judge `where` and `changes`. The guard's plugin judges
+every write to the session attribute a scope reads -- X1n1 -- because only `@auth` knows which of its operations write
+a session, and that the attributes `issue` opened a session with are the ones the guard hands back. None computes what
+another has: the storage plugin reads the store through `scope.get('store', path)` (RFC 0003) and the graph's or
+binding's `resolvers` through the registry, and classifies a value with the one helper below; the auth plugin reads a
+`store`, a core kind (RFC 0002), for its `scoped` columns and the resolver each names, and nothing of what a scope
+means to a statement.
 
 **One definition of "exactly this read".** `packages/core/src/templates.ts` gains
 `readsExactly(value: unknown, expected: string[]): boolean` -- true when `value` is a string that `WHOLE_TEMPLATE`
@@ -280,18 +353,21 @@ the same source, and nothing downstream can tell them apart.
 
 | Code | Where it lives | Refuses when | Hint |
 |---|---|---|---|
-| C0n1 | `check/contracts.ts`, `checkStore` (RFC 0003), at `collections/<c>/scoped/<column>` | a `scoped` column is a field of the collection's shape; or its resolver is not one of the store's `resolvers` document (R001 when the store names none or names a document that does not exist; L005 through `judge.visible` when it is another feature's); or that resolver is not `required`; or its read types as anything but a string or a number (`JudgedResolver.read.type`) | `a scope is a column the store keeps, not a field of the shape: rename one` / `name the resolver in <resolvers doc> and declare it required` / `a scope is a string or a number` |
+| C0n1 | `check/contracts.ts`, `checkStore` (RFC 0003), at `collections/<c>/scoped/<column>` | a `scoped` column is a field of the collection's shape; or its resolver is not one of the store's `resolvers` document (R001 when the store names none or names a document that does not exist; L005 through `judge.visible` when it is another feature's); or that resolver is not `required`; or its read types as anything but a string or a number (`JudgedResolver.read.type`: so a field of `request.principal.claims`, which is open, and a session attribute of a tree whose guard names no `settings.session`, both `unknown`, are refused here) | `a scope is a column the store keeps, not a field of the shape: rename one` / `name the resolver in <resolvers doc> and declare it required` / `a scope is a string or a number: declare the attribute in the shape the guard's settings.session names` |
 | C0n2 | `checkStore`, at `collections/<c>/view` or `/behind` | `view` names a collection this store does not declare, one that is itself a view, or one that declares no `scoped`; a view declares `of`, `key`, `unique`, `refs`, `defaults` or `scoped` (the schema refuses most; this refuses what it cannot); `behind` names no policy document (R001) | `a view sees every row of one scoped collection of this store` / `a view has the viewed collection's shape and key; declare them there` |
 | A0n1 | `check/access.ts`, a new `checkStoreScopes(judge)` over every store, at `collections/<c>/scoped/<column>` | the resolver a column is scoped by reads a `request.*` path whose first segment is not a key of the guard's `guard.context` (`scope.guard()`, `packages/plugin-auth/docs/plugin.json`: `principal`, `session`, `challenge`); or the tree has no guard | `a scope reads what the guard hands once it identified the caller (request.principal, request.session); wilanis describe <guard>` / `add a guarding plugin to project.json → plugins, such as @wilanis/plugin-auth` |
 | A0n2 | `check/access.ts`, `AccessCheck` per trigger, at `policies` | under some profile, a trigger's `fire.run` reaches (`effectsReachable`, RFC 0011) a call site of `@storage/store.port.json` whose static `store` and `collection` name a view, and no attached policy is the view's `behind` by canonical path; the message names the graph, the node, the view and the policy | `attach "<behind>" under policies, or read <viewed> with a scope` |
 | X2n1 | `plugin-storage/src/rules.ts`, at `nodes/<id>/in/scope` or `/in/scope/<column>` (a binding delegation: `operations/<op>/in/scope`) | over a collection with `scoped`: `scope` is not given; is not a literal object; its keys are not exactly the `scoped` columns (one missing, one extra); or a value is not `readsExactly` the whole template of the resolver the column names; or the graph or binding names no `resolvers`, or one that is not the store's | `write "scope": { "<column>": "{{<resolver>}}" } and name <resolvers doc> under resolvers: a scope is who is calling, which the guard established, never what the caller sent` |
 | X2n2 | `rules.ts`, at `nodes/<id>/in/scope` | `scope` is given over a collection that declares no `scoped`, or over a view; or given to `newKey` | `this collection keeps no scope; drop it` / `a view sees every row; drop scope, or read <viewed>` |
+| X1n1 | `plugin-auth/src/rules.ts`, beside X103, at `nodes/<id>/in/values/<key>` or `/in/keys` (a binding delegation: `operations/<op>/in/...`) | a `session.port.json#set` whose `values` name, or a `#remove` whose `keys` name, an attribute that some store's `scoped` column reads through its resolver (`request.session.attributes.<key>`); the message names the store and the collection | `drop it: a scoped attribute is what the sign-in graph gave token.port.json#issue, and nothing writes it again` |
 
-Three things follow from rules that exist. **T004 and A006** already judge the resolver's read under every trigger
-reaching the graph: the kind hands `request.principal` (the guard adds it to every kind's context), and it is
-"sometimes" (a public trigger has no principal), so a `required` scope resolver makes every reaching trigger attach a
-policy whose `proves` covers `request.principal`, or A006 refuses at `policies` -- the stub's claim, now placed in
-`check/triggers.ts` where it lives. **B008** refuses a startup step whose operation reaches a `request.*` read, so a
+Four things follow from rules that exist. **T004 and A006** already judge the resolver's read under every trigger
+reaching the graph: the kind hands `request.session` (the guard adds it to every kind's context), and it is
+"sometimes" (a public trigger has no session), so a `required` scope resolver makes every reaching trigger attach a
+policy whose `proves` covers `request.session`, or A006 refuses at `policies` -- the stub's claim, now placed in
+`check/triggers.ts` where it lives. **X103** already refuses a session write naming an attribute the shape does not
+declare, so X1n1 only has to refuse the one it does declare and a store scopes by; and `token.port.json#issue` is not
+a session write in X103's sense, so the sign-in's one write stands. **B008** refuses a startup step whose operation reaches a `request.*` read, so a
 scoped collection is unreachable from startup by construction, and `ensure` -- which takes the store alone -- is
 untouched. **A005** refuses a policy reading the caller on a trigger whose kind gives the guard nothing, so a
 scheduled trigger (RFC 0010) or a queue trigger without a credential in its headers (RFC 0009) cannot reach a scoped
@@ -311,9 +387,17 @@ matches on a fact it already holds rather than on the storage port's path.
 ### Runtime behaviour
 
 **The compiler.** Nothing lowers differently. `scope` is an input like `where`: `lowerValues` turns
-`{ "tenant": "{{tenant}}" }` into `{ object: { tenant: { ref: 'request', path: ['principal', 'tenant'] } } }`, and
-the engine hands the handler `{ tenant: 'acme' }`. The proof was made before this line; the runtime trusts it, as it
-trusts every type the checker proved.
+`{ "tenant": "{{tenant}}" }` into `{ object: { tenant: { ref: 'request', path: ['session', 'attributes', 'tenant'] } } }`,
+and the engine hands the handler `{ tenant: 'acme' }`. The proof was made before this line; the runtime trusts it, as
+it trusts every type the checker proved.
+
+**The guard** changes nothing. `fromToken` in `packages/plugin-auth/src/guard.ts` already loads the session record on
+every verified token, to know the session has not ended, and hands its attributes as `request.session.attributes`; a
+scope read there costs no read the guard did not make. The token carries what it carries -- `sub`, `realm`, `roles`,
+`sid` and the standard claims -- and `SessionRecord` holds what it holds. `identity.port.json#verify` reads the
+account's `attributes` (a directory connection) or the claims the type's fields name (an OIDC identity token), judges
+them with `conforms` against the type when one is given, as `judged` does for a session write, and answers them under
+`identity.attributes`.
 
 **`@storage`'s handlers** (RFC 0002) read `input.scope` where they read
 `input.where`, judge it at run time as they judge `where` -- an object whose keys are the collection's `scoped`
@@ -365,10 +449,12 @@ this RFC does not pretend otherwise.
 ### Discoverability
 
 - `wilanis describe <store>` (RFC 0003's marks in `packages/runtime/src/discovery.ts`) prints a `resolvers` line and,
-  per scoped collection, `scoped by  <column> ← {{<resolver>}}  (<read>, required; guaranteed at N trigger(s) by
-  <policies>)`, the policies being those whose `proves` cover the read on the triggers that reach the collection;
-  `unique` gains `(within the scope)`. A view prints `view of <collection>, behind <policy>` and, beside each reader,
-  the triggers reaching it and that each attaches the policy.
+  per scoped collection, `scoped by  <column> ← {{<resolver>}}  (<read>: <type>, required; guaranteed at N trigger(s)
+  by <policies>)`, the policies being those whose `proves` cover the read on the triggers that reach the collection,
+  and beneath it `written at sign-in by <graph>#<node>, ...`: every call site of `@auth/token.port.json#issue`, found
+  through the bindings the way `describe` finds any native site, whose `attributes` gives the key -- so a reader sees
+  where the value a scope trusts was decided; `unique` gains `(within the scope)`. A view prints `view of
+  <collection>, behind <policy>` and, beside each reader, the triggers reaching it and that each attaches the policy.
 - `wilanis describe <resolvers document>` gains a case in `kindBody`: one line per resolver -- name, read, `required`,
   description -- and `scopes @monitor/data/entries.store.json#entries.tenant` where a store names it. This is the
   precursor the hints above need: a hint that says "read the resolver `tenant`" must point at something the command
@@ -389,17 +475,23 @@ this RFC does not pretend otherwise.
 
 `PluginModule` is unchanged. `PluginCheckContext` (`packages/core/src/plugin.ts`) is unchanged: X2n1 and X2n2 read
 the store, the graph's `resolvers` and the resolvers document through `scope`, and judge a value with
-`readsExactly` from `@wilanis/core`, which a plugin already depends on. The compiler's `effectsReachable` and
-`collectionOf` are the compiler's; a plugin never imports them, which is why A0n2 -- the one rule that needs the
-trigger walk -- is the compiler's and not the plugin's.
+`readsExactly` from `@wilanis/core`, which a plugin already depends on. X1n1 reads every `store` through
+`scope.registry.all('store')` and each scoped column's resolver through `scope.get('resolvers', store.resolvers)`,
+both core kinds; it learns which session attributes a store reads and nothing of what the storage plugin does with
+them, and the storage plugin learns nothing of sessions. The compiler's `effectsReachable` and `collectionOf` are the
+compiler's; a plugin never imports them, which is why A0n2 -- the one rule that needs the trigger walk -- is the
+compiler's and not the plugin's.
 
 ## Compatibility
 
 IR v1, compatible. `store.schema.json` gains optional `resolvers`, `scoped`, `view` and `behind`; `store.port.json`
 gains an optional `scope` on six operations; `Engine` gains a parameter every engine implements; `VEdge` gains an
-optional `via`; `templates.ts` gains a function. A store, a graph, a binding written before this RFC validates and
-means what it meant: no scope, every row. L007 judges the same documents it judged, with one false negative fewer
-(`{{ in.name }}` with spaces is now the forward it always was). No `schemas-v2`.
+optional `via`; `templates.ts` gains a function. `@auth/identity.port.json#verify` gains an optional `type`, and
+`Account.shape.json` and `Identity.shape.json` an optional `attributes`; the guard's `plugin.json`, the token's claims
+and `SessionRecord` are unchanged, so a token issued before this RFC verifies after it and a session opened before it
+reads as it did. A store, a graph, a binding written before this RFC validates and means what it meant: no scope,
+every row. L007 judges the same documents it judged, with one false negative fewer (`{{ in.name }}` with spaces is now
+the forward it always was). No `schemas-v2`.
 
 The stub's dependency on RFC 0007 is dropped, and its citation of `check/access.ts` for A006 corrected to
 `check/triggers.ts`; neither file changes.
@@ -411,11 +503,12 @@ answer the codes), in a new `sabotage-scoping.test.ts`, once the example keeps i
 
 | Code | The edit |
 |---|---|
-| C0n1 | `"scoped": { "url": "tenant" }` (a field of the shape); `{ "tenant": "agent" }` (not required); `{ "tenant": "nope" }` (no such resolver); the store's `resolvers` removed (R001); `tenant`'s read changed to `request.principal.roles` (a list) |
+| C0n1 | `"scoped": { "url": "tenant" }` (a field of the shape); `{ "tenant": "agent" }` (not required); `{ "tenant": "nope" }` (no such resolver); the store's `resolvers` removed (R001); `tenant`'s read changed to `request.principal.roles` (a list); to `request.principal.claims.tenant` (open, so unknown); `settings.session` removed from the `@auth` plugin in `project.json` (the attribute reads unknown; the access tree's own refusals filtered) |
 | C0n2 | `"view": "nope"`; `"view": "every-entry"` (a view of a view); a view with `"of"` beside it; `"behind": "@access/edge/nope.policy.json"` (R001) |
 | A0n1 | `tenant`'s read changed to `request.headers['x-tenant']`; to `request.params.id`; to `request.body.tenant`; the `@auth` plugin removed from `project.json` (with the access feature's other refusals filtered) |
 | A0n2 | `employees-only` dropped from `digest.trigger.json` |
-| A006 | `signed-in` dropped from `get-entry.trigger.json`: the message names `request.principal` |
+| A006 | `signed-in` dropped from `get-entry.trigger.json`: the message names `request.session` |
+| X1n1 | `"values": { "theme": "{{in.theme}}", "tenant": "globex" }` in `write-theme.graph.json`; `"keys": ["tenant"]` on a `session.port.json#remove`; the same through a binding delegation |
 | X2n1 | `"scope": { "tenant": "{{in.tenant}}" }` on `saved` in `create-record.graph.json` (the M11 demo); `"scope": { "tenant": "acme" }`; `"scope": { "tenant": "{{tenant}}-eu" }`; `"scope": {}`; `"scope": { "tenant": "{{tenant}}", "owner": "{{tenant}}" }`; `scope` deleted from `asked` in `get-record.graph.json`; the graph's `resolvers` changed to another feature's document |
 | X2n2 | `"scope": { "tenant": "{{tenant}}" }` on the `find` over `every-entry`; on a `newKey` |
 | X206 | `"where": { "tenant": "acme" }` on the `find` over `entries` |
@@ -449,8 +542,13 @@ scope` and `view of`; `describe` of the resolvers document prints its two resolv
 `scoped by tenant`. Viewer, in `packages/view/test/view.test.ts`: the `get-record` view's edge into `asked.scope` has
 `via: 'tenant'`; the store page carries the scope and the view.
 
-Access, in `libraries/access/test`: an identity from either directory the access tree tests against carries its tenant into the token, and the
-principal the guard hands has `tenant`.
+Access, in `libraries/access/test`: a customer of the directory the access tree tests against carries
+`attributes.tenant`, sign-in writes it into the session, and the session the guard hands on the next call has
+`attributes.tenant` and the token's claims do not; the employee sign-in writes the operator's tenant; a customer whose
+account lacks the attribute fails the sign-in's `checked` node with the directory's words. In
+`packages/plugin-auth/test`: `verify` with `type` over a directory account whose `attributes` fit, and one whose do
+not; over the fake OIDC issuer, the claims the type's fields name are read and the rest are not; `verify` without
+`type` answers what it answered before.
 
 ## Implementation plan
 
@@ -467,15 +565,51 @@ principal the guard hands has `tenant`.
 7. Plugin: `@storage-postgres` -- the column, the composite unique, the index, the predicate on every statement,
    `ensure` and `drift`; the postgres suite.
 8. Runtime: `describe <store>`, `<graph>`, `<trigger>` and `map` lines. (`good first issue`)
-9. The example, the M11 demo: `libraries/access` -- the identities of the directories it tests against carry a tenant (two values),
-   sign-in writes it into the token, `Identity.shape.json` and `Principal.shape.json` gain `tenant`; the example's
-   `request.resolvers.json` gains `tenant`; the store gains `scoped` and `every-entry`; every storage node gains
-   `scope`; `get-entry` and `list-entries` attach `signed-in`; the digest's graph reads the view and its trigger
-   attaches `employees-only`; `sabotage-scoping.test.ts`; the README's storage paragraph gains a sentence on scope.
-10. Viewer: `VEdge.via`, the emphasised scope edge and the port badge; the store page's scope and view. Test.
+9. Auth plugin: `verify` gains `type` (`$I`), `Identity.shape.json` and `Account.shape.json` gain `attributes`, the
+   handler reads and judges them for both directory kinds; X1n1 in `rules.ts`. Tests in `packages/plugin-auth/test`.
+10. The example, the M11 demo: `libraries/access` -- the customer directory's accounts carry `attributes.tenant` (two
+    values), the `identity.binding.json` delegation of `verifyCustomer` and `verifyEmployee` gives `verify` the
+    tree's identity-attributes shape, `Session.shape.json` gains `tenant` (required), `sign-in-customer.graph.json`
+    writes it from `{{checked.identity.attributes.tenant}}` and `sign-in-employee.graph.json` from a constant, the
+    `access.port.json#issue` contract's `attributes` is the session shape already; `Principal.shape.json`, the
+    guard's `plugin.json` and the token are untouched. The example's `request.resolvers.json` gains `tenant` reading
+    `request.session.attributes.tenant`; the store gains `scoped` and `every-entry`; every storage node gains `scope`;
+    `get-entry` and `list-entries` attach `signed-in`; the digest's graph reads the view and its trigger attaches
+    `employees-only`; `sabotage-scoping.test.ts`; the README's storage paragraph gains a sentence on scope.
+11. Viewer: `VEdge.via`, the emphasised scope edge and the port badge; the store page's scope and view. Test.
 
 ## Drawbacks and alternatives
 
+- **A session attribute, not a principal field.** The first full draft read the scope from `request.principal.tenant`,
+  which made `tenant` a field the guard hands: a claim `issueTokens` signs, a field `fromToken` lifts, a column of
+  `SessionRecord`, a field of `guard.context`, and an input of `token.port.json#issue` -- the same fact in five places
+  of a plugin that should not know it, and a plugin release for every tree whose word is not `tenant`. The guard
+  already hands `request.session.attributes`, typed by the shape the project names and written once by the sign-in
+  graph; the tenant is one more attribute of it, declared where the tree declares its session, and the guard is as
+  ignorant of it as of `displayName`. The cost is one rule the move opens: a session attribute can be written again
+  through `session.port.json#set`, where a claim in a token cannot, so X1n1 holds a scoped attribute to its sign-in
+  write. What the move does not cost is a read: the guard loads the session record on every verified token already,
+  so a scope in the session is where the guard already looked. `realm` and `roles` sit in both places today, a claim
+  and (for `realm`) an attribute written by the same node; whether they should be attributes too is a question about
+  the guard, not about scoping, and is left where RFC 0020 draws the guard's contract.
+- **A configurable claim set.** Considered: the sign-in graph composes the token's payload -- one port call or one
+  literal per claim, an object nowhere -- and the store names the claim. The composition exists: `issue.attributes` is
+  that object, each value a node's output, a constant or a literal, typed by the shape the sign-in's port names, and
+  the store names the attribute. What a claim set would add is a second carrier beside the session, readable by the
+  client without the key (a JWT's payload is signed, not sealed) and a second typing question (`principal.claims` is
+  open, so a claim types `unknown` and C0n1 refuses it). If the guard ever verifies statelessly -- no session read on
+  a call -- which session attributes fold into the token becomes a setting of the plugin (`tokens.claims: [...]`,
+  read back into `session.attributes` on verification), and a scope reads `request.session.attributes.<key>`
+  unchanged. Not this RFC's. Where sessions live between calls -- files, memory, PostgreSQL, a cache -- is RFC 0005's,
+  and this RFC reads them wherever they are.
+- **What the directory says is the one plugin change kept.** A tenant has to come from somewhere, and in the demo it
+  comes from the directory: the draft's "the identities carry a tenant" hid a change to `@auth/Identity.shape.json`
+  that would have taught the plugin the word from the other side. `verify`'s `type` and `Identity.attributes: $I` teach
+  it a mechanism instead -- a directory hands attributes, and the tree says which, the way `settings.session` says
+  which a session holds. The alternative, deriving a tenant from a group name (`tenant:acme`), asks the sign-in graph
+  to parse a string and puts the business word in the directory's group list; the other alternative, a plugin setting
+  `identity` beside `session` binding `$Identity` for every directory at once, is compatible later if a tree wants
+  one shape for all its directories, and `type` at the call site is what the session port does today.
 - **The store keeps the tenant; the shape does not.** The stub asked whether the scoped field exists on the shape.
   It does not, and that is the design: a domain graph cannot read the request (L002), so a tenant on the shape would
   have to arrive through the trigger's `fire.in` and the domain graph's `make`, and the value the store writes would
@@ -508,7 +642,8 @@ principal the guard hands has `tenant`.
 
 Settled here, with the reasoning in the text: the scope is the store's column and not the shape's field; a
 collection may have several; a view behind a policy is the one way across; provenance is direct; the engine
-enforces the predicate and the checker proves the document, and the rehearsal observes neither.
+enforces the predicate and the checker proves the document, and the rehearsal observes neither; the value a scope
+reads is a session attribute the project declared and the sign-in wrote, never a field the guard's plugin learns.
 
 To decide during implementation:
 
@@ -518,3 +653,9 @@ To decide during implementation:
    one is enough for the example, and a list is compatible later.
 3. Whether the `(tenant, id)` index on postgres is the primary key's order or a second index; the suite judges
    behaviour and the planner (RFC 0017) may later prefer one.
+4. Whether a scope attribute may be optional in the session shape. As written it is `required`: proving
+   `request.session` proves the root, and an optional field would type optional and C0n1 would refuse the resolver as
+   not `required`; so a sign-in that has no tenant to write (the operator's employees) writes the operator's own. A
+   tree that wants callers without a scope reads a view.
+5. Whether `verify`'s `type` stays at the call site or a plugin setting `identity` binds `$I` for every directory of
+   the tree; the call site is the session port's pattern and enough for the example.
