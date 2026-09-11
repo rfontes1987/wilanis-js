@@ -30,7 +30,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0022](0022-storage-engines.md) | More storage engines: SQLite, MySQL, and declared capabilities | draft |
 | [0023](0023-adapters.md) | Adapters: search, cache, email, payment | draft |
 | [0024](0024-cloud-deployment.md) | Kubernetes deployment: a Helm chart and a local cluster | stub |
-| [0025](0025-ai-provider-integrations.md) | AI model calls as an effect | stub |
+| [0025](0025-ai-provider-integrations.md) | AI model calls as an effect | draft |
 | [0026](0026-application-manifest.md) | The application manifest | stub |
 | [0027](0027-fitness-functions.md) | Fitness functions: decisions about the code, held by the tests that record them | implemented |
 | [0028](0028-principles-hold.md) | The principles hold: four sentences of `CLAUDE.md` that nothing held, and the two claims not to write | implemented |
