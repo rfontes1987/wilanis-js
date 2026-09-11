@@ -44,8 +44,8 @@ connection and sent it here, and this RFC sends it on to RFC 0021 with the obser
 irreversible effect after the retried one needs no construct. It does not give a run a deadline, cancel a run,
 bound a `map`'s fan-out or a body's size (RFC 0012 owns the run; this RFC owns the call and names the seam). It
 does not say what a failure means to a `switch` (RFC 0014). It does not map a queue message's redelivery to
-`idempotent` (RFC 0009 does, on what this RFC declares). It does not cache (RFC 0023 asks whether a cache is an
-operation property; it is not one this RFC adds). And it changes nothing about how the engine schedules: every
+`idempotent` (RFC 0009 does, on what this RFC declares). It does not cache (RFC 0030 makes a cache a word on a
+node, lowered to nodes; it is not one this RFC adds). And it changes nothing about how the engine schedules: every
 ready node still starts at once.
 
 ## Guide-level explanation
