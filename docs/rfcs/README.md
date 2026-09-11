@@ -27,7 +27,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0019](0019-diagnostics-for-repair-loops.md) | Diagnostics designed for an agent's repair loop | draft |
 | [0020](0020-security-model.md) | The security model: what is guaranteed, what is enforced, what is the application's | stub |
 | [0021](0021-higher-level-constructs.md) | Higher-level constructs: state machines and resources | draft |
-| [0022](0022-storage-engines.md) | More storage engines: SQLite, MySQL, and declared capabilities | stub |
+| [0022](0022-storage-engines.md) | More storage engines: SQLite, MySQL, and declared capabilities | draft |
 | [0023](0023-adapters.md) | Adapters: search, cache, email, payment | stub |
 | [0024](0024-cloud-deployment.md) | Kubernetes deployment: a Helm chart and a local cluster | stub |
 | [0025](0025-ai-provider-integrations.md) | AI model calls as an effect | stub |
