@@ -1,6 +1,6 @@
 # RFC 0023: Adapters: search, email, payment
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** three new packages (`area:plugin-email`, `area:plugin-payment`, `area:plugin-search`) and the example tree;
   nothing in core, the compiler, the runtime or the view
 - **Schemas:** none change
