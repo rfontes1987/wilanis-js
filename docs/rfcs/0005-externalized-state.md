@@ -220,7 +220,7 @@ added to it. X201 is widened so that a collection's `of` may name a shape a plug
 | Code | Where it lives | Refuses when | Hint |
 |---|---|---|---|
 | B002 (existing) | `check/project.ts` `checkPortMet` | a required port has no binding under a profile; the message gains `(required by @auth)` | `wilanis new binding <feature>/<name> --port <path>` |
-| B0nn | `check/bindings.ts` | a binding of a required port has `using` (RFC 0029), or one of its graphs reads `request.*`: the guard runs before the policies, with no request judged yet | remove `using`; a state operation reads only its `in` |
+| B0nn | `check/bindings.ts` | a binding of a required port has `reads` (RFC 0029), or one of its graphs reads `request.*`: the guard runs before the policies, with no request judged yet | remove `reads`; a state operation reads only its `in` |
 | B0nn | `check/bindings.ts` | a binding of a required port delegates to an operation that `holds` or `refuses`: memory answers or fails, it never ends the run on purpose | delegate to `@auth/files.port.json` or `@storage/store.port.json` |
 | C0nn | `check/project.ts` | `blobs.connection` names a connection whose kind no named plugin offers a blob store for, or names no connection | `wilanis ls connection-kind`; name a plugin that offers one |
 | D0nn | `validate.ts` / loader | a plugin lists a path under both `grants.ports` and `requires.ports`, or a required port is not under its `docs/` | list it once |
@@ -324,7 +324,7 @@ Sabotage, in `packages/runtime/test/example.test.ts` (copies of the example hand
 `ResolvedInclude`):
 
 - delete the state binding from the `live` profile → B002 naming `@auth/state.port.json` and `required by @auth`;
-- add `using` to the state binding → B0nn; delegate `getSession` to `@http/server.port.json#listen` → B0nn;
+- add `reads` to the state binding → B0nn; delegate `getSession` to `@http/server.port.json#listen` → B0nn;
 - set `blobs.connection` to `@connections/monitor-api.connection.json` → C0nn;
 - list `@auth/state.port.json` under `grants.ports` in a copied plugin manifest → D0nn (`packages/core/test/validate.test.ts`);
 - delegate `files.port.json#get` with `dir: "features"` → X10n (`packages/plugin-auth/test`).
