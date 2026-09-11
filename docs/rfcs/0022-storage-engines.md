@@ -391,8 +391,8 @@ exists.
 
 - `wilanis describe <connection>` gains the `capabilities` line under *Guide*: `transactional DDL: yes|no; unique
   over: <list or none>; refs: yes|no`, rendered by `describeCapabilities` in `packages/runtime/src/discovery.ts` from
-  `capabilitiesOf`. `wilanis describe <connection-kind>` prints the same line under the kind's settings, and RFC
-  0002's `granted by` stays where it is.
+  the `capabilities` block of the loaded kind document. `wilanis describe <connection-kind>` prints the same line
+  under the kind's settings, and RFC 0002's `granted by` stays where it is.
 - `wilanis describe <store>` (RFC 0002) prints the connection's engine already; it gains nothing. A refusal is where
   a store's author meets a capability, and the refusal names the kind.
 - `wilanis ls connection-kind` lists the two new kinds with their plugins, as it lists every kind a plugin grants.
