@@ -35,8 +35,9 @@ One command, work in `tools.ts` (callable without the CLI), output stable and so
 
 Per profile, since bindings and permits differ. "Privileged" is every operation reachable only behind a
 policy; "public" is every trigger with none, listed so a reviewer sees them first. The viewer gets a
-manifest page from the same function, and `wilanis check --json` (RFC 0019) may embed it. Counts (the
-report's "HTTP endpoints: 12") are derived by the reader, not printed.
+manifest page from the same function; `wilanis check --json` (RFC 0019) does not embed it, and the
+manifest takes RFC 0019's stability promise as its own command's output. Counts (the report's "HTTP
+endpoints: 12") are derived by the reader, not printed.
 
 ## Checker rules, tests, implementation plan
 
