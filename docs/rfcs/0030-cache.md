@@ -1,6 +1,6 @@
 # RFC 0030: `cache`: one word on a node, a graph or an operation, lowered to the nodes it stands for
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:core` (one `$defs` entry and five optional fields), `area:compiler` (the lowering and two rule
   families), `area:runtime` (`describe`, the example), `area:view` (a badge and the project page), and one new package
   (`area:plugin-cache`, `@wilanis/plugin-cache`)
@@ -63,7 +63,8 @@ shared across processes; a shared kind is the last step and comes when a tree on
 **Cache.** A word on a `run` or `map` node of a data graph, on a data graph, or on an operation in a port a plugin
 grants: `"cache": { "ttlMs": <number>, "key"?: <text> }`, or `false`. It means: before calling, ask the tree's cache
 for what this call answered last time, under this key; if it knows, answer that; otherwise call, and remember the
-answer for `ttlMs`. The key is the operation and its inputs unless `key` says otherwise. A site inherits the `cache` of
+answer for `ttlMs`. The key is the operation, its inputs and its lifetime unless `key` says otherwise; who called is not in it, so two
+sites that ask the same thing share one entry. A site inherits the `cache` of
 the operation it runs when the port declared one, and writes `"cache": false` to decline it.
 
 **One cache per tree.** `project.json → cache` names the connection, once:
@@ -175,8 +176,8 @@ C0n1  project.json#cache
 
 **`common.schema.json`** gains `$defs/cache`: `false`, or an object with `ttlMs` (integer, at least 1: "how long an
 answer stands, in milliseconds; a cache entry without a lifetime is a store, RFC 0002") and `key` (string, optional: "the
-key the answer is kept under, text with `{{in.*}}` reads; absent: the operation and every input, canonicalised. Name it
-where a write elsewhere must `remove` it"). `additionalProperties: false`.
+key the answer is kept under, text with `{{in.*}}` reads; absent: the operation, every input, every resolver value a
+cached graph reads, and `ttlMs`, canonicalised; never the caller. Name it where a write elsewhere must `remove` it"). `additionalProperties: false`.
 
 **`node/run.schema.json`** and **`node/map.schema.json`** gain `cache` (`$ref` to `$defs/cache`, optional): "Remember what
 this node answers, under its inputs or `key`, for `ttlMs`, over the connection `project.json → cache` names; `false`
@@ -184,7 +185,7 @@ declines the operation's own default. Data graphs only (L0n1)." On a `map`, the 
 call is a site with the element's inputs in its key.
 
 **`graph.schema.json`** gains `cache` (the object form only, optional): "Remember what this graph answers, keyed by its
-`in`, for `ttlMs`. Data graphs only."
+`in` and every value it reads from its `resolvers`, for `ttlMs`. Data graphs only."
 
 **`port.schema.json`** gains `cache` on an operation (the object form only, optional): "The plugin's default for every
 site that runs this operation; a site declines it with `\"cache\": false` or replaces it with its own. Only an operation
@@ -257,8 +258,11 @@ under *Guide*, and `cacheOf(node | graph, op)` answers the effective `cache` of 
 default, else none. `lowerNode` in `compiler.ts`, for a `run` or `map` with an effective cache, lowers the node as today
 and then wraps: the node's handler becomes `cache:<graph path>#<node id>`, registered once through `nestedRunner` over
 `cachedSpec`, and the node's `in` gains `$key`: the site's `key` lowered as a value in the graph's roots or, absent, one object
-source `{ op: <opRef>, in: <the same sources as the node's in> }`, which the kind canonicalises. `graphCall`, for a graph
-with a `cache`, does the same around `graph:<path>`. `$` is a character no `ident` allows, so `$key` collides with no
+source `{ op: <opRef>, in: <the same sources as the node's in>, ttlMs }`, which the kind canonicalises. `graphCall`, for a
+graph with a `cache`, does the same around `graph:<path>`, with `{ graph: <path>, in, reads, ttlMs }` where `reads` holds
+every resolver value the graph's nodes read, each lowered as the source it lowers to inside the graph: the compiler knows
+them from the graph's `resolvers` reference and its templates, and nothing request-dependent is left out of the key. The
+caller -- the graph and node the site sits in -- is in no default key. `$` is a character no `ident` allows, so `$key` collides with no
 field an author writes, and the report shows the key it used under `in.$key` -- redacted where an input it reads is
 marked `secret`, as `redactFor` redacts today. The engine is untouched: `KCall`, `KSwitch`, `KMap`, `KernelSpec` and
 `Run` are what they are, and the nested plan is a `KernelSpec` like a binding's.
@@ -348,6 +352,9 @@ clock, registered beside `PLUGINS` from the harness, over a copy of the example:
 | a second call hits | two runs of `monitor.get` with one id: the effect ran once; the second report's `asked.sub` has `cached`, `known`, `hit` and no `origin` |
 | a lifetime ends | the clock past `ttlMs`: the effect ran twice |
 | the key is the inputs | two ids: two calls; the same id twice: one |
+| the caller is not the key | two data graphs running the same call with the same inputs: the effect ran once |
+| a lifetime is part of the key | two sites, `ttlMs` 60000 and 5000, the same inputs: two entries, the effect ran twice |
+| a cached graph reads the request | `cache` on a data graph with a `resolvers` read: two requests differing only in that value: two calls |
 | a named key | `key: "entry:{{in.id}}"`: `update` then `get` of the same id calls the effect again (the `forgot` node removed it) |
 | a whole graph | `cache` on a data graph's root: one call for one `in`, keyed by it |
 | a port default and a decline | a fake port declaring `cache`: cached with no word at the site; `"cache": false` at the site: not |
@@ -409,6 +416,11 @@ Each step is one pull request and one sub-issue of #265.
 - **A key of the inputs, or a key the author names.** The inputs are always right and never wrong to write, so they
   are the default; but a write that must forget a read's entry cannot reproduce the read's canonical inputs, so a site
   may name its key in text and the `remove` names the same text. Both are in the report under `in.$key`.
+- **The caller is not in the key.** The answer depends on the call, not on the graph that made it, so two sites asking
+  the same thing share one entry and a port's default cache is worth having. Everything the answer can depend on must
+  then be in the key as a value: the inputs are, a cached graph's resolver reads are added for that reason, and `ttlMs`
+  is added so a site promising five seconds never reads an entry another site kept for a minute. A site that wants an
+  entry of its own names a `key` and puts what makes it its own in the text.
 - **`cache` on a binding operation.** RFC 0011 put `retry` there because a binding is where the data layer meets a
   domain operation. A bound graph is cached at the graph; a delegation to a native operation is one call and is cached
   by the operation's default or by a one-node data graph. Adding a fourth place would say the same thing twice, and the
