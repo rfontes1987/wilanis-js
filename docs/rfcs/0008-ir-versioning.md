@@ -73,7 +73,7 @@ None.
 | Code | Where it lives | Refuses when | Hint |
 |---|---|---|---|
 | D0nn | `load.ts` / `check/project.ts` | a document names an IR version this runtime does not read | "this runtime reads v1; the document names v2: upgrade @wilanis/runtime, or rewrite the document against v1" |
-| D0nn | `check/project.ts` | two documents of one tree name different IR versions | "a tree is one version: migrate the rest, see docs/rfcs/0008" |
+| D0nn | `check/project.ts` | two documents of one tree name different IR versions | "a tree is one version: upgrade the rest, see docs/rfcs/0008" |
 
 Numbers are assigned when the implementing pull request lands (current highest: D010).
 
@@ -90,14 +90,14 @@ kinds, and a rule that must ask which version it is judging is a rule written tw
 per-kind alternative was rejected for in Drawbacks, and it is the same cost here, paid by the reader as well
 as the code: a refusal would have to say which version it was refusing under.
 
-A tree moves with `wilanis migrate`, which rewrites its documents from one version to the next and is the
+A tree moves with `wilanis upgrade`, which rewrites its documents from one version to the next and is the
 only supported path between them. A fleet that cannot move every tree at once pins the runtime it has --
 versions are npm versions, and an old runtime keeps reading the trees it always read.
 
 **An npm major of `@wilanis/runtime` may drop an IR version**, with the notice the ecosystem already
 expects rather than a rule of our own invention: the version is deprecated in a minor release, which warns
-on load and names `wilanis migrate` and the version that will drop it, and it is removed no sooner than the
-next major. A tree that has not migrated keeps working on the runtime it is pinned to; nothing stops
+on load and names `wilanis upgrade` and the version that will drop it, and it is removed no sooner than the
+next major. A tree that has not moved keeps working on the runtime it is pinned to; nothing stops
 serving because a newer runtime was published.
 - Refusal codes and `at` paths are part of the promise: a code keeps its meaning within a version
   (RFC 0019 makes the full statement).
@@ -128,10 +128,10 @@ rules that cannot fire on any v1 tree today.
 1. Write the compatible/breaking definitions into `README.md → Schemas` (good first issue).
 2. Print the IR version in `wilanis check` and `describe project`.
 3. The two loader rules and their sabotage tests.
-4. `wilanis migrate`, when there is a second version to migrate to: it rewrites a tree's documents from one
+4. `wilanis upgrade`, when there is a second version to move to: it rewrites a tree's documents from one
    version to the next, in place, and says what it changed. Not written before v2 exists, since there is
    nothing for it to do.
-5. The deprecation warning on load, when a version is first deprecated: it names `wilanis migrate` and the
+5. The deprecation warning on load, when a version is first deprecated: it names `wilanis upgrade` and the
    major that will drop the version.
 6. At 1.0: tag `schemas-v1` as frozen in the README and in this RFC's status.
 
