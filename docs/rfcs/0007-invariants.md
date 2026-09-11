@@ -425,10 +425,13 @@ A transition invariant says what may change between two values of one record:
 ```
 
 Its sites are the storage operations of RFC 0002 that replace or patch a record, where the old value can
-be read and the new one is known. It needs an implication in the grammar or a `then` field, and it is
-better stated once against a lifecycle (`pending → paid → refunded`, RFC 0021) than against every write.
-Nothing in this RFC forecloses it: the document kind has room for a third form, and sites, proof and
-guards apply to it unchanged.
+be read and the new one is known, and it is better stated once against a lifecycle (`pending → paid →
+refunded`) than against every write. RFC 0021, accepted, states it that way: a `machine` document over the
+shape names the state field, the initial state and the transitions, and the rule above is the `when` of
+the transition into `paid` (`has(new.payment)`), its `from` and `to` standing where the implication would.
+It is not a third form of the `invariant` kind, since one place is enough; this RFC's sites, proof and
+guards apply to it unchanged, and its guard refuses with the reserved reason `transition` as ours does
+with `invariant`.
 
 ## Decided during implementation
 

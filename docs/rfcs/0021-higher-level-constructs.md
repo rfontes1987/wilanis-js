@@ -1,6 +1,6 @@
 # RFC 0021: Higher-level constructs: state machines and resources
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:core` (one kind: schema, `MachineDoc`, placement; one reserved reason word), `area:compiler` (the M
   family, the machine's sites and the guards it lowers), `area:runtime` (`describe`, `map`, `rehearse`'s lines, two
   scaffolds, the template), `area:view` (the machine page and the canvas badge), `area:plugin-storage` (one X rule over
@@ -59,7 +59,7 @@ step a transition an operation performs, compensation a transition an author wri
 drives a stuck record forward is a worker (RFC 0009) or a schedule (RFC 0010) that finds records in a state and moves
 them. The machine gives that process its table and its rehearsal; it runs nothing. It does not add `transition` as a
 third form of the `invariant` document: the rule on a transition *is* the class 3 invariant, and one place is enough.
-It does not touch removal: a record is removed in any state (*Open questions*). It does not add a construct for a
+It does not touch removal: a record is removed in any state (*Open questions*, 4). It does not add a construct for a
 state field that is not an `enum`, or for a lifecycle spread over two records: one shape, one field, one table. And it
 does not make the compiler learn `@storage`: it finds a write by the type the contract binds through `resolves`, which
 is core's vocabulary, and the one rule that reads `patch`'s `changes` is the storage plugin's own.
@@ -141,9 +141,10 @@ are ordinary. `flag-record.graph.json`:
 ```
 
 The author wrote no rule about `status`. The compiler sees a move at `entry`: its `base` is a record of `entries`, its
-`over` writes `status` to the literal `flagged`, and the one transition that ends there is `flag`, from `observed`.
-Nothing in the graph says what `asked.record.status` is, so the move is **guarded**: a switch the author never wrote
-routes to `entry` when the old state is `observed` and to a refusal with reason `transition` otherwise. The trigger,
+`over` writes `status` to the literal `flagged`, and two transitions end there: `flag`, from `observed`, and `reopen`,
+from `resolved` or `dismissed`. Nothing in the graph says what `asked.record.status` is, so the move is **guarded**: a
+switch the author never wrote, one rule per transition, routes to `entry` when the old state is `observed`, `resolved`
+or `dismissed`, and to a refusal with reason `transition` when it is `flagged` already. The trigger,
 `POST /monitor/{id}/flag`, maps the reason as it maps every other:
 
 ```json
@@ -199,9 +200,10 @@ M006  @features/monitor/data/replace-record.graph.json#nodes/stored/in/record
 **The rehearsal** walks a guard as it walks every switch, and names each branch after its transition:
 
 ```
-features/monitor/data/flag-record  move 'entry' An entry's review  2/2 branches
+features/monitor/data/flag-record  move 'entry' An entry's review  3/3 branches
   ok  flag       answered from 'entry'
-  ok  violated   refused on purpose at 'entry:violated' as transition: "'An entry's review' allows no move from 'resolved' to 'flagged'"
+  ok  reopen     answered from 'entry'
+  ok  violated   refused on purpose at 'entry:violated' as transition: "'An entry's review' allows no move from 'flagged' to 'flagged'"
 
 features/monitor/data/review-record  move 'entry' An entry's review  5/5 branches
   ok  flag       answered from 'entry'
@@ -296,9 +298,9 @@ refactor stale, and RFC 0007 already writes `scaffolds.ts`):
   `GET /<names>/{id}`, `POST /<names>`, `PUT /<names>/{id}`, `DELETE /<names>/{id}`) with `missing` mapped to 404.
   It is the one scaffold that edits a file that exists: `feature.json → effects` gains the storage operations the
   graphs run, since a scaffold that leaves the tree refusing L003 has not scaffolded. It refuses, before writing,
-  when the project names neither `@wilanis/plugin-http` nor `@wilanis/plugin-storage`, with the `project.json` edit as
-  the hint. The plural defaults to `<name>s`. It writes no machine and no policy: what a resource's lifecycle is and
-  who may touch it are the business's, and the scaffold does not guess.
+  when the project does not name both `@wilanis/plugin-http` and `@wilanis/plugin-storage`, naming the one that is
+  missing and its `project.json` edit as the hint. The plural defaults to `<name>s`. It writes no machine and no
+  policy: what a resource's lifecycle is and who may touch it are the business's, and the scaffold does not guess.
 
 **Pagination, retry, events: where each already lives**, so that the answer is on record and not re-asked. A page is a
 `find` with `limit` and `offset` (RFC 0002) behind a domain operation whose `accepts` carries them and whose `returns`
@@ -374,11 +376,12 @@ narrowed by the same switch), the move is *proved*; otherwise *guarded*. A dynam
 What is not added. Two machines over one shape and different fields are allowed: an order's `status` and its
 `payment` are two lifecycles. Two transitions with the same `to` and overlapping `from` are allowed; the guard is their
 disjunction. A `when` on a birth does not exist: a birth is judged by RFC 0007's field invariants on the shape. `remove`
-is not a site (*Open questions*). And no rule reads a `patch`: that is X2nn, below.
+is not a site: a record is removed in any state (*Open questions*, 4). And no rule reads a `patch`: that is X2nn, below.
 
 **One rule in `@storage`**, `packages/plugin-storage/src/rules.ts`, the next free code in the band RFC 0003 and RFC
-0015 extend (X2nn here), beside RFC 0003's rules over `changes`: a `patch` whose `changes` names the `state` field of a
-machine over the collection's shape is refused, at `nodes/<id>/in/changes/<field>`, with the hint `the state moves by
+0015 extend -- written X2nn here and numbered when the rule lands, after whichever of RFC 0015's rows are in by then,
+since two accepted RFCs cannot both hold the next number -- beside RFC 0003's rules over `changes`: a `patch` whose
+`changes` names the `state` field of a machine over the collection's shape is refused, at `nodes/<id>/in/changes/<field>`, with the hint `the state moves by
 put of the record read and merged: wilanis describe <machine>`. The plugin reads the machine documents of the tree
 through `PluginCheckContext` as it reads store documents for X204; core's `MachineDoc` is all it needs to know.
 
@@ -423,8 +426,9 @@ the grammar (`packages/core/src/expr`). `@std/object.port.json#merge` and `#make
 **Races.** Two moves from one state, at once, on one record: both read `observed`, both guards pass, the second `put`
 wins. This RFC adds nothing for it, on purpose: RFC 0004 is where a `get`-then-`put` pair becomes one transaction, and
 a graph that performs a move marks itself `"atomic": true` where its connection can carry that (the memory engine
-cannot, and L0n3 says so). The template's paragraph says it in one sentence; whether the checker should say it is
-*Open questions*.
+cannot, and L0n3 says so). The template's paragraph says it in one sentence, and no L rule
+requires `atomic` of a move: a rule would refuse every move on the memory engine, and RFC 0004 already tells an author
+when `atomic` can be had (*Open questions*, 3).
 
 **Rehearsal.** A guard is a switch, so the branch solver (`packages/runtime/src/solve.ts`) inverts each rule as it
 inverts any rule and the walk (`rehearse.ts`) tries each transition and the else; the stubbed `get` is where the
@@ -460,8 +464,8 @@ tree again, and a graph whose move the new table refuses is a refusal of that ch
   name and `when`, a title on each arrow listing its sites; clicking an arrow lists them below with proved or guarded
   and the triggers that reach them. It uses `drawGraph`'s `svg`, `txt` and `withTitle` helpers and adds no library.
   On a graph's canvas, a guarded write carries a badge naming the machine and, for a move, the transitions it may take
-  (`flag`, or `4 transitions`); a proved one a lighter badge saying how; double-clicking opens the machine's page. The
-  shape page lists its machine beside the fields and the invariants RFC 0007 lists there.
+  (`flag, reopen`, or `4 transitions`); a proved one a lighter badge saying how; double-clicking opens the machine's
+  page. The shape page lists its machine beside the fields and the invariants RFC 0007 lists there.
 
 ### Plugin contract
 
@@ -510,15 +514,15 @@ Sabotage tests in a new `packages/runtime/test/sabotage-machines.test.ts`, throu
 
 Behaviour tests in `packages/runtime/test/example.test.ts` and `branches.test.ts`:
 
-- `rehearse` prints `move 'entry' An entry's review  2/2 branches` for `flag-record`, `5/5` for `review-record`, the
+- `rehearse` prints `move 'entry' An entry's review  3/3 branches` for `flag-record`, `5/5` for `review-record`, the
   `born` line for `create-record` as proved, and the summary line, for every seed 1 to 8; with the narrowing switch
   written into `flag-record`, its guard line is gone and the summary counts it proved.
 - `wilanis run` with the memory engine: `POST /monitor/{id}/flag` on an observed entry answers 200 with `flagged`;
   again, 409 with the message naming `flagged` and `flagged`; `PUT /monitor/{id}/review` with `resolved` and no note,
   409; with a note, 200; with `observed`, 409.
-- Compiler: `flag-record`'s spec has `entry:made`, `entry:check` with one rule labelled `flag`, `entry`,
-  `entry:violated`, and `entry:violated` in `output`; `review-record`'s check has four rules in declaration order;
-  `create-record`'s spec has none of them.
+- Compiler: `flag-record`'s spec has `entry:made`, `entry:check` with two rules labelled `flag` and `reopen` in
+  declaration order, `entry`, `entry:violated`, and `entry:violated` in `output`; `review-record`'s check has four
+  rules in declaration order; `create-record`'s spec has none of them.
 - `describe` of the machine, of `Entry.shape.json` and of `flag-record.graph.json` print the lines above; `map` prints
   `moves` under the two triggers.
 
@@ -555,7 +559,9 @@ sabotage. `packages/view/test` gains the machine page of the example and the bad
 10. **The viewer.** `machineView`, the diagram, the canvas badges, the shape page's line. `area:view`.
 11. **The resource scaffold.** `new resource`, its refusals, the `feature.json` edit, the test that its output checks
     clean and rehearses. `area:runtime`. Independent of 3 to 10; needs RFC 0002's plugin to exist.
-12. **A milestone.** `docs/roadmap.md` gains one under the heading the maintainer chooses: `wilanis new resource`
+12. **A milestone.** `docs/roadmap.md` gains one under the heading the maintainer chooses. Its first task is the
+    measurement the stub asked for: the node count of the example's graphs and of a scaffolded resource's, recorded
+    in the roadmap so the before and after are on record. Then `wilanis new resource`
     into a fresh feature, `check` clean; then a machine over the resource, one route refused as M006, the fix, and
     `rehearse` printing the table walked. This RFC leaves *Unscheduled* when it lands.
 
@@ -583,7 +589,8 @@ sabotage. `packages/view/test` gains the machine page of the example and the bad
   table. The cost is one `get` and one `merge` where a `patch` would do, and one race the author closes with `atomic`
   (RFC 0004). The alternative -- a compare-and-set on `patch`, `expect: { status: { in: [...] } }`, filled in by the
   compiler -- would make the compiler write a `@storage` input, which is the seam this repository does not cross.
-  *Open questions* keeps the door open for a `patch` after a `get` of the same key.
+  The one widening on record is a `patch` after a `get` of the same key (*Open questions*, 2): refused in the first
+  cut, admitted only with a failing example.
 - **A guard is not a catch.** RFC 0014 wondered whether a machine's transitions would want to catch a refusal by
   reason. They do not: the guard is a `switch` over `old.status`, and an author who wants to route an illegal move
   somewhere other than a 409 writes that switch, at which point there is no guard to catch. The dataflow walk RFC
@@ -599,35 +606,36 @@ sabotage. `packages/view/test` gains the machine page of the example and the bad
   removes the price, and M005 is where a table and a graph disagree at check time, which is the cheapest place.
 - **The measurement the stub asked for** -- how big generated trees really are, and where their nodes pile up -- is
   not made here. The resource scaffold answers the node-count fear directly whatever the count turns out to be, and
-  the machine's claim rests on RFC 0007's deferred class and the rehearsal, not on size. *Open questions* says whether
-  that should gate acceptance.
+  the machine's claim rests on RFC 0007's deferred class and the rehearsal, not on size. It does not gate acceptance;
+  it is the first task of the milestone (*Open questions*, 1).
 
 ## Open questions
 
-To decide before `accepted`:
+None open. Settled at acceptance, with the edits in the text above:
 
-1. **Measure first, or not.** The stub said to measure generated trees after RFC 0002 before deciding. Recommendation:
-   accept without the measurement, since the two deliverables answer different questions -- the scaffold the size of a
-   tree, the machine a rule no size of tree can state -- and record the measurement as the first task of the
-   milestone (step 12), so the roadmap's demo shows the before and after of `wilanis new resource` on a real feature.
-2. **`patch` after `get`.** As written, a `patch` of the state field is X2nn, full stop. The alternative allows it as
-   a move when a `get` of the same collection with the same `key` read stands in the graph, with the old value that
-   `get` answered; `provenance.ts` can find it syntactically. Recommendation: refuse in the first cut, and widen only
-   with a failing example, as RFC 0007 widened narrowing.
-3. **Atomic moves.** Whether a graph performing a move on a connection whose kind is `transactional` must declare
-   `atomic` (a new L rule) or is merely told to in the template. Recommendation: the template; a rule would make every
-   move on the memory engine a refusal, and RFC 0004 already tells an author when `atomic` can be had.
-4. **Removal.** A record is removed in any state. A machine could say which states may be left by removal
-   (`"final": ["resolved", "dismissed"]`), making `remove` a site guarded on the old state. Recommendation: defer to a
-   later RFC if anyone asks; nothing here forecloses it, and the example does not need it.
-5. **The answer to the stub's second question** -- the table on the shape, or its own document -- is its own document,
-   for RFC 0007's reasons (a shape is a type; a rule has a label, a description, a page and a place in the checker's
-   output; an include ships it). Recorded here so the question is not reopened.
+1. **Measure first, or not.** Not first. The stub said to measure generated trees after RFC 0002 before deciding; the
+   two deliverables answer different questions -- the scaffold the size of a tree, the machine a rule no size of tree
+   can state -- so the measurement gates nothing and is the first task of the milestone (step 12), where the
+   roadmap's demo shows the before and after of `wilanis new resource` on a real feature.
+2. **`patch` after `get`.** Refused. A `patch` of the state field is X2nn, full stop, in the first cut. The widening
+   -- a `patch` allowed as a move when a `get` of the same collection with the same `key` read stands in the graph,
+   with the old value that `get` answered, which `provenance.ts` can find syntactically -- is admitted only with a
+   failing example, as RFC 0007 widened narrowing.
+3. **Atomic moves.** The template, not a rule. A graph performing a move on a `transactional` connection is told to
+   declare `atomic` by the template's paragraph; no L rule requires it, since a rule would make every move on the
+   memory engine a refusal, and RFC 0004 already tells an author when `atomic` can be had.
+4. **Removal.** Deferred. A record is removed in any state, and `remove` is not a site. A machine saying which states
+   removal may leave (`"final": ["resolved", "dismissed"]`), making `remove` a site guarded on the old state, is a
+   later RFC's if a tree asks for it; nothing here forecloses it, and the example does not need it.
+5. **The table on the shape, or its own document.** Its own document, for RFC 0007's reasons: a shape is a type; a
+   rule has a label, a description, a page and a place in the checker's output; an include ships it. Recorded so the
+   stub's second question is not reopened.
 
-To decide during implementation:
+During implementation:
 
-6. Whether a dynamic move's `else` message names the transitions that were possible from the old state, which the
-   check switch knows; it costs nothing and helps a caller.
-7. Whether the `resource` scaffold's `list` graph accepts `limit` and `offset` from the start, or a bare `find`; the
-   test that its output rehearses every branch decides how much a bare scaffold should carry.
-8. The exact `--json` field names, settled beside RFC 0019's when the two meet in code.
+- Whether a dynamic move's `else` message names the transitions that were possible from the old state, which the
+  check switch knows; it costs nothing and helps a caller.
+- Whether the `resource` scaffold's `list` graph accepts `limit` and `offset` from the start, or a bare `find`; the
+  test that its output rehearses every branch decides how much a bare scaffold should carry.
+- The exact `--json` field names, settled beside RFC 0019's when the two meet in code.
+- The number X2nn takes, settled when the rule lands (*Checker rules*).
