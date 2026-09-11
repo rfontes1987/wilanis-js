@@ -1,6 +1,6 @@
 # RFC 0022: More storage engines: SQLite, MySQL, and declared capabilities
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:plugin-storage` (two engine packages, the capability vocabulary, `capabilitiesOf`), `area:core` (one
   optional block on the connection-kind schema: `capabilities`), `area:compiler` (RFC 0003's constraint rule gains the
   fact it reads), `area:runtime` (`describe`), `area:view` (the kind page)
@@ -57,7 +57,7 @@ This RFC does not try to solve: swapping a connection's kind per profile (RFC 00
 connection names one kind for every profile, and the guide shows the one-line edit); anything about SQL a document
 could see (there is no raw operation, RFC 0002); engines that are not relational (a key-value store or a document
 database is a plugin like these, and the block is what lets it say `unique: []` honestly); and which engine a fresh
-tree gets from `wilanis init`, which is the template's decision and RFC 0013's.
+tree gets from `wilanis init`, which is the template's decision, not this RFC's.
 
 ## Guide-level explanation
 
@@ -96,7 +96,7 @@ The kind document the connection names, `packages/plugin-storage-sqlite/docs/sql
   "capabilities": { "transactionalDdl": true, "unique": ["string", "number", "boolean"], "refs": true },
   "settings": {
     "fields": {
-      "file": { "type": "string", "description": "The database file, relative to the tree's root; created if absent. ':memory:' for a database that lives as long as the process." }
+      "file": { "type": "string", "description": "The database file, relative to the tree's root; created if absent." }
     }
   }
 }
@@ -210,7 +210,7 @@ under *Guide*:
 
 ```
 settings
-  file    string, required    the database file, relative to the tree's root; ':memory:' for one that lives as long as the process
+  file    string, required    the database file, relative to the tree's root, created if absent
 capabilities
   { "transactionalDdl": true, "unique": ["string", "number", "boolean"], "refs": true }
 ```
@@ -330,8 +330,10 @@ its kind and the compiler refuses from there, or the same fact would live in two
 **`capabilitiesOf`.** `@wilanis/plugin-storage` exports one function beside `engines(env)`, in
 `src/capabilities.ts`: `capabilitiesOf(env, connection): StorageCapabilities`, the block of the kind the canonical
 connection names, read through the registry. RFC 0017's planner calls it before `apply` and prints `in one
-transaction` or `step by step` accordingly; `describe` calls it for the line under *Guide*. No handler of
-`store.port.json` reads it: a capability never changes what `get`, `put` or `find` mean.
+transaction` or `step by step` accordingly. `describe` does not call it: the runtime reads `capabilities` off the
+loaded kind document (*Discoverability*), never a plugin's export, since the runtime sees a plugin through
+`PluginModule` alone. No handler of `store.port.json` reads it: a capability never changes what `get`, `put` or
+`find` mean.
 
 **Registration and the version check.** Each new package's `postLoad` registers its engine exactly as RFC 0002 shows
 -- `engines(ctx.env).register('@storage-sqlite/sqlite.connection-kind.json', makeSqliteEngine(ctx))` -- and, for
@@ -340,28 +342,33 @@ adds to `postLoad`: before registering, an engine that has a server asks it its 
 the server is older than what the kind's block assumes, with a message naming the version found and the version
 required. The block is declared by the kind and not discovered from the server (*Open questions*), because
 `wilanis check` runs with no connection open; the version check is what keeps a declaration honest against the
-database actually reached. MySQL requires 8.0.1 (`SKIP LOCKED` for RFC 0009's broker, functional indexes, `JSON`).
-PostgreSQL, retroactively, requires 12; RFC 0002's engine gains the same check in this RFC's first step. SQLite's
+database actually reached. MySQL requires 8.0.16 (`SKIP LOCKED` for RFC 0009's broker since 8.0.1, functional
+indexes since 8.0.13, enforced `CHECK` constraints since 8.0.16, `JSON`). PostgreSQL, retroactively, requires 12; RFC 0002's engine gains the same check in this RFC's first step. SQLite's
 version is the package's own, since `better-sqlite3` bundles its library, and needs no check at run time: the
 package's tests pin it (3.35 or later: `RETURNING` and `DROP COLUMN`).
 
-**SQLite.** One `better-sqlite3` database per connection, kept in a `WeakMap` as postgres keeps its Kysely instance,
-opened on first use with `PRAGMA journal_mode = WAL`, `PRAGMA foreign_keys = ON` and `PRAGMA busy_timeout =
-<busyTimeoutMs>`; the file's parent directory is created if absent, and the file too. `begin` (RFC 0004) is `BEGIN
-IMMEDIATE`, so an atomic graph takes the write lock at its first write and a second atomic graph waits rather than
-failing at commit; two concurrent atomic graphs therefore serialise at the file, which is what the atomic suite's
-isolation case expects and what a single-file database is. The driver is synchronous: a statement runs to completion
-on the event loop, and the engine checks `ctx.signal` (RFC 0012) between statements, not inside one. Over a
-development database a statement is microseconds and this costs nothing; over a large file it is the price of SQLite,
-said under *Drawbacks*.
+**SQLite.** One `better-sqlite3` database per connection for every statement outside a scope, kept in a `WeakMap`
+as postgres keeps its Kysely instance, opened on first use with `PRAGMA journal_mode = WAL`, `PRAGMA foreign_keys =
+ON` and `PRAGMA busy_timeout = <busyTimeoutMs>`; the file's parent directory is created if absent, and the file too.
+A `better-sqlite3` handle holds one transaction at a time and a `BEGIN` on a handle already inside one throws, so
+`begin` (RFC 0004) opens a second handle on the same file with the same pragmas, runs `BEGIN IMMEDIATE` on it, and
+closes it when the participant commits or rolls back: the transaction holds a handle the way postgres's holds a
+connection (RFC 0004, *Who joins*), and a statement outside the scope never runs inside another run's transaction.
+`BEGIN IMMEDIATE` takes the write lock at once, so a second atomic graph waits on the file, up to `busyTimeoutMs`,
+rather than failing at commit; two concurrent atomic graphs therefore serialise at the file, which is what the atomic
+suite's isolation case expects and what a single-file database is. The driver is synchronous: a statement runs to
+completion on the event loop, and the engine checks `ctx.signal` (RFC 0012) between statements, not inside one. Over
+a development database a statement is microseconds and this costs nothing; over a large file it is the price of
+SQLite, said under *Drawbacks*.
 
 **MySQL.** One pool per connection through `mysql2`, as postgres keeps one through `pg`. `begin` is `START
 TRANSACTION`; `put` with `replace: false` is `INSERT IGNORE` and `conflict` is read off the affected row count;
 `patch` and `remove` are an `UPDATE` or `DELETE` and a `SELECT` by key in one short transaction, since there is no
 `RETURNING`. `apply` (RFC 0017) runs step by step, writing `wilanis_migrations` after each, because the kind says
 `transactionalDdl: false`; the planner prints `applied step by step` and, on a failure, which step the record stands
-at. `statementTimeout` becomes `SET SESSION MAX_EXECUTION_TIME` for reads; a write past the deadline is cancelled
-through the signal as RFC 0012 arranges for postgres.
+at. `statementTimeout` becomes `SET SESSION MAX_EXECUTION_TIME`, which MySQL applies to reads alone; a write has no
+server-side deadline, and the engine honours `ctx.signal` (RFC 0012) between statements, as every engine does, and
+lets the statement in flight finish.
 
 **What the new kinds declare beside `storage`.** RFC 0009's table broker and RFC 0010's lease keeper are "the storage
 engine's": the postgres kind declares `delivery` and `leases` and registers both from `postLoad`. The sqlite and
@@ -443,9 +450,9 @@ not; a kind without `storage` and without the block still validates (every exist
 
 `packages/plugin-storage-sqlite/test/`, all unconditional:
 
-- `engine.test.ts`: RFC 0002's `suite.ts` against a file under the test's temporary directory, then against
-  `:memory:`; the file survives a second `loadTree` of the same tree (the point of the engine), and `:memory:` does
-  not.
+- `engine.test.ts`: RFC 0002's `suite.ts` against a file under the test's temporary directory; the file survives a
+  second `loadTree` of the same tree (the point of the engine). No `:memory:` run: a transaction's handle would open
+  a second, empty database (*Runtime behaviour*), and a database that forgets is the memory kind's.
 - `atomic.test.ts`: RFC 0004's atomic suite, including two concurrent atomic graphs serialising at the file rather
   than one failing at commit.
 - `constraints.test.ts`: RFC 0003's `ensure`, `unique` and `refs` cases, and that `PRAGMA foreign_keys` is on for
@@ -572,10 +579,23 @@ spec.
   provide one is not an engine of this plugin. RFC 0021's question about a move on a connection that cannot carry
   `atomic` is thereby closed: there is none.
 - **The example keeps the memory kind.** Its tests then need no native module, and which engine a fresh tree gets is
-  the template's decision under RFC 0013, not a side effect of an engine landing.
+  the template's decision, not a side effect of an engine landing.
 
-**Left to implementation, deliberately.** Whether `better-sqlite3`'s `:memory:` or a file in the OS temporary
-directory backs the shared suite's default run; the exact rebuild sequence for a SQLite `retype` (the documented
+**Settled on acceptance.**
+
+- **`describe` reads the document, not the plugin.** The draft had `describe` call `capabilitiesOf`;
+  that is the runtime importing a plugin, against the one direction CLAUDE.md allows. The block is in the kind
+  document the runtime already loaded, so `describeCapabilities` reads `doc.capabilities`, and `capabilitiesOf` stays
+  what the planner inside `@storage` calls.
+- **A SQLite transaction holds its own handle.** One handle per connection cannot carry two transactions, and a
+  second `BEGIN` on it throws rather than waits; the "serialise at the file" promise holds only when `begin` opens a
+  handle of its own. It follows that `:memory:` is not a supported `file`: a second handle on it is a second database.
+- **MySQL's floor is 8.0.16**, not 8.0.1: functional indexes arrived in 8.0.13 and `CHECK` constraints are enforced
+  from 8.0.16, and the block promises both.
+- **RFC 0004's sentence** that an engine unable to `begin` "says so through its capabilities" is edited in the same
+  pull request: every engine begins one, and RFC 0022 is where that became the contract.
+
+**Left to implementation, deliberately.** The exact rebuild sequence for a SQLite `retype` (the documented
 twelve steps, or the shorter `ALTER TABLE ... RENAME` dance, inside the one transaction either way); the
 `busyTimeoutMs` default; and whether MySQL's `JSON` columns take `CHECK (JSON_VALID(x))` or rely on the type's own
 validation. None changes a document, a rule, a schema or the plan; each is judged by the shared suite, and one that
