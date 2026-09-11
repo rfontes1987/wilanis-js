@@ -126,7 +126,7 @@ the `live` profile the binding meets it with one data graph, `example/features/m
   "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/graph.schema.json",
   "label": "Publish a removal",
   "description": "Data graph behind monitor.enqueueRemoval: one message on the removals queue, carrying the caller's token so the worker's gate judges the same caller.",
-  "using": { "token": "@monitor/edge/request.resolvers.json#token" },
+  "reads": { "token": "@monitor/edge/request.resolvers.json#token" },
   "in": "@monitor/domain/EntryRef.shape.json",
   "nodes": [
     {
@@ -146,7 +146,7 @@ the `live` profile the binding meets it with one data graph, `example/features/m
 }
 ```
 
-`{{token}}` is a resolver, bound under `using` (RFC 0029) -- `request.resolvers.json` gains `token: { "read":
+`{{token}}` is a resolver, bound under `reads` (RFC 0029) -- `request.resolvers.json` gains `token: { "read":
 "request.headers.authorization" }` beside `agent` -- because the request is read in three places only, and a data graph is not one of them.
 `feature.json → effects` gains `"@queue/queue.port.json#publish"`, and `project.json` names the two plugins
 and one more step:
