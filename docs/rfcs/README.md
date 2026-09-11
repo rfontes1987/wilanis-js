@@ -20,7 +20,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0012](0012-limits-and-cancellation.md) | Resource limits, timeouts and cancellation of a run | accepted |
 | [0013](0013-deployment-and-profiles.md) | A deployment model: profiles, environments and what a tree needs to run | stub |
 | [0014](0014-outcome-semantics.md) | Outcome semantics: refusals, failures and faults, end to end | draft |
-| [0015](0015-tenant-and-resource-scoping.md) | Tenant and resource scoping as a provenance rule | stub |
+| [0015](0015-tenant-and-resource-scoping.md) | Tenant and resource scoping as a provenance rule | draft |
 | [0016](0016-capability-aware-compilation.md) | Capability-aware compilation: what a tree requires against what an environment permits | stub |
 | [0017](0017-migration-planner.md) | Migrations derived from store declarations | stub |
 | [0018](0018-scenario-generation.md) | Scenario generation from the branch solver | stub |
