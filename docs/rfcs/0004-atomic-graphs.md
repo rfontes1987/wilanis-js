@@ -309,8 +309,8 @@ canonical path the handler resolved the way it resolves everything else: through
 `env.canon` and the registry hand it, then `env.connections[canonical]` (RFC 0002, *Handlers*). When the
 scope is absent, it runs as it does today, in its own implicit transaction. Beginning a transaction is
 part of the `Engine` interface `@wilanis/plugin-storage` exports (RFC 0002), so `@storage`'s handlers
-join a scope without knowing which engine answers, and an engine that cannot begin one says so through
-its capabilities (RFC 0022) rather than failing at run time.
+join a scope without knowing which engine answers, and every engine begins one: RFC 0022 makes `begin`
+the contract of an engine rather than a capability it may lack.
 `@wilanis/plugin-storage-postgres` begins a Kysely transaction
 and answers a participant whose `commit` and `rollback` are Kysely's; the statements of concurrent nodes are
 queued on the one connection the transaction holds, which is what makes a map inside an atomic graph serial
