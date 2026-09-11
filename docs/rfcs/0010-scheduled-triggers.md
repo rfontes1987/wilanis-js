@@ -143,7 +143,7 @@ The plugin that grants the kind registers a lease keeper for it; the scheduler's
 connection as its `lease` (X0n4). Absent: a connection of this kind keeps no lease (an HTTP upstream, a
 directory)." `ConnectionKindDoc` in `packages/core/src/model.ts` gains `leases?: boolean`. A plugin declares it on
 the kind it grants and fills the contract under *Lease keepers*; `@schedule` grants no kind, as `@queue` and
-`@storage` grant none. The marker is the kind's own word, so a Redis or etcd kind (RFC 0023) can be a keeper without
+`@storage` grant none. The marker is the kind's own word, so a Redis or etcd kind (RFC 0030) can be a keeper without
 being a store, and a store can decline to be one.
 
 The `trigger` kind means what it means: `settings`, `in`, `out`, `policies`, `fire`. The `trigger-kind`, `port`
@@ -522,7 +522,7 @@ what fires where.
 in the storage plugin makes this RFC depend on RFC 0002. It does not, because the ability to keep a lease is the
 connection kind's own fact, declared by the plugin that knows, as `storage` (RFC 0002) and `delivery` (RFC 0009)
 are. Reading RFC 0002's `storage` marker instead would have made every store a keeper and nothing else one; a Redis
-kind from RFC 0023 is the obvious keeper that is not a store. The alternative of a lock the graphs could call -- a
+kind from RFC 0030 is the obvious keeper that is not a store. The alternative of a lock the graphs could call -- a
 `@lock` port with `acquire` and `release` operations -- was considered and not taken: a hold across nodes is state
 the stateless engine cannot carry, a lock inside business logic is what RFC 0004's atomic graphs exist to make
 unnecessary for storage, and the scheduler is the one consumer, behind a `holds` step. A contract-only package for

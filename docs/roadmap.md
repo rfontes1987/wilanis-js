@@ -97,5 +97,5 @@ RFC 0020.
 
 ## Unscheduled
 
-RFC 0021 (higher-level constructs), RFC 0022 (more storage engines), RFC 0023 (adapters) and RFC 0025 (AI
-model calls) each get a milestone with its own demo when someone picks them up.
+RFC 0021 (higher-level constructs), RFC 0022 (more storage engines), RFC 0023 (adapters), RFC 0025 (AI
+model calls) and RFC 0030 (the cache) each get a milestone with its own demo when someone picks them up.
