@@ -79,7 +79,7 @@ Draws on RFC 0029, the `reads` header the store binds its scope with, and RFC 00
 
 ## M12 Change the schema, get the plan
 
-Add a field to the entry shape and `wilanis migrate plan` prints the migration, refusing the destructive
+Add a field to the entry shape and `wilanis migrate` prints the migration, refusing the destructive
 step until told. Draws on RFC 0017.
 
 ## M13 The agent fixes it

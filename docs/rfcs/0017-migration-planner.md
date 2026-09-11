@@ -1,6 +1,6 @@
 # RFC 0017: Migrations derived from store declarations
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:plugin-storage` (the planner, the record, the engine contract), `area:core` (two optional marks on the
   `store` schema; one optional hook on `PluginModule`), `area:compiler` (two C rules over the marks), `area:runtime`
   (the `wilanis migrate` command, the template), `area:view`
@@ -9,9 +9,10 @@
   RFC 0002 for implementation: the planner lives in `@wilanis/plugin-storage` and every step is executed by an engine
   through the `Engine` interface that RFC 0002 exports, so nothing here lands before that package does. RFC 0022's
   `transactionalDdl` capability decides whether a plan is one transaction (*Runtime behaviour*); until it lands the
-  postgres engine is the one engine and has it. RFC 0019's envelope is what `--json` prints; RFC 0013's rule for the
-  active profile is the rule `--profile` follows. RFC 0008 already uses the word `migrate` for another command
-  (*Open questions*, first).
+  postgres engine is the one engine and has it. RFC 0019's envelope is what `--json` prints. RFC 0013 is a stub: when
+  it settles the active profile, `--profile` follows it, and until then the flag is given as `start` takes it
+  (*Runtime behaviour*). RFC 0008 used the word `migrate` for the command that rewrites a tree's documents; that
+  command is renamed `wilanis upgrade` there (*Open questions*, first).
 
 ## Summary
 
@@ -53,8 +54,8 @@ backfills: a step that needs logic -- splitting `name` into `first` and `last`, 
 it meets one. It derives no reverse plan: the platform moves forward, and the record says what it moved from
 (*Drawbacks*). It does not touch what `ensure` is for (RFC 0003 settled that running it in `live` is the author's
 call). It exposes no SQL: the plan is printed in the tree's words, and what a step is on an engine is the engine's.
-And it does not rewrite a tree's documents from one IR version to the next, which RFC 0008 calls by the same name
-(*Open questions*).
+And it does not rewrite a tree's documents from one IR version to the next, which is RFC 0008's `wilanis upgrade`
+(*Open questions*, first).
 
 ## Guide-level explanation
 
@@ -241,7 +242,7 @@ refused, a destructive step was not allowed, or a connection has drifted; 2 on a
 
 The runtime knows nothing of tables. It knows a `Plan`: targets, each with steps of one of three classes, a line of
 text, and what would be lost. It prints them in the format above with the `padEnd` columns `discovery.ts` already
-uses, orders targets by connection path and steps by collection then declaration order, and applies a target only
+uses, orders targets by connection path and steps by target then declaration order, and applies a target only
 when every one of its steps is allowed -- a refused step refuses the whole connection, since a plan is one
 transaction. The three lines it can print at the end: `N steps would apply; M refused. Nothing was applied: run again
 with --apply.`, `N steps applied in one transaction; recorded as migration K (<iso>).`, `nothing to apply`.
@@ -387,8 +388,8 @@ the shape's words rather than reaching a graph; the fix is the plan.
   record is `wilanis migrate --history`'s alone.
 - `wilanis migrate --json` prints RFC 0019's envelope with `"command": "migrate"`: `format`, `runtime`, `root`,
   `profile`, `ok` (no refused step and no drift), `applied` (boolean), and `targets`, each `{ connection, engine,
-  skipped?, drifted?: [...], steps: [{ do, collection, field?, class, says, loses?, rows?, refused?, applied }] }`,
-  sorted as printed. `--history --json` prints `migrations: [{ id, appliedAt, by, tree, collections: [...] }]`. The
+  skipped?, drifted?: [...], steps: [{ do, target, at?, class, says, loses?, rows?, refused?, applied }] }`,
+  sorted as printed. `--history --json` prints `migrations: [{ id, appliedAt, by, tree, targets: [...] }]`. The
   fields join the envelope's promise from 1.0; the wording of `says` does not.
 - `wilanis ls store` and `wilanis map` are unchanged: a migration is not a document and not a flow.
 - The viewer's `store` page (`renderDocPage` in `packages/view/client/index.html`, RFC 0002 and RFC 0003) shows a
@@ -417,11 +418,12 @@ migrate?: {
 
 with, in the same file: `MigrateContext`, which is `PostLoadContext` plus `profile: string`, `allowDestructive:
 string[]`, `adopt: boolean`; `Plan`, `{ targets: PlanTarget[] }`; `PlanTarget`, `{ connection: string; engine:
-string; skipped?: string; drifted?: string[]; steps: PlanStep[] }`; `PlanStep`, `{ do: string; collection: string;
-field?: string; class: 'additive' | 'transformative' | 'destructive'; says: string; loses?: string; rows?: number;
+string; skipped?: string; drifted?: string[]; steps: PlanStep[] }`; `PlanStep`, `{ do: string; target: string;
+at?: string; class: 'additive' | 'transformative' | 'destructive'; says: string; loses?: string; rows?: number;
 refused?: string }`; `Applied`, `{ id: number; appliedAt: string; by: string; tree: string; connection: string;
-collections: string[] }`. The storage plugin's own `Step` union lowers to `PlanStep`; core never learns what a
-column is.
+targets: string[] }`. The storage plugin's own `Step` union lowers to `PlanStep`: `target` is what the step is about
+in the plugin's words (a collection here; a topic or a bucket for another plugin) and `at` the part of it (a field).
+Core holds the plan's names and none of the store's, so it never learns what a column is.
 
 Why a hook and not a command in the runtime, or an operation in a tree. RFC 0002 rejected "a CLI command and a
 printed DDL" because "a CLI command would need the runtime to reach into the plugin, which the contract forbids".
@@ -519,8 +521,9 @@ the printed lines and the exit code for a clean plan, a refused step, `--apply`,
   and puts the migration in the tree, where `map` and `describe` see it -- but every feature with a store would carry
   a trigger, a domain operation and a delegation for it (X211 keeps one feature from naming another's store), an
   operator would run one command per store, and the answer would be the trigger kind's JSON where a plan wants
-  columns and a summary line. The hook composes every plugin's plan into one printout and leaves the trigger route
-  open for a tree that wants a migration as a declared operation (*Open questions*, second).
+  columns and a summary line. The hook composes every plugin's plan into one printout, and it is the one route:
+  `@storage` grants no `migrate` operation, so no graph and no trigger can reach a schema change (*Open questions*,
+  second).
 - **The record, not the catalog, is the truth.** Diffing against `information_schema` alone would need no table
   and would see what is really there. It would also lose the one thing a record has: intent. A column made `NOT
   NULL` by hand looks, from the catalog, like the tree is behind; from the record, it looks like what it is, a
@@ -549,31 +552,31 @@ the printed lines and the exit code for a clean plan, a refused step, `--apply`,
 
 ## Open questions
 
-To decide before `accepted`:
+None open. Settled at acceptance, with the edits in the text above:
 
-1. **The word.** RFC 0008, accepted, names `wilanis migrate` as the command that rewrites a tree's documents from one
-   IR version to the next; that command does not exist yet and is planned for "when there is a second version".
-   The stub, this RFC and the roadmap's M12 use `migrate` for the store planner, which is the word every database
-   tool uses. Recommendation: this RFC keeps `migrate`, and RFC 0008's unbuilt command becomes `wilanis upgrade`
-   (a tree's documents move up a version; a database migrates), edited in RFC 0008 with the reason in the commit
-   as RFC 0001 provides for a change to an accepted RFC. The alternative is to rename this one (`wilanis reconcile`,
-   the verb RFC 0003 uses for it) and leave RFC 0008 alone.
-2. **The hook, or the trigger.** As written, `wilanis migrate` composes every plugin's `migrate` member. The
-   alternative under *Drawbacks* -- an operation on `@storage/storage.port.json` reached through a domain operation
-   and a command-line trigger -- adds nothing to `PluginModule` and keeps every migration a declared way in.
-   Recommendation: the hook, for the reasons given there; and whether `@storage` *also* grants a `migrate` operation
-   for a tree that wants the trigger route is left to a later RFC if anyone asks.
-3. **Does `ensure` adopt silently?** As written, a table `ensure` finds unrecorded is adopted as an additive step
-   and the start goes on, logging it. The alternative is that adoption is `wilanis migrate`'s alone and `ensure`
-   refuses `drift` on an unrecorded table, which would stop every existing deployment's first start after this RFC
-   lands. Recommendation: adopt in `ensure`, since a table it built is a table it knows.
+1. **The word is `migrate`.** RFC 0008, accepted, named `wilanis migrate` as the command that rewrites a tree's
+   documents from one IR version to the next; that command does not exist yet and is planned for when there is a
+   second version. A database migrates and a tree's documents move up a version, so this RFC keeps `migrate`, the
+   word every database tool uses, and RFC 0008's unbuilt command becomes `wilanis upgrade`, edited there with the
+   reason in the commit as RFC 0001 provides for a change to an accepted RFC. The roadmap's M12 spells the command
+   as this RFC does.
+2. **The hook, and only the hook.** `wilanis migrate` composes every plugin's `migrate` member, and there is no
+   second route: `@storage` grants no `migrate` operation, so a schema change is never a declared operation that a
+   graph or a trigger can reach. The trigger route under *Drawbacks* is the alternative rejected, not one left open
+   for a later RFC. What core holds of a step is named for what it is to the runtime, `target` and `at`; the storage
+   words stay in the plugin's own `Step`.
+3. **`ensure` adopts.** A table `ensure` finds unrecorded is adopted as an additive step and the start goes on,
+   logging it: a table `ensure` built is a table it knows, and the alternative, refusing `drift` there, would stop
+   every existing deployment's first start after this RFC lands.
 
-To decide during implementation:
+During implementation:
 
-4. The exact casts `retype` attempts per pair of types on postgres, and which pairs are refused outright rather than
-   counted; the suite judges behaviour.
-5. Whether `by` records the operating-system user and host, as written, or a `--by` flag an operator's pipeline
-   fills; a pipeline running as `deploy` on a random host may want to say `release 1.4.2`.
-6. Whether the memory engine records within the process, so that a test of `wilanis migrate --history` needs no
-   database; a fake `Engine` in the plugin's tests serves the same purpose and is what the plan above assumes.
-7. The `--json` envelope's exact field names, settled beside RFC 0019's when the two meet in code.
+- The exact casts `retype` attempts per pair of types on postgres, and which pairs are refused outright rather than
+  counted; the suite judges behaviour.
+- Whether `by` records the operating-system user and host, as written, or a `--by` flag an operator's pipeline
+  fills; a pipeline running as `deploy` on a random host may want to say `release 1.4.2`.
+- Whether the memory engine records within the process, so that a test of `wilanis migrate --history` needs no
+  database; a fake `Engine` in the plugin's tests serves the same purpose and is what the plan above assumes.
+- The `--json` envelope's exact field names, settled beside RFC 0019's when the two meet in code.
+- Whether `--allow-destructive` names a collection alone, as written, or the pair of connection and collection: a
+  table is the pair (RFC 0002), and two connections of one tree may each hold a `notes`.
