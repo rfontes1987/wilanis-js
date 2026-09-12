@@ -242,6 +242,19 @@ settled which shape the collection holds, so every rule below reads that shape.
 | X212 | `rules.ts` | `ensure` is run by a graph node, or delegated to by a binding operation that no startup step reaches under any profile | `name the domain operation in project.json → startup; ensure runs once, before the port opens` |
 | X213 | `rules.ts` | a graph or binding of one feature names a store of another | `reach another feature's records through its domain port` |
 
+**What X209 can see of a read.** A value a filter tests with is a literal or a read, and the two are judged
+differently: a literal as written, a read by the type it reads. A plugin can type a read of `in` -- a graph's
+in shape and a binding operation's `accepts` are documents, and `scope.valueRead` with `typeAt` over them
+answers -- and it cannot type a read of an earlier node's output, because that table is the graph checker's,
+and so is the narrowing a `switch` does. Such a read is left unjudged, and a filter comparing a node's answer
+with the wrong field fails that node at run time rather than refusing at check. Closing the gap means widening
+`PluginCheckContext`, which hands a plugin `scope`, `settings` and `refuse` and nothing that types a read at a
+node; that is its own change, and this RFC does not make it.
+
+The same distinction is why the grammar judges the *shape* of a value -- a list for `in`, a boolean for `has`
+-- only where the value is one. At check time `{{in.urls}}` is a string, and refusing it for not being a list
+would refuse a filter the run then accepts.
+
 X213 is the plugin's rather than L005's because a store is never in `exports`: `feature.schema.json` says
 exports are ports and core shapes, and this RFC keeps it so. A collection is an implementation detail of
 one feature; another feature asks the domain port.

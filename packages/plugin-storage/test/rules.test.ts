@@ -184,10 +184,44 @@ describe('what a call may ask of the records', () => {
     expect(only({ tags: { has: true } }, 'X210')).toEqual([]);
   });
 
-  it('a read is not judged: its type comes from where it is read, which a plugin cannot see', () => {
-    // `hits` is a number and `in.id` a string, so this would be X209 if the plugin could type the read.
-    // PluginCheckContext hands scope, settings and refuse, and nothing that types a read at a node.
-    expect(only({ hits: '{{in.id}}' }, 'X209')).toEqual([]);
+  it('X209 a read of the graph in, typed by the shape the graph declares', () => {
+    // `hits` is a number and `in.id` a string: the graph's in shape is a document, so this is judgeable
+    const found = only({ hits: '{{in.id}}' }, 'X209');
+    expect(found).toHaveLength(1);
+    expect(found[0].at).toBe('nodes/asked/in/where/hits');
+    expect(only({ url: '{{in.id}}' }, 'X209')).toEqual([]);
+  });
+
+  it('a read is judged by the type it reads, never by the shape of the read itself', () => {
+    // `{{in.urls}}` is not an array until it is read, and `{{in.tagged}}` is not a boolean; judging either by
+    // how it is spelled would refuse a filter the run then accepts, which is the opposite of the promise
+    expect(codes(tree())).toEqual([]);
+    expect(only({ url: { in: '{{in.urls}}' } }, 'X210')).toEqual([]);
+    expect(only({ tags: { has: '{{in.tagged}}' } }, 'X209')).toEqual([]);
+    // and the type it reads is still judged: a list of the wrong thing, and a boolean that is not one
+    expect(only({ hits: { in: '{{in.urls}}' } }, 'X209')).toHaveLength(1);
+    expect(only({ tags: { has: '{{in.id}}' } }, 'X209')).toHaveLength(1);
+  });
+
+  it("a read of an earlier node is left unjudged: that table is the graph checker's, not a plugin's", () => {
+    // the gap RFC 0003 records beside X209: a plugin sees documents, and a node's output is not one
+    const found = graph(doc => {
+      doc.nodes.unshift({
+        id: 'said',
+        type: '@wilanis/node/run.schema.json',
+        run: '@std/object.port.json#make',
+        in: { value: { text: '{{in.id}}' }, type: '@features/monitor/edge/EntryRow.shape.json' },
+      });
+      doc.nodes[1].in.where = { hits: '{{said.id}}' };
+    });
+    expect(found.filter(one => one.code === 'X209')).toEqual([]);
+  });
+
+  it('a refusal points where the document says it, under a combinator and at a bare value', () => {
+    expect(only({ any: [{ methd: 'x' }] }, 'X208')[0].at).toBe('nodes/asked/in/where/any/0/methd');
+    // a bare value has no `eq` key to point at, so the field is where it points
+    expect(only({ url: 7 }, 'X209')[0].at).toBe('nodes/asked/in/where/url');
+    expect(only({ url: { contains: 7 } }, 'X209')[0].at).toBe('nodes/asked/in/where/url/contains');
   });
 });
 

@@ -109,9 +109,9 @@ export function tree(): Docs {
     },
     'features/monitor/domain/Ref.shape.json': {
       $schema: schemaRef('shape'),
-      description: 'which entry is wanted',
+      description: 'which entries are wanted: one id, the urls to match, and whether the tags matter',
       layer: 'core',
-      fields: { id: { type: 'string' } },
+      fields: { id: { type: 'string' }, urls: { type: 'string[]' }, tagged: { type: 'boolean' } },
     },
     'features/monitor/edge/EntryRow.shape.json': {
       $schema: schemaRef('shape'),
@@ -135,7 +135,11 @@ export function tree(): Docs {
           id: 'asked',
           type: '@wilanis/node/run.schema.json',
           run: '@storage/store.port.json#find',
-          in: { store: STORE, collection: 'entries', where: { id: '{{in.id}}' } },
+          in: {
+            store: STORE,
+            collection: 'entries',
+            where: { id: '{{in.id}}', url: { in: '{{in.urls}}' }, tags: { has: '{{in.tagged}}' } },
+          },
         },
       ],
     },
