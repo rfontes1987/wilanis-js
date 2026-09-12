@@ -141,9 +141,11 @@ describe('trigger, kinds, connection, codec', () => {
       refused(doc('trigger-kind', { settings: { fields: { route: { type: 'string', binds: 'Params' } } } })),
     ).toEqual([at('settings/fields/route/binds', 'Native contracts only')]);
   });
-  it('a connection kind has settings; a connection names a kind', () => {
+  it('a connection kind has settings; a connection names a kind; storage says the kind reaches an engine', () => {
     expect(refused(doc('connection-kind', { settings: {} }))).toEqual([at('settings', "missing 'fields'")]);
     expect(refused(doc('connection', { kind: 'postgres' }))).toEqual([at('kind', 'A document path')]);
+    expect(refused(doc('connection-kind', { storage: true }))).toEqual([]);
+    expect(refused(doc('connection-kind', { storage: 'yes' }))).toEqual([at('storage', 'must be boolean')]);
   });
   it('a codec yields declared or a type; the refusal names both', () => {
     expect(refused(doc('codec', { yields: 'maybe' }))).toEqual([at('yields', 'must be "declared", or', 'A type:')]);
@@ -192,5 +194,33 @@ describe('scenario', () => {
     ]);
     expect(refused(doc('scenario', { expect: { status: 'done' } }))).toEqual([at('expect', "missing 'nodes'")]);
     expect(refused(doc('scenario', { seed: 'one' }))).toEqual([at('seed', 'must be integer')]);
+  });
+});
+
+describe('store', () => {
+  it('names one connection by path and at least one collection', () => {
+    expect(refused(doc('store', { connection: 'postgres' }))).toEqual([at('connection', 'A document path')]);
+    expect(refused(doc('store', { collections: {} }))).toEqual([
+      at('collections', 'must NOT have fewer than 1 properties'),
+    ]);
+    const { connection: _, ...without } = doc('store');
+    expect(refused(without)).toEqual([at(undefined, "missing 'connection'")]);
+  });
+  it('a collection is named by an identifier and says the shape it keeps and the field that keys it', () => {
+    const collections = (one: Record<string, unknown>) => doc('store', { collections: { entries: one } });
+    expect(refused(collections({ of: '@features/f/domain/Entry.shape.json' }))).toEqual([
+      at('collections/entries', "missing 'key'"),
+    ]);
+    expect(refused(collections({ key: 'id' }))).toEqual([at('collections/entries', "missing 'of'")]);
+    expect(refused(collections({ of: 'Entry', key: 'id' }))).toEqual([at('collections/entries/of', 'A type:')]);
+    expect(refused(collections({ of: '@features/f/domain/Entry.shape.json', key: 'the id' }))).toEqual([
+      at('collections/entries/key', 'identifier'),
+    ]);
+    expect(refused(collections({ of: '@features/f/domain/Entry.shape.json', key: 'id', table: 'entries' }))).toEqual([
+      at('collections/entries', "unknown property 'table'"),
+    ]);
+    expect(refused(doc('store', { collections: { 'Bad Name': { of: 'unknown', key: 'id' } } }))).toEqual([
+      at('collections', "property name 'Bad Name'", 'identifier'),
+    ]);
   });
 });

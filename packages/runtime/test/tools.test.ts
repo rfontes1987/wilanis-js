@@ -68,6 +68,29 @@ describe('wilanis new', () => {
     expect(() => scaffold(dir, 'nonsense', 'x', {})).toThrow("unknown kind 'nonsense'");
     rmSync(dir, { recursive: true, force: true });
   });
+  it('writes a store into data/, with one collection named after the file and keyed by id', () => {
+    const dir = tmp();
+    scaffold(dir, 'project', 'board', {});
+    scaffold(dir, 'feature', 'tasks', {});
+    scaffold(dir, 'shape', 'features/tasks/Task', {});
+    expect(scaffold(dir, 'store', 'features/tasks/tasks', { of: '@features/tasks/domain/Task.shape.json' })).toEqual([
+      'features/tasks/data/tasks.store.json',
+    ]);
+    expect(read(join(dir, 'features/tasks/data/tasks.store.json')).collections).toEqual({
+      tasks: { of: '@features/tasks/domain/Task.shape.json', key: 'id', description: 'TODO' },
+    });
+    // a file the author named with a dash still declares a collection the grammar accepts
+    scaffold(dir, 'store', 'features/tasks/audit-log', {});
+    expect(Object.keys(read(join(dir, 'features/tasks/data/audit-log.store.json')).collections)).toEqual(['auditLog']);
+    // both validate and are where a store lives: the loader has nothing to say about them
+    expect(loadTree(dir, PLUGINS).refusals.items).toEqual([]);
+    // anywhere else it is D008: how records are kept is the data layer's job
+    scaffold(dir, 'store', 'features/tasks/domain/elsewhere', {});
+    expect(loadTree(dir, PLUGINS).refusals.items.map(refusal => [refusal.code, refusal.file])).toEqual([
+      ['D008', 'features/tasks/domain/elsewhere.store.json'],
+    ]);
+    rmSync(dir, { recursive: true, force: true });
+  });
 });
 
 describe('wilanis init', () => {

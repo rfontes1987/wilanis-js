@@ -18,7 +18,8 @@ export type Kind =
   | 'feature'
   | 'shape'
   | 'scenario'
-  | 'resolvers';
+  | 'resolvers'
+  | 'store';
 
 export const KINDS: Kind[] = [
   'project',
@@ -36,6 +37,7 @@ export const KINDS: Kind[] = [
   'shape',
   'scenario',
   'resolvers',
+  'store',
 ];
 
 /** The short alias a document may use as its $schema: @wilanis/<kind>.schema.json. */
@@ -313,8 +315,10 @@ export interface TriggerKindDoc extends Envelope {
   context: InlineObject;
   refusals?: string;
 }
+/** `storage`: a connection of this kind reaches a storage engine, so a store may name it; the granting plugin registers the engine. */
 export interface ConnectionKindDoc extends Envelope {
   settings: InlineObject;
+  storage?: boolean;
 }
 export interface ConnectionDoc extends Envelope {
   kind: string;
@@ -333,6 +337,22 @@ export interface ShapeDoc extends Envelope {
   fields: Fields;
   open?: boolean | TypeRef;
 }
+/** One collection of a store: the shape its records have, the field that identifies one, and what it holds. */
+export interface Collection {
+  of: TypeRef;
+  key: string;
+  description?: string;
+}
+/**
+ * What a feature keeps: the connection its records live behind, and the collections kept there, by name. The
+ * collection is where the record type is written down, so a call site names the store and the collection and
+ * nothing else.
+ */
+export interface StoreDoc extends Envelope {
+  connection: string;
+  collections: Record<string, Collection>;
+}
+
 export interface ScenarioDoc extends Envelope {
   trigger: string;
   seed: number;
@@ -362,5 +382,6 @@ export interface DocByKind {
   shape: ShapeDoc;
   scenario: ScenarioDoc;
   resolvers: ResolversDoc;
+  store: StoreDoc;
 }
 export type AnyDoc = DocByKind[Kind];

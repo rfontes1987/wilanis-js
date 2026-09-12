@@ -19,6 +19,7 @@ export const HOME: Partial<Record<Kind, Home>> = {
   policy: { layers: ['edge'], why: 'a policy gates a way in: it reads the request the way a trigger does' },
   graph: { layers: ['domain', 'data'], why: 'a graph is business rules (domain/) or a translation (data/)' },
   binding: { layers: ['data'], why: "a binding says how a domain port is met, which is the data layer's job" },
+  store: { layers: ['data'], why: "a store says how records are kept, which is the data layer's job" },
   port: { layers: ['domain'], why: 'a domain port is the contract the business offers' },
   shape: { layers: ['edge', 'domain'], why: "a shape is the world's (edge/) or ours (domain/)" },
   resolvers: {

@@ -41,6 +41,7 @@ property is described.
 | `trigger` | a way in: `kind`, `settings`, `in`, `out`, `policies` (what gates it, in order, each given the credentials it needs), and `fire` -- the run node it invokes | `edge/` |
 | `policy` | a gate: `decide` fires a domain operation over what the guard hands (`{{request.principal}}`), `outcomes` maps each reason its graph refuses with to `deny` or `challenge`, `proves` says what is present once it allows | `edge/` |
 | `resolvers` | named reads of the request (`request.params.id`, `request.headers['user-agent']`, `request.session.id`), for data graphs and bindings to read as `{{name}}`; `required` when a policy guarantees the read | `edge/` |
+| `store` | what the feature keeps: a connection and collections of a core shape (or a plugin's shape), each by key | `data/` |
 | `connection` | a channel to an external system, settings read `{{secrets.*}}` | `connections/` |
 | `scenario` | a recorded run (fuzz writes, regress replays) | `scenarios/` |
 

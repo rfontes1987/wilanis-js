@@ -33,6 +33,10 @@ export const minimal: Record<Kind, Record<string, unknown>> = {
   shape: { layer: 'core', fields: {} },
   scenario: { trigger: '@features/f/edge/t.trigger.json', seed: 1, expect: { status: 'done', nodes: {} } },
   resolvers: { resolvers: { caller: { read: "request.headers['user-agent']" } } },
+  store: {
+    connection: '@connections/records.connection.json',
+    collections: { entries: { of: '@features/f/domain/Entry.shape.json', key: 'id' } },
+  },
 };
 export const doc = (kind: Kind, body: Record<string, unknown> = {}, schema = schemaRef(kind)) => ({
   $schema: schema,
