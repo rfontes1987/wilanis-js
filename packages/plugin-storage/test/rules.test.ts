@@ -63,7 +63,7 @@ describe('what a collection may keep, and what identifies one record', () => {
     );
     expect(found).toHaveLength(1);
     expect(found[0].at).toBe('collections/entries/key');
-    expect(found[0].message).toMatch(/\(fields: id, url, ua\)/);
+    expect(found[0].message).toMatch(/\(fields: id, url, hits, ok, tags, ua\)/);
   });
 
   it('X202 a key that may be absent, since a key identifies every record', () => {
@@ -143,6 +143,51 @@ describe('two stores over one connection', () => {
 
   it('the same name with the same shape is how two features share a collection on purpose', () => {
     expect(codes(alsoKeeping(SHAPE))).toEqual([]);
+  });
+});
+
+describe('what a call may ask of the records', () => {
+  const where = (filter: unknown) =>
+    graph(doc => {
+      doc.nodes[0].in.where = filter;
+    });
+  const only = (filter: unknown, code: string) => at(where(filter), code);
+
+  it('X208 a filter naming a field the shape does not have, at any nesting', () => {
+    expect(only({ methd: 'GET' }, 'X208')[0].at).toBe('nodes/asked/in/where/methd');
+    expect(only({ any: [{ nope: 1 }] }, 'X208')).toHaveLength(1);
+  });
+
+  it('X208 an order by a field the shape does not have', () => {
+    const found = at(
+      graph(doc => {
+        doc.nodes[0].in.order = [{ by: 'nope' }];
+      }),
+      'X208',
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0].at).toBe('nodes/asked/in/order/0/by');
+  });
+
+  it('X209 a literal the field would not accept', () => {
+    expect(only({ url: 7 }, 'X209')).toHaveLength(1);
+    expect(only({ ua: { has: 'yes' } }, 'X209')).toHaveLength(1);
+    expect(only({ hits: { in: ['a'] } }, 'X209')).toHaveLength(1);
+    expect(only({ hits: 7 }, 'X209')).toEqual([]);
+  });
+
+  it('X210 an operator the grammar does not name, or one the field type does not admit', () => {
+    expect(only({ url: { like: 'x' } }, 'X210')).toHaveLength(1);
+    expect(only({ hits: { contains: '2' } }, 'X210')).toHaveLength(1);
+    expect(only({ ok: { gt: false } }, 'X210')).toHaveLength(1);
+    expect(only({ tags: { eq: ['a'] } }, 'X210')).toHaveLength(1);
+    expect(only({ tags: { has: true } }, 'X210')).toEqual([]);
+  });
+
+  it('a read is not judged: its type comes from where it is read, which a plugin cannot see', () => {
+    // `hits` is a number and `in.id` a string, so this would be X209 if the plugin could type the read.
+    // PluginCheckContext hands scope, settings and refuse, and nothing that types a read at a node.
+    expect(only({ hits: '{{in.id}}' }, 'X209')).toEqual([]);
   });
 });
 

@@ -32,6 +32,25 @@ const ORDERINGS = new Set<Operator>(['lt', 'lte', 'gt', 'gte']);
 const STRINGS = new Set<Operator>(['contains', 'startsWith']);
 const LISTS = new Set<Operator>(['in', 'notIn']);
 
+/**
+ * Why a filter is not one: a name the shape does not have, a value the field would not accept, or grammar the
+ * port does not admit. A run fails the node on any of them; the checker gives each its own code, which is why
+ * they are told apart here rather than read back out of a message.
+ */
+export type WhereFault = 'name' | 'value' | 'grammar';
+
+/** A filter the grammar refuses: which rule it breaks, and where in the filter it breaks it. */
+export class WhereError extends Error {
+  constructor(
+    readonly fault: WhereFault,
+    message: string,
+    readonly at: string[] = [],
+  ) {
+    super(message);
+    this.name = 'WhereError';
+  }
+}
+
 /** One test of one field: the operator, and what it is given. */
 export interface Test {
   op: Operator;
@@ -71,11 +90,17 @@ function unfit(op: Operator, type: Type): string | undefined {
 /** One test, held to being one the grammar names and one the field's type admits. */
 function testOf(field: string, op: string, value: unknown, type: Type): Test {
   if (!isOperator(op))
-    throw new Error(`where: '${op}' is not an operator of '${field}' (operators: ${OPERATORS.join(', ')})`);
+    throw new WhereError(
+      'grammar',
+      `where: '${op}' is not an operator of '${field}' (operators: ${OPERATORS.join(', ')})`,
+      [field, op],
+    );
   const bad = unfit(op, type);
-  if (bad) throw new Error(`where: on '${field}', ${bad}`);
-  if (LISTS.has(op) && !Array.isArray(value)) throw new Error(`where: '${field}.${op}' takes a list`);
-  if (op === 'has' && typeof value !== 'boolean') throw new Error(`where: '${field}.has' takes a boolean`);
+  if (bad) throw new WhereError('grammar', `where: on '${field}', ${bad}`, [field, op]);
+  if (LISTS.has(op) && !Array.isArray(value))
+    throw new WhereError('grammar', `where: '${field}.${op}' takes a list`, [field, op]);
+  if (op === 'has' && typeof value !== 'boolean')
+    throw new WhereError('value', `where: '${field}.has' takes a boolean`, [field, op]);
   return { op, value };
 }
 
@@ -86,13 +111,13 @@ function testOf(field: string, op: string, value: unknown, type: Type): Test {
 function testsOf(field: string, given: unknown, type: Type): Test[] {
   if (!isPlainObject(given)) return [testOf(field, 'eq', given, type)];
   const keys = Object.keys(given);
-  if (!keys.length) throw new Error(`where: the predicate on '${field}' names no operator`);
+  if (!keys.length) throw new WhereError('grammar', `where: the predicate on '${field}' names no operator`, [field]);
   return keys.map(key => testOf(field, key, given[key], type));
 }
 
 /** Every filter of a combinator that takes a list of them. */
 function branches(key: string, given: unknown, shape: Type): Where[] {
-  if (!Array.isArray(given)) throw new Error(`where: '${key}' takes a list of filters`);
+  if (!Array.isArray(given)) throw new WhereError('grammar', `where: '${key}' takes a list of filters`, [key]);
   return given.map(one => parseWhere(one, shape));
 }
 
@@ -104,7 +129,7 @@ function entry(key: string, given: unknown, shape: Type): Where {
   const field = fieldsOf(shape)[key];
   if (!field) {
     const names = Object.keys(fieldsOf(shape)).join(', ') || 'none';
-    throw new Error(`where: '${key}' is not a field of the collection's shape (fields: ${names})`);
+    throw new WhereError('name', `where: '${key}' is not a field of the collection's shape (fields: ${names})`, [key]);
   }
   return { kind: 'field', field: key, tests: testsOf(key, given, field.type) };
 }
@@ -114,7 +139,7 @@ function entry(key: string, given: unknown, shape: Type): Where {
  * filter names a field the shape lacks or an operator the grammar does not have. Several keys are one `all`.
  */
 export function parseWhere(given: unknown, shape: Type): Where {
-  if (!isPlainObject(given)) throw new Error('where: a filter is an object of fields and combinators');
+  if (!isPlainObject(given)) throw new WhereError('grammar', 'where: a filter is an object of fields and combinators');
   const of = Object.entries(given).map(([key, value]) => entry(key, value, shape));
   if (of.length === 1) return of[0];
   return { kind: 'all', of };

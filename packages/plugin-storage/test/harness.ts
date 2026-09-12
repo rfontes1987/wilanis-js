@@ -98,7 +98,14 @@ export function tree(): Docs {
       $schema: schemaRef('shape'),
       description: 'one observed call',
       layer: 'core',
-      fields: { id: { type: 'string' }, url: { type: 'string' }, ua: { type: 'string', required: false } },
+      fields: {
+        id: { type: 'string' },
+        url: { type: 'string' },
+        hits: { type: 'number' },
+        ok: { type: 'boolean' },
+        tags: { type: 'string[]' },
+        ua: { type: 'string', required: false },
+      },
     },
     'features/monitor/domain/Ref.shape.json': {
       $schema: schemaRef('shape'),
