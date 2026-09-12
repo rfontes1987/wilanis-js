@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkTree } from '@wilanis/compiler';
-import { loadTree, type ResolvedInclude } from '@wilanis/core';
+import { type LoadResult, loadTree, type ResolvedInclude } from '@wilanis/core';
 import auth from '@wilanis/plugin-auth';
 import blobs from '@wilanis/plugin-blob';
 import http from '@wilanis/plugin-http';
@@ -28,6 +28,10 @@ export const INCLUDES: ResolvedInclude[] = [
 
 /** The refusal codes a tree answers with. */
 export const codes = (root: string) => checkTree(loadTree(root, PLUGINS, INCLUDES)).items.map(refusal => refusal.code);
+
+/** The refusals a tree answers with, as `code file#at`: what a case needs when where it points is the claim. */
+export const refusalsAt = (root: string) =>
+  checkTree(loadTree(root, PLUGINS, INCLUDES)).items.map(one => `${one.code} ${one.file}${one.at ? `#${one.at}` : ''}`);
 
 /** A plugin's docs directory, written from name -> document. */
 export function docsDir(docs: Record<string, unknown>): string {
@@ -88,6 +92,26 @@ export function planted(file: string, doc: unknown): string[] {
 /** Copy the example, add several documents at paths it does not have, and answer the refusal codes. */
 export function plantedAll(docs: Record<string, unknown>): string[] {
   return codesAfter(dir => write(dir, docs));
+}
+
+/** Copy the example, add several documents, and answer each refusal as `code file#at`. */
+export function plantedPointing(docs: Record<string, unknown>): string[] {
+  const dir = copyOfExample();
+  write(dir, docs);
+  const out = refusalsAt(dir);
+  rmSync(dir, { recursive: true, force: true });
+  return out;
+}
+
+/**
+ * Copy the example, add documents, and answer the tree as loaded together with the directory it sits in --
+ * what a case needs when it reads what `describe` says rather than what the checker refuses. The caller
+ * removes the directory.
+ */
+export function loadedWith(docs: Record<string, unknown>): { load: LoadResult; dir: string } {
+  const dir = copyOfExample();
+  write(dir, docs);
+  return { load: loadTree(dir, PLUGINS, INCLUDES), dir };
 }
 
 /**

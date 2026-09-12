@@ -51,7 +51,7 @@ each visible in the code:
   secret, and the trace then redacts the one thing an operator wants to read.
 - **"What a tree needs to run" has no name.** The compiler already walks from an operation through the
   profile's binding to the graphs it reaches, once, for one payload: `opNeeds` in `check/resolvers.ts`, the
-  request reads a startup step may not have (B008). RFC 0003's X210 wants the same walk for another payload
+  request reads a startup step may not have (B008). RFC 0003's X212 wants the same walk for another payload
   (which startup step reaches `ensure`), RFC 0009 names "the per-profile walk", RFC 0026 prints its result
   (`effects`, `requires`, `secrets`), RFC 0016 compares it with `permits`. Each RFC assumed another supplied
   it; none did. `feature.json → effects` is not it: L003 judges what a feature *allows* its data layer to
@@ -227,7 +227,7 @@ None.
 ### Checker rules
 
 All in `check/project.ts`; numbers are assigned when the implementing pull request lands (current highest:
-A006 B008 C002 D010 G013 L008 P003 R001 S001 T006, X103).
+A006 B008 C008 D010 G013 L008 P003 R001 S001 T006, X103; RFC 0003 took C003-C008).
 
 | Code | Where it lives | Refuses when | Hint |
 |---|---|---|---|
