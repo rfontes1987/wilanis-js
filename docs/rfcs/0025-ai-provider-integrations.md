@@ -1,6 +1,6 @@
 # RFC 0025: AI model calls as an effect
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** one new package (`area:plugin-model`); `area:core` for one optional field on a typed field, carried into the
   JSON Schema core already lowers (no schema changes); `area:runtime` for one row of the trace, when RFC 0006's
   `trace.ts` exists. Nothing in the compiler, the engine or the view.
@@ -56,11 +56,12 @@ print and RFC 0020's page can list.
 This RFC does not try to solve: a conversation (a transcript is state and lives behind a port the host binds, RFC 0005;
 `complete` is one turn); tool use, in either direction (a model never calls an operation and an operation never
 consults a model mid-run; a tree that wants a model to *choose* between two actions asks for a value of an enum shape
-and puts a `switch` on it); embeddings and vector search (one more operation and RFC 0023's search adapter; named in
+and puts a `switch` on it; where a *sentence* is to pick a *route*, RFC 0031's intents fire the route under its own
+policies); embeddings and vector search (one more operation and RFC 0023's search adapter; named in
 *Open questions*); images, audio and files as input (a `blob` to a model is a codec question this RFC leaves closed);
 streaming (an answer is validated whole, and a stream cannot be); pricing (tokens are counted here and priced by the
-collector that reads the trace, since prices change monthly and per contract); and a spend limit (RFC 0012 owns what
-a run may consume, and *Open questions* names the one setting a connection may grow).
+collector that reads the trace, since prices change monthly and per contract); and a spend limit (RFC 0012 bounds one run; a
+budget per connection across runs is named under *Open questions* for a later RFC).
 
 ## Guide-level explanation
 
@@ -306,7 +307,8 @@ says so. The openai module sends `messages` = a `system` and a `user` turn, `res
 json_schema: { name: "answer", schema, strict: true } }`; the answer is `choices[0].message.content` parsed as JSON;
 `finish_reason` `stop` is `answered`, `length` is `truncated`, `content_filter` or a `refusal` field is `declined`.
 Where a provider offers a newer constrained-output mechanism than the one named here, which the module uses is left to
-implementation, behind the same kind and judged by `conforms` regardless. A server that ignores `response_format` (an
+implementation, behind the same kind and judged by `conforms` regardless. RFC 0031's `choose` shares these
+modules and sends a tool list instead of one forced tool; `complete` is untouched by it. A server that ignores `response_format` (an
 older local one) answers text; `JSON.parse` fails or `conforms` refuses, and the fault says so.
 
 **What is reported and what is thrown.** The rule is `@http`'s: the provider *answering* is an answer, whatever it
@@ -498,18 +500,15 @@ Ollama and once against Anthropic, one connection edit between them, and `--trac
 
 ## Open questions
 
-**Before `accepted`:**
-
-1. **`idempotent: true`.** Settled above with the reasoning; listed here because it revises the stub, and the
-   maintainer should say so in the acceptance rather than find it.
-2. **A throttle on the kinds.** Every provider rate-limits, and `@http`'s connection kind has `throttle` for exactly
-   this; the module behind it (`packages/plugin-http/src/throttle.ts`) is that plugin's. Three shapes: this plugin
-   carries a copy (two files that drift); the throttle moves to core as a utility every connection kind may name (a
-   core change, the DRY one); or nothing, and a 429 is a fault RFC 0011's backoff repeats. This RFC recommends the
-   third for now and the second when a second adapter asks, and asks the maintainer to decide.
+None before `accepted`.
 
 **Settled here, so the reasoning survives the stub.**
 
+- **`idempotent: true`.** The stub said `false` and meant "not deterministic"; under RFC 0011's definition a completion
+  applies nothing anywhere, and the acceptance revises the stub. *Drawbacks*, first item.
+- **No throttle on the kinds.** A 429 is a fault RFC 0011's backoff repeats; the module in
+  `packages/plugin-http/src/throttle.ts` stays that plugin's, and moves to core as a utility every connection kind may
+  name when a second adapter asks for it.
 - **Provider kinds, not a `provider` setting.** *Drawbacks*, sixth item, on RFC 0023's line.
 - **Structured output from the shape's JSON Schema, which core already lowers.** `toJsonSchema` in
   `packages/core/src/values.ts` is the lowering; the one thing it lacked was descriptions, and step 1 adds them. The
@@ -532,4 +531,6 @@ non-conformance fault beyond the path `conforms` names; and whether `Attempt` sh
 **Named for a later RFC:** an `embed` operation (a list of strings in, a list of vectors out, `idempotent`), which is
 worth having only beside a store that can hold and search vectors (RFC 0023's search adapter, RFC 0022's engines); a
 `blob` handed to a model (an image, a PDF) and which codec carries it; and whether a second turn carrying the
-validation error is worth a `repair: true` on the site once the tests show how often one try fails to conform.
+validation error is worth a `repair: true` on the site once the tests show how often one try fails to conform; and a
+`budget` on a model connection kind -- tokens per window, a fault when exceeded -- the limit across runs that RFC 0012,
+which bounds one run, does not give.
