@@ -223,4 +223,52 @@ describe('store', () => {
       at('collections', "property name 'Bad Name'", 'identifier'),
     ]);
   });
+  it('a collection may declare what no two records repeat, which field holds another collection key, and what existing rows receive', () => {
+    const entries = {
+      of: '@features/f/domain/Entry.shape.json',
+      key: 'id',
+      unique: [['url', 'method']],
+      defaults: { ua: 'unknown' },
+      description: 'observed calls',
+    };
+    const notes = {
+      of: '@features/f/domain/Note.shape.json',
+      key: 'id',
+      refs: { entryId: { collection: 'entries', onRemove: 'refuse', description: 'the entry observed' } },
+    };
+    expect(refused(doc('store', { collections: { entries, notes } }))).toEqual([]);
+  });
+  it('a constraint names each field by its identifier, and names at least one', () => {
+    const collections = (one: Record<string, unknown>) =>
+      doc('store', { collections: { entries: { of: '@features/f/domain/Entry.shape.json', key: 'id', ...one } } });
+    expect(refused(collections({ unique: [[]] }))).toEqual([
+      at('collections/entries/unique/0', 'must NOT have fewer than 1 items'),
+    ]);
+    expect(refused(collections({ unique: [['url', 'url']] }))).toEqual([
+      at('collections/entries/unique/0', 'must NOT have duplicate items'),
+    ]);
+    expect(refused(collections({ unique: [['the url']] }))).toEqual([
+      at('collections/entries/unique/0/0', 'identifier'),
+    ]);
+    expect(refused(collections({ unique: ['url'] }))).toEqual([at('collections/entries/unique/0', 'must be array')]);
+    expect(refused(collections({ defaults: { 'not a field': 1 } }))).toEqual([
+      at('collections/entries/defaults', "property name 'not a field'", 'identifier'),
+    ]);
+  });
+  it('a reference names one collection and refuses a removal, and admits nothing else', () => {
+    const collections = (ref: Record<string, unknown>) =>
+      doc('store', {
+        collections: { entries: { of: '@features/f/domain/Entry.shape.json', key: 'id', refs: { entryId: ref } } },
+      });
+    expect(refused(collections({}))).toEqual([at('collections/entries/refs/entryId', "missing 'collection'")]);
+    expect(refused(collections({ collection: 'entries', onRemove: 'cascade' }))).toEqual([
+      at('collections/entries/refs/entryId/onRemove', 'must be one of "refuse"'),
+    ]);
+    expect(refused(collections({ collection: '@features/f/data/other.store.json' }))).toEqual([
+      at('collections/entries/refs/entryId/collection', 'identifier'),
+    ]);
+    expect(refused(collections({ collection: 'entries', of: 'string' }))).toEqual([
+      at('collections/entries/refs/entryId', "unknown property 'of'"),
+    ]);
+  });
 });

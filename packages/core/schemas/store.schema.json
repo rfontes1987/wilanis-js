@@ -44,6 +44,56 @@
             "description": "The field of `of` that identifies a record: required, and of whatever type the shape gives it -- that is the type get, patch and remove take and newKey answers.",
             "$ref": "common.schema.json#/$defs/ident"
           },
+          "unique": {
+            "description": "The combinations no two records may repeat: each inner list is one constraint over those fields together, so [[\"url\", \"method\"]] is one constraint on the pair and [[\"url\"], [\"method\"]] is two constraints, one on each. The key is unique already and is never listed here.",
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/ident"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "uniqueItems": true
+          },
+          "refs": {
+            "description": "field -> the collection whose key that field holds. A record whose reference names nothing is refused, and so is removing a record another still references. The reference stays within this store, and the field's type is the referenced collection's key's type.",
+            "type": "object",
+            "propertyNames": {
+              "$ref": "common.schema.json#/$defs/ident"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "collection": {
+                  "description": "The collection of this store whose key this field holds.",
+                  "$ref": "common.schema.json#/$defs/ident"
+                },
+                "onRemove": {
+                  "description": "What removing a referenced record does. refuse is the only value: a removal that would orphan a record is refused, and nothing is ever deleted on a tree's behalf.",
+                  "enum": [
+                    "refuse"
+                  ]
+                },
+                "description": {
+                  "description": "What this reference means, for a reader of a graph that writes it.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "collection"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "defaults": {
+            "description": "field -> the literal existing records receive when ensure adds that field's column to a table that already holds rows. It is about existing rows, never about what a graph writes: a put still gives the whole record, and whether a field may be absent is the shape's required: false, said once. A key is never defaulted.",
+            "type": "object",
+            "propertyNames": {
+              "$ref": "common.schema.json#/$defs/ident"
+            }
+          },
           "description": {
             "description": "What this collection holds, for a reader of a graph that reads or writes it.",
             "type": "string"
