@@ -2,7 +2,7 @@
 
 `checkTree(load)` judges a loaded tree against every rule and answers a `RefusalList`: each refusal with
 its code, file, location and hint. Rule families: D documents, R references, L layers and effects, G
-graphs, P params and resolvers, B bindings and profiles, T triggers, C connections and settings, S
+graphs, P params and resolvers, B bindings and profiles, T triggers, C connections, settings and stores, S
 scenarios; plugins add X through their `check` hook.
 
 `Compiler` lowers a judged graph to an engine spec: every `path#operation` becomes a handler, a plugin

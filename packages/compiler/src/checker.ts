@@ -3,7 +3,7 @@
  * its module under check/:
  *   D documents (the loader)   R references   L layers/effects/visibility   G graphs (graph.ts, inputs.ts)
  *   P static fields/resolvers (resolvers.ts)   B bindings/profiles (bindings.ts, project.ts)
- *   T triggers (triggers.ts)   A access (access.ts)   C connections/settings/stores (project.ts, contracts.ts)
+ *   T triggers (triggers.ts)   A access (access.ts)   C connections, settings and stores (project.ts, contracts.ts)
  *   S scenarios (triggers.ts)   X plugin-specific (each plugin's own `check`)
  */
 import { type LoadResult, type PluginModule, RefusalList, Scope } from '@wilanis/core';
