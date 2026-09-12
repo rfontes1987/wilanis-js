@@ -1,0 +1,21 @@
+{
+  "name": "wilanis",
+  "version": "0.0.0",
+  "description": "Reserved name; this package holds no code. wilanis is backend services written as JSON documents, judged by a compiler before they run. Nothing is published to npm before 1.0 -- see github.com/wilanis/wilanis-js",
+  "license": "Apache-2.0",
+  "author": "Rafael Fontes <rfontes1987@gmail.com>",
+  "homepage": "https://github.com/wilanis/wilanis-js#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wilanis/wilanis-js.git",
+    "directory": "reserved/wilanis"
+  },
+  "bugs": "https://github.com/wilanis/wilanis-js/issues",
+  "keywords": [
+    "wilanis"
+  ],
+  "files": [
+    "README.md",
+    "LICENSE"
+  ]
+}
