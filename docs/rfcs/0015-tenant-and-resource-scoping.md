@@ -506,7 +506,7 @@ answer the codes), in a new `sabotage-scoping.test.ts`, once the example keeps i
 | A0n2 | `employees-only` dropped from `digest.trigger.json` |
 | A006 | `signed-in` dropped from `get-entry.trigger.json`: the message names `request.session`, read by the store |
 | B008 | a startup step naming `@monitor/domain/monitor.port.json#count` over `entries`: the message names the store's read |
-| X2n1 | `"scope": { "tenant": "{{tenant}}" }` written on `asked` in `get-record.graph.json` (the M11 demo: "the agent added the filter by hand"); on the `find` over `every-entry`; on a `newKey` |
+| X2n1 | `"scope": { "tenant": "{{tenant}}" }` written on `asked` in `get-record.graph.json` (the M12 demo: "the agent added the filter by hand"); on the `find` over `every-entry`; on a `newKey` |
 | X1n1 | `"values": { "theme": "{{in.theme}}", "tenant": "globex" }` in `write-theme.graph.json`; `"keys": ["tenant"]` on a `session.port.json#remove`; the same through a binding delegation |
 | X206 | `"where": { "tenant": "acme" }` on the `find` over `entries` |
 | none | the example as written: `codes(EXAMPLE)` is empty; `describe` of the store prints the lines above |
@@ -565,7 +565,7 @@ not; over the fake OIDC issuer, the claims the type's fields name are read and t
 8. Runtime: `describe <store>`, `<resolvers>`, `<graph>`, `<trigger>` and `map` lines. (`good first issue`)
 9. Auth plugin: `verify` gains `type` (`$I`), `Identity.shape.json` and `Account.shape.json` gain `attributes`, the
    handler reads and judges them for both directory kinds; X1n1 in `rules.ts`. Tests in `packages/plugin-auth/test`.
-10. The example, the M11 demo: `libraries/access` -- the customer directory's accounts carry `attributes.tenant` (two
+10. The example, the M12 demo: `libraries/access` -- the customer directory's accounts carry `attributes.tenant` (two
     values), the `identity.binding.json` delegation of `verifyCustomer` and `verifyEmployee` gives `verify` the
     tree's identity-attributes shape, `Session.shape.json` gains `tenant` (required), `sign-in-customer.graph.json`
     writes it from `{{checked.identity.attributes.tenant}}` and `sign-in-employee.graph.json` from a constant;
