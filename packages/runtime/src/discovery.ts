@@ -7,14 +7,13 @@ import {
   type Kind,
   type Loaded,
   type PolicyDoc,
-  type PortDoc,
   policyPath,
   Scope,
-  show,
   splitOp,
   type TriggerDoc,
   type TriggerKindDoc,
 } from '@wilanis/core';
+import { fieldLine, portLines, shower } from './lines.js';
 
 // ---- discovery --------------------------------------------------------------------------------------
 
@@ -30,65 +29,6 @@ export function ls(load: LoadResult, kind?: Kind): string[] {
 function whereFrom(file: { native?: string; included?: string }): string {
   if (file.native) return '  (native)';
   return file.included ? `  (included from ${file.included})` : '';
-}
-
-/** A spec as one reader sees it, or the spec itself when it does not resolve. */
-function shower(scope: Scope) {
-  return (spec: unknown) => {
-    try {
-      return show(scope.types.spec(spec as string));
-    } catch {
-      return JSON.stringify(spec);
-    }
-  };
-}
-
-/** One input one port's operation accepts: one type parameter is shown as `type`, and one static one says so. */
-function acceptsLine(
-  name: string,
-  field: { type: unknown; required?: boolean; enum?: string[]; binds?: string; static?: boolean; description?: string },
-  showType: (spec: unknown) => string,
-): string {
-  const optional = field.required === false ? '?' : '';
-  const type = field.type === 'type' ? 'type' : showType(field.type);
-  const isStatic = field.static || field.type === 'type' ? '  (static)' : '';
-  const binds = field.binds ? ` binds ${field.binds}` : '';
-  const allowed = field.enum ? ` ∈ ${field.enum.join('|')}` : '';
-  const says = field.description ? `  -- ${field.description}` : '';
-  return `    in  ${name}${optional}: ${type}${isStatic}${binds}${allowed}${says}`;
-}
-
-/** What an operation says about itself: whether it is pure, may refuse, or holds something until stopped. */
-function operationLine(name: string, op: { pure?: boolean; refuses?: unknown; holds?: boolean; description?: string }) {
-  const pure = op.pure ? '  (pure)' : '';
-  const refuses = op.refuses ? '  (refuses on purpose)' : '';
-  const holds = op.holds ? '  (holds until stopped)' : '';
-  return `#${name}${pure}${refuses}${holds}: ${op.description}`;
-}
-
-/** A port: every operation, what it accepts and what it answers. */
-function portLines(doc: Loaded, showType: (spec: unknown) => string): string[] {
-  const lines: string[] = [];
-  for (const [name, op] of Object.entries((doc.doc as PortDoc).operations)) {
-    lines.push(operationLine(name, op));
-    for (const [field, accepts] of Object.entries(op.accepts ?? {})) lines.push(acceptsLine(field, accepts, showType));
-    if (op.returns) lines.push(`    returns ${showType(op.returns)}`);
-  }
-  return lines;
-}
-
-/** What one field says about itself: optional, its type, the values it allows, what it binds, and its description. */
-function fieldLine(
-  name: string,
-  field: { type: unknown; required?: boolean; enum?: string[]; binds?: string; description?: string },
-  showType: (spec: unknown) => string,
-): string {
-  const optional = field.required === false ? '?' : '';
-  const type = typeof field.type === 'string' ? field.type : showType(field.type);
-  const allowed = field.enum ? ` ∈ ${field.enum.join('|')}` : '';
-  const binds = field.binds ? ` binds ${field.binds}` : '';
-  const says = field.description ? `  -- ${field.description}` : '';
-  return `    ${name}${optional}: ${type}${allowed}${binds}${says}`;
 }
 
 /** A trigger kind, one connection kind or one plugin: its settings, the context it hands, and its guard. */

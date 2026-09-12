@@ -39,7 +39,10 @@ class Secrets {
   }
 }
 
-/** The environment handlers see: connections with secrets substituted, plugin settings, a type resolver. */
+/**
+ * The environment handlers see: connections with secrets substituted, plugin settings, a type resolver, and
+ * the `resolves` view of the tree a stubbed effect binds its variables through.
+ */
 export function buildEnv(scope: Scope, env: NodeJS.ProcessEnv = process.env): { env: Settings; missing: string[] } {
   const project = scope.project;
   const secrets = new Secrets(project?.secrets ?? {}, env);
@@ -51,7 +54,11 @@ export function buildEnv(scope: Scope, env: NodeJS.ProcessEnv = process.env): { 
   const plugins: Record<string, Settings> = {};
   for (const use of project?.plugins ?? []) plugins[use.use] = secrets.substitute(use.settings ?? {}) as Settings;
   const resolveType = (ref: string) => scope.types.spec(ref);
-  return { env: { connections, plugins, canon: scope.canon, resolveType }, missing: [...secrets.missing] };
+  const resolving = scope.resolving();
+  return {
+    env: { connections, plugins, canon: scope.canon, resolveType, resolving },
+    missing: [...secrets.missing],
+  };
 }
 
 /** Run a compiled graph once. */

@@ -94,7 +94,11 @@ export interface InlineObject {
   description?: string;
 }
 export type TypeSpec = TypeRef | InlineObject;
-/** One field of a shape or a contract. `static`: where the operation is called the value must be a literal, never a read; a field of type `type` always is. */
+/**
+ * One field of a shape or a contract. `static`: where the operation is called the value must be a literal,
+ * never a read; a field of type `type` always is. `resolves`: variable -> the path within the document this
+ * field's literal names whose value is the type to bind it to (`resolves.ts` holds the grammar).
+ */
 export interface Field {
   type: TypeSpec;
   required?: boolean;
@@ -103,6 +107,7 @@ export interface Field {
   enum?: string[];
   binds?: string;
   static?: boolean;
+  resolves?: Record<string, string>;
 }
 export type Fields = Record<string, Field>;
 

@@ -1,8 +1,9 @@
 /**
  * G inputs: one grammar for the values given where an operation is called, judged against what it accepts.
  * Fields of type `type` and fields marked static must be literals: the checker reads them here, and binds the
- * variables the type fields name (P001). Every other value is typed by the site's reader in the caller's
- * context (G003), must be an input (G006), present when required (G005), and assignable (G004).
+ * variables they name (P001) -- a type field from its own literal, a static field through its `resolves`.
+ * Every other value is typed by the site's reader in the caller's context (G003), must be an input (G006),
+ * present when required (G005), and assignable (G004).
  */
 import {
   assignable,
@@ -11,6 +12,7 @@ import {
   hasVars,
   type Loaded,
   type Read,
+  resolvedHere,
   substitute,
   type Type,
 } from '@wilanis/core';
@@ -64,12 +66,22 @@ class InputCheck {
 
   run(): Record<string, Type> {
     this.checkUnknown();
-    // type fields first: the rest may be typed through the variables they bind
+    // what binds comes first: the rest may be typed through the variables bound here
     for (const [name, field] of Object.entries(this.accepts))
       if (this.isTypeField(field)) this.checkTypeField(name, field);
+    this.bindResolved();
     for (const [name, field] of Object.entries(this.accepts))
       if (!this.isTypeField(field)) this.checkValueField(name, field);
     return this.subst;
+  }
+
+  /**
+   * The second channel a variable is bound through: a static field whose `resolves` names where the type is
+   * written down (a store's collection), read through the same core resolution the compiler and the gate's
+   * stub use, so no two of them can disagree about what this call site binds.
+   */
+  private bindResolved(): void {
+    Object.assign(this.subst, resolvedHere(this.accepts, this.site.given, this.judge.scope.resolving()));
   }
 
   private isTypeField(field: Field): boolean {

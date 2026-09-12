@@ -17,6 +17,7 @@ import type {
   TriggerKindDoc,
 } from './model.js';
 import { type Loaded, type Registry, splitOp } from './registry.js';
+import type { Resolves } from './resolves.js';
 import { PLACEHOLDER, splitPath, TEMPLATE, WHOLE_TEMPLATE } from './templates.js';
 import { type Read, STRING, type Type, TypeResolver, UNKNOWN } from './types.js';
 import { typeAt, typeOfValue } from './values.js';
@@ -265,6 +266,18 @@ export class Scope {
       fields[name] = { type: read.type, required: !read.optional };
     }
     return { type: { kind: 'object', fields, open: false }, optional: false };
+  }
+
+  /**
+   * What a `resolves` channel reads of this tree: the document a reference names, whatever its kind, and the
+   * type a reference names. Every site that binds a variable through `resolves` -- the checker, the compiler
+   * and the gate's stub -- asks the same one, so none can differ about what a call site binds.
+   */
+  resolving(): Resolves {
+    return {
+      document: ref => this.any(ref)?.doc,
+      type: ref => this.types.spec(ref),
+    };
   }
 
   /** Is the value a literal, free of templates? */

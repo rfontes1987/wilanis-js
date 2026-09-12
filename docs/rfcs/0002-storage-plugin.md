@@ -321,9 +321,12 @@ is the point: the type is a fact of a document the checker already reads. An ope
 
 `resolves` is a new key on a native operation's input, read by the compiler alone: given the static
 value of that input, it names the document to load and the path within it whose value is a type
-reference, and binds the variable to that type. The path may name another static input of the same
-call (`collection`), so one expression covers every collection of a store. Where a type variable comes
-from is thereby always written in the port document -- `describe` prints it, and no caller repeats it.
+reference, and binds the variable to that type. A segment may take a key rather than a fixed name,
+written two ways: `[input]` takes it from another static input of the same call, so one expression
+covers every collection of a store; `{sibling}` takes it from a field beside the one just read. A path
+that reaches a type reference and goes on follows it into the shape it names, which is the one place a
+path leaves the document it started in. Where a type variable comes from is thereby always written in
+the port document -- `describe` prints it, and no caller repeats it.
 
 This is a core change, and the smallest one that removes the repetition. `resolves` is a new optional
 key on a contract's field: `$defs/field` in `packages/core/schemas/common.schema.json`, where it sits
@@ -344,10 +347,12 @@ Everything downstream is untouched: once `subst['$T']` holds a type, `substitute
 `checkValueField` already substitutes before holding a value to its contract, so `record: $T` on `put`
 is held to the collection's shape by machinery that exists.
 
-It is deliberately not a general expression language: a path of field names with one optional
-substitution of another static input of the same call (`collections[collection].of`), resolving to a
-value that must be a type reference. A port document whose `resolves` names a path that is not one is
-refused when the plugin loads, not when a graph runs.
+It is deliberately not a general expression language: a path of field names, each segment optionally
+taking a key by a static input of the same call (`collections[collection].of`) or by a sibling field
+(`of{key}`), resolving to a value that must be a type reference. A path outside that grammar is refused
+by the schema, at the field that writes it; a contract that resolves from a field that is not static, or
+takes a key by an input the operation has not got, is refused when the plugin loads (D011) -- not when a
+graph runs.
 
 | Operation | Accepts, beyond store/collection | Returns | Answers |
 |---|---|---|---|
@@ -366,7 +371,9 @@ upsert the name suggests; a graph that must not overwrite sets `"replace": false
 one they hold. RFC 0004 makes a `get`-then-`put` pair atomic for the cases a flag cannot express.
 
 **`$K`, the key's type.** A key is whatever type the collection's key field has -- `$K` is resolved
-from the store beside `$T`, by the same `resolves` expression (`collections[collection].of.<key>`), so
+from the store beside `$T`, by the same `resolves` key
+(`collections[collection].of{key}.type`: `of` is followed into the shape it names, and `{key}` takes
+the field whose name the collection's `key` holds), so
 `get`, `patch` and `remove` accept that type and `newKey` answers it. The port says nothing about
 which types a key may be: that is the shape's business, and the engine's. A collection keyed by a
 `number` field types its `get` with a number and no rule in this RFC objects. What each engine can
@@ -715,8 +722,9 @@ than dropping the questions, so the reasoning survives with the spec.
 - **No call site names a record type.** `resolves` is accepted: a native operation's static input may
   say where a type variable comes from, read as a path from the document that input names. It costs
   core one optional property on a field (*Compatibility*) and pays for the repetition every storage
-  call site would otherwise carry. The `resolveType` plugin hook remains the fallback if the path
-  grammar ever needs a second feature; it is not needed for this.
+  call site would otherwise carry. The grammar needed a second form after all -- `{sibling}`, so that a
+  key's type can be read from the record's own shape -- and taking it kept `$K` in the port document,
+  where a reader can see it, rather than in the `resolveType` plugin hook that was the fallback.
 - **An engine registers from `postLoad`.** It is the hook whose meaning is "the tree is loaded and
   judged", which is exactly when an engine may exist, and the registration table is created by
   whichever side reaches it first, so no plugin order is required of an author (*Runtime behaviour*).

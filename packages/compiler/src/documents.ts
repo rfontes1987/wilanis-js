@@ -2,11 +2,15 @@
  * What both judges read off a document: the variables a call site binds, the inputs a delegation passes
  * on, and the nodes a graph answers with. The checker and the compiler agree on these by sharing them.
  */
-import type { GraphDoc, Operation, Scope, Type, Values } from '@wilanis/core';
+import { type GraphDoc, type Operation, resolvedHere, type Scope, type Type, type Values } from '@wilanis/core';
 
-/** The variables an operation's `type` fields bind at one call site: each is a literal type reference in `given`. */
+/**
+ * The variables an operation binds at one call site, through both channels: a `type` field whose literal is
+ * the type, and a static field whose `resolves` says where the type is written down. The checker and the
+ * compiler share this, so neither can differ from the other about what a call site binds.
+ */
 export function bindings(scope: Scope, op: Operation, given: Values | undefined): Record<string, Type> {
-  const subst: Record<string, Type> = {};
+  const subst: Record<string, Type> = resolvedHere(op.accepts, given ?? {}, scope.resolving());
   for (const [name, field] of Object.entries(op.accepts ?? {})) {
     if (!field.binds || field.type !== 'type') continue;
     const value = given?.[name];

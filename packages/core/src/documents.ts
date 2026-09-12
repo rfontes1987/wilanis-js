@@ -1,11 +1,13 @@
 /**
  * Reading one document into the registry: parsed, judged against its kind's schema, placed where its kind
  * lives (D000, D001, D003, D004, D008), and registered under its canonical path. A plugin's documents are
- * registered the same way, under the plugin's root, marked native (D006).
+ * registered the same way, under the plugin's root, marked native (D006), and its ports are held to what a
+ * contract may say for itself (D011).
  */
 import { readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { type AnyDoc, type Kind, layerOf, type ProjectDoc } from './model.js';
+import { badResolves } from './contracts.js';
+import { type AnyDoc, type Kind, layerOf, type PortDoc, type ProjectDoc } from './model.js';
 import { featureOf, stem, treePath, walk } from './paths.js';
 import { misplaced } from './placement.js';
 import type { PluginModule } from './plugin.js';
@@ -144,6 +146,11 @@ export class Documents {
     const judged = validateDocument(parsed.doc, path);
     for (const refusal of judged.refusals) this.refuse(refusal);
     if (judged.refusals.length || !judged.kind) return;
+    if (judged.kind === 'port') {
+      const bad = badResolves(parsed.doc as PortDoc, path);
+      for (const refusal of bad) this.refuse(refusal);
+      if (bad.length) return;
+    }
     this.registry.add({
       doc: parsed.doc as AnyDoc,
       kind: judged.kind,
