@@ -498,10 +498,15 @@
         const chain = el('div', 'chain'); chain.appendChild(step('kept behind', link(d.connection))); page.appendChild(chain);
         page.appendChild(el('h2', null, 'Collections'));
         page.appendChild(el('p', null, 'What this feature keeps, by name. The collection is where the record type is written down, so a graph names the store and the collection and never repeats the shape.'));
-        const t = el('table'); const hd = el('tr'); for (const h of ['collection', 'records of', 'keyed by', 'holds']) hd.appendChild(el('th', null, h)); t.appendChild(hd);
+        const uniqueOf = c => (c.unique || []).map(fields => '[' + fields.join(', ') + ']').join(', ');
+        const refsOf = c => Object.entries(c.refs || {}).map(([f, r]) => f + ' \u2192 ' + r.collection + '.' + ((d.collections[r.collection] || {}).key || '?') + (r.onRemove ? ' (' + r.onRemove + ' on remove)' : '')).join(', ');
+        const defaultsOf = c => Object.entries(c.defaults || {}).map(([f, v]) => f + ' = ' + JSON.stringify(v)).join(', ');
+        const t = el('table'); const hd = el('tr'); for (const h of ['collection', 'records of', 'keyed by', 'unique', 'refs', 'default', 'holds']) hd.appendChild(el('th', null, h)); t.appendChild(hd);
         for (const [name, c] of Object.entries(d.collections)) {
           const tr = el('tr'); tr.appendChild(el('td', 'name', name));
-          tr.appendChild(el('td')).appendChild(typeEl(c.of)); tr.appendChild(el('td', 'mono', c.key)); tr.appendChild(el('td', 'desc', c.description || ''));
+          tr.appendChild(el('td')).appendChild(typeEl(c.of)); tr.appendChild(el('td', 'mono', c.key));
+          tr.appendChild(el('td', 'mono', uniqueOf(c))); tr.appendChild(el('td', 'mono', refsOf(c))); tr.appendChild(el('td', 'mono', defaultsOf(c)));
+          tr.appendChild(el('td', 'desc', c.description || ''));
           t.appendChild(tr);
         }
         page.appendChild(t);
