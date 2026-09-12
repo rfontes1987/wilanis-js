@@ -10,7 +10,7 @@ import type { Refusal } from './registry.js';
 import { parsePath, substituted } from './resolves.js';
 
 const GRAMMAR =
-  'a path is field names separated by dots, a segment optionally taking a key by another static input: collections[collection].of';
+  'a path is field names separated by dots, a segment optionally taking a key by another static input ([input]) or by a field beside the one just read ({sibling}): collections[collection].of, collections[collection].of{key}.type';
 
 /** Every way one port document's `resolves` can be wrong, each named at the field that writes it. */
 export function badResolves(doc: PortDoc, file: string): Refusal[] {

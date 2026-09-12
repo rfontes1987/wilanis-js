@@ -6,8 +6,8 @@
  * A segment may take a key rather than a fixed name, written two ways and both read left to right:
  * `[input]` takes it from another static input of the same call, so `collections[collection].of` covers every
  * collection of a store; `{sibling}` takes it from a field beside the one just read, so
- * `collections[collection].of.{key}` follows `of` into the shape it names and takes the field whose name the
- * collection's `key` holds -- which is how a key's type is reached without the port repeating it.
+ * `collections[collection].of{key}.type` follows `of` into the shape it names and takes the field whose name
+ * the collection's `key` holds -- which is how a key's type is reached without the port repeating it.
  *
  * A path that reaches a type reference and keeps going follows it into the shape it names: that is the one
  * place a path leaves the document it started in, and it is what makes the second form worth having.
@@ -26,7 +26,7 @@ export type KeyFrom = 'input' | 'sibling';
 /** One step of a `resolves` path: a field name, and -- where it takes one -- the key to take under it. */
 export interface Segment {
   name: string;
-  /** the name whose value is the key, for `collections[collection]` and `of.{key}` */
+  /** the name whose value is the key, for `collections[collection]` and `of{key}` */
   by?: string;
   /** where that name is read: an input of the call, or a sibling of the value just read */
   from?: KeyFrom;
@@ -39,7 +39,7 @@ const SEGMENT = /^([a-z][A-Za-z0-9_]*)(?:\[([a-z][A-Za-z0-9_]*)\]|\{([a-z][A-Za-
 
 /**
  * A `resolves` path parsed, or the reason it is not one: dot-separated field names, each optionally taking a
- * key by an input of the same call (`collections[collection]`) or by a sibling field (`of.{key}`).
+ * key by an input of the same call (`collections[collection]`) or by a sibling field (`of{key}`).
  */
 export function parsePath(expr: string): ResolvesPath | string {
   if (!expr) return 'an empty path';
