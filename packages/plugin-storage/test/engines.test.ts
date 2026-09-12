@@ -3,16 +3,16 @@
  * tree that names its engine before @storage works exactly as one that names it after, because the table is
  * made by whichever side reaches it first and @storage builds nothing in its own postLoad.
  */
+import { MemoryEngine } from '@wilanis/plugin-storage-memory';
 import { describe, expect, it } from 'vitest';
 import { engines } from '../src/index.js';
-import { FakeEngine } from './fake-engine.js';
 
 const KIND = '@fake/fake.connection-kind.json';
 
 describe('finding the engine that keeps the records', () => {
   it('the table is the same one whichever side reaches it first', () => {
     const engineFirst = {};
-    const engine = new FakeEngine();
+    const engine = new MemoryEngine();
     engines(engineFirst).register(KIND, engine);
     expect(engines(engineFirst).for(KIND)).toBe(engine);
 
@@ -25,7 +25,7 @@ describe('finding the engine that keeps the records', () => {
   it('one table per environment, so a reload starts clean and two trees never share an engine', () => {
     const one = {};
     const other = {};
-    engines(one).register(KIND, new FakeEngine());
+    engines(one).register(KIND, new MemoryEngine());
     expect(engines(other).for(KIND)).toBeUndefined();
     expect(engines(one).kinds).toEqual([KIND]);
     expect(engines(other).kinds).toEqual([]);
@@ -35,7 +35,7 @@ describe('finding the engine that keeps the records', () => {
     // The embedder hands a handler `{ ...env, blobs }` whenever a run carries a blob scope, as the http listener
     // does on every request; an engine registered in postLoad on the tree's env must still be found through it.
     const env = { connections: {}, plugins: {} };
-    const engine = new FakeEngine();
+    const engine = new MemoryEngine();
     engines(env).register(KIND, engine);
     expect(engines({ ...env, blobs: {} }).for(KIND)).toBe(engine);
     engines({ ...env, blobs: {} }).register('@other/other.connection-kind.json', engine);
@@ -44,7 +44,7 @@ describe('finding the engine that keeps the records', () => {
 
   it('a kind nothing registered for has no engine, whatever else did', () => {
     const env = {};
-    engines(env).register(KIND, new FakeEngine());
+    engines(env).register(KIND, new MemoryEngine());
     expect(engines(env).for('@other/other.connection-kind.json')).toBeUndefined();
   });
 });

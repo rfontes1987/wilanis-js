@@ -4,9 +4,9 @@
  * the three steps every handler takes -- not how records are kept, which is the engine's and the suite's.
  */
 import { type Type, TypeResolver } from '@wilanis/core';
+import { MemoryEngine } from '@wilanis/plugin-storage-memory';
 import { beforeEach, describe, expect, it } from 'vitest';
 import plugin, { engines } from '../src/index.js';
-import { FakeEngine } from './fake-engine.js';
 
 const KIND = '@fake/fake.connection-kind.json';
 const CONNECTION = '@connections/records.connection.json';
@@ -44,7 +44,7 @@ beforeEach(() => {
       },
     },
   };
-  engines(env).register(KIND, new FakeEngine());
+  engines(env).register(KIND, new MemoryEngine());
 });
 
 describe('what an operation reads off the tree', () => {

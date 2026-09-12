@@ -15,6 +15,7 @@ packages/plugin-blob/  @wilanis/plugin-blob  index.ts, docs/                    
 packages/plugin-reload/ @wilanis/plugin-reload  index.ts, docs/                     → core, engine
 packages/plugin-auth/  @wilanis/plugin-auth  index.ts store.ts, docs/               → core, engine   (the guard: tokens, sessions, challenges, directories)
 packages/plugin-storage/ @wilanis/plugin-storage  index.ts engine.ts store.ts where.ts handlers.ts suite.ts, docs/   → core, engine   (records behind one port; an engine plugin keeps them)
+packages/plugin-storage-memory/ @wilanis/plugin-storage-memory  index.ts engine.ts match.ts, docs/   → core, engine, plugin-storage   (an engine: records in a Map, for as long as the process)
 packages/view/         @wilanis/view       model.ts serve.ts cli.ts, client/index.html, bin/   → core, compiler, runtime
 libraries/access/      @wilanis/access     a tree to include: features/access (sign-in, sessions, policies, otp), features/access-dev (its own binding), connections/, project.json, test/
 example/               a consumer project: JSON documents + package.json; includes @wilanis/access and binds its identity port in features/directories
@@ -23,7 +24,7 @@ reserved/wilanis/      a name held on npm with no code under it; not a workspace
 
 Dependencies point one way: engine ← core ← compiler ← runtime ← view, and plugins depend on core and
 engine only. The viewer is a tool over a loaded tree, not a plugin: it grants nothing to a tree and
-executes nothing; `viewOf` is pure and the page under `client/` is one static file with no build step. A plugin never imports the compiler or the runtime. The runtime never reaches into a plugin's
+executes nothing; `viewOf` is pure and the page under `client/` is one static file with no build step. A plugin never imports the compiler or the runtime. One plugin may import another only where that other is a **contract** it implements -- `@storage` says what a store is and an engine plugin answers it -- and the contract imports no engine, so the arrow still points one way. The runtime never reaches into a plugin's
 internals; it sees the `PluginModule` contract in `packages/core/src/plugin.ts`. If a change needs an
 import against this direction, the design is wrong, not the import rule.
 
@@ -145,7 +146,7 @@ branches `then` and `otherwise`. Neither is a place to put new debt.
 - **A schema change.** Until 1.0: edit in place; the schemas are served from `main`. After 1.0: compatible,
   edit in place; breaking, the base URL in `model.ts` and every `$id` move to the tag `schemas-v2`, and the
   `schemas-v1` tag stays (RFC 0008).
-- **A new plugin.** A new package under `packages/`, depending on core and engine only, exporting its
+- **A new plugin.** A new package under `packages/`, depending on core and engine only -- and, where it implements one, the contract plugin it answers -- exporting its
   `PluginModule` as default: `root`, `docs` (the directory of the JSON documents it ships, with
   `plugin.json`; listed in the package's `files`), `handlers`, and optionally `triggers`, `codecs`, `check`
   (its X rules; it refuses with a `Refusal` object: code, file, message, at, hint),
