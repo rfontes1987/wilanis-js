@@ -342,10 +342,25 @@ export interface ShapeDoc extends Envelope {
   fields: Fields;
   open?: boolean | TypeRef;
 }
-/** One collection of a store: the shape its records have, the field that identifies one, and what it holds. */
+/** One field of a collection holding the key of another: which collection, and what removing a referenced record does. */
+export interface StoreRef {
+  collection: string;
+  /** refuse is the only value there will be: nothing is ever deleted on a tree's behalf. */
+  onRemove?: 'refuse';
+  description?: string;
+}
+/**
+ * One collection of a store: the shape its records have, the field that identifies one, the constraints the
+ * records are held to, and what it holds. `unique` lists combinations no two records may repeat, each inner
+ * list one constraint over those fields together; `refs` says which fields hold another collection's key;
+ * `defaults` is what existing rows receive when `ensure` adds a column, never what a graph writes.
+ */
 export interface Collection {
   of: TypeRef;
   key: string;
+  unique?: string[][];
+  refs?: Record<string, StoreRef>;
+  defaults?: Record<string, unknown>;
   description?: string;
 }
 /**
