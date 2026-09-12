@@ -183,11 +183,17 @@ export function packageOf(specifier: string): string | null {
   return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : (parts[0] ?? null);
 }
 
-/** Every directory under `packages/`, repository-relative and sorted, so a claim reads the workspace. */
+/**
+ * Every package under `packages/`, repository-relative and sorted, so a claim reads the workspace. A
+ * directory holding no `package.json` is not a package: build output is gitignored, so a `dist/` left by a
+ * branch that had the package outlives a switch to one that does not, and a reader that took it for a
+ * package took the whole suite down with it.
+ */
 export function packageDirs(): string[] {
   return readdirSync('packages', { withFileTypes: true })
     .filter(entry => entry.isDirectory())
     .map(entry => `packages/${entry.name}`)
+    .filter(dir => fileExists(`${dir}/package.json`))
     .sort();
 }
 

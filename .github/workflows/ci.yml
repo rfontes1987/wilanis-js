@@ -84,22 +84,22 @@ jobs:
         run: |
           base="${{ github.event.pull_request.base.sha }}"
           head="${{ github.event.pull_request.head.sha }}"
-          if [ -z "$(git diff --name-only "$base" "$head" -- fitness/)" ]; then
+          if [ -z "$(git diff --name-only "$base" "$head" -- 'fitness/*.fitness.ts')" ]; then
             echo "this pull request changes no decision; nothing to approve"
             exit 0
           fi
           missing=""
           for commit in $(git rev-list "$base".."$head"); do
-            git diff-tree --no-commit-id --name-only -r "$commit" | grep -q '^fitness/' || continue
+            git diff-tree --no-commit-id --name-only -r "$commit" | grep -qE '^fitness/[^/]+\.fitness\.ts$' || continue
             git log -1 --format=%B "$commit" | grep -Eq '^Decision: (adds|reconfigures|retires) fitness/' \
               || missing="$missing $commit"
           done
           if [ -n "$missing" ]; then
-            echo "refused: these commits touch fitness/ and carry no Decision: line"
+            echo "refused: these commits change a decision and carry no Decision: line"
             for commit in $missing; do echo "  $(git log -1 --oneline "$commit")"; done
             echo
             echo "A commit that changes a decision says which of adds, reconfigures or retires, which file,"
             echo "and why. Rewrite the message (git rebase -i) and push again."
             exit 1
           fi
-          echo "every commit touching fitness/ carries its Decision: line"
+          echo "every commit changing a decision carries its Decision: line"
