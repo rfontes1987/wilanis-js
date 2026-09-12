@@ -9,7 +9,14 @@
   "effects": [
     "@http/http.port.json#request",
     "@blob/csv.port.json#parse",
-    "@blob/csv.port.json#write"
+    "@blob/csv.port.json#write",
+    "@storage/store.port.json#find",
+    "@storage/store.port.json#get",
+    "@storage/store.port.json#put",
+    "@storage/store.port.json#patch",
+    "@storage/store.port.json#remove",
+    "@storage/store.port.json#newKey",
+    "@storage/storage.port.json#ensure"
   ],
   "dependsOn": [
     "access"

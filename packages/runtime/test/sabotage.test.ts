@@ -188,19 +188,20 @@ describe('sabotage: graphs, layers, resolvers and triggers', () => {
     ).toEqual(['T006']);
   });
   it('P001 a reason given as a read: the checker must see the word', () => {
-    // and with the word unreadable, the mapping that named it has nothing to point at
+    // the mapping that named it is not dead, though: reasons are gathered across profiles, and under
+    // local the same operation is met by a graph over the store, which still refuses with the word
     expect(
       sabotage('features/monitor/data/get-row.graph.json', graph => {
         graph.nodes.find((node: any) => node.id === 'missing').in.reason = '{{asked.status}}';
       }).sort(),
-    ).toEqual(['P001', 'T006']);
+    ).toEqual(['P001']);
   });
   it('G005 a refusal without a reason', () => {
     expect(
       sabotage('features/monitor/data/get-row.graph.json', graph => {
         delete graph.nodes.find((node: any) => node.id === 'missing').in.reason;
       }).sort(),
-    ).toEqual(['G005', 'T006']);
+    ).toEqual(['G005']);
   });
   it('G006 an input the operation does not declare', () => {
     expect(

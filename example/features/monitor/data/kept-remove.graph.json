@@ -1,0 +1,62 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/graph.schema.json",
+  "label": "Remove what is kept",
+  "description": "Data graph behind monitor.remove under the local profile: remove the record and answer the one that was removed, so the caller sees what it lost.",
+  "in": "@monitor/domain/EntryRef.shape.json",
+  "out": {
+    "type": "@monitor/domain/Entry.shape.json",
+    "from": [
+      "row",
+      "missing"
+    ]
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "asked",
+      "label": "Remove the record",
+      "run": "@storage/store.port.json#remove",
+      "in": {
+        "store": "@monitor/data/entries.store.json",
+        "collection": "entries",
+        "key": "{{in.id}}"
+      }
+    },
+    {
+      "type": "@wilanis/node/switch.schema.json",
+      "id": "route",
+      "label": "Was it there?",
+      "in": {
+        "record": "{{asked.record}}"
+      },
+      "rules": [
+        {
+          "when": "has(record)",
+          "to": "row"
+        }
+      ],
+      "else": "missing"
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "row",
+      "label": "The record",
+      "run": "@std/object.port.json#make",
+      "in": {
+        "value": "{{asked.record}}",
+        "type": "@monitor/domain/Entry.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "missing",
+      "label": "No such entry",
+      "run": "@std/outcome.port.json#refuse",
+      "in": {
+        "reason": "missing",
+        "message": "no entry {{in.id}}",
+        "type": "@monitor/domain/Entry.shape.json"
+      }
+    }
+  ]
+}

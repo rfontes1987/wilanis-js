@@ -11,16 +11,25 @@ describe('the example tree', () => {
   it('passes check', () => {
     expect(codes(EXAMPLE)).toEqual([]);
   });
+  it('keeps its entries under the local profile, and every branch of that still settles', async () => {
+    // the same routes, the same policies, the same domain graphs: only the binding differs, which is
+    // what a port is for. Nothing here reaches a network, so this is the milestone's demo in one line.
+    const run = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed: 1, profile: 'local' });
+    expect(run.ok, run.lines.join('\n')).toBe(true);
+    expect(run.lines.join('\n')).toMatch(/every branch settled/);
+    // and the store is what answers: a data graph of the local binding is among the graphs walked
+    expect(run.lines.join('\n')).toContain('features/monitor/data/kept-get');
+  });
   it('rehearses every branch of every switch, whatever the seed', async () => {
     // solved from the rules, so no seed can leave a branch untried
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-      const run = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed });
+      const run = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed, profile: 'live' });
       expect(run.ok, `seed ${seed}: ${run.lines.join('\n')}`).toBe(true);
       expect(run.lines.join('\n')).not.toMatch(/NEVER RUN|BROKE|BLOCKED|WRONG ROUTE/);
     }
   });
   it('reports each decision once, under the graph that declares it', async () => {
-    const run = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed: 1 });
+    const run = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed: 1, profile: 'live' });
     const text = run.lines.join('\n');
     // list-rows is reached from two triggers (the listing and the digest), and is one decision even so
     expect(text.match(/list-rows {2}switch 'route'/g)).toHaveLength(1);
@@ -29,7 +38,7 @@ describe('the example tree', () => {
     expect(text).toMatch(/every branch settled -- 37 branch\(es\), 15 decision\(s\), 15 graph\(s\)/);
   });
   it('reaches both the answer and the declared failure of every data graph', async () => {
-    const run = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed: 1 });
+    const run = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed: 1, profile: 'live' });
     const text = run.lines.join('\n');
     // the six data graphs each answer on one branch and refuse on purpose on the others
     expect(text.match(/refused on purpose at 'failed' as upstream/g)).toHaveLength(6);
@@ -44,7 +53,7 @@ describe('the example tree', () => {
   });
   it('rehearses a switch inside a mapped operation through the first element, whatever the seed', async () => {
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-      const run = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed, verbose: true });
+      const run = await rehearse(loadTree(EXAMPLE, PLUGINS, INCLUDES), { seed, verbose: true, profile: 'live' });
       const text = run.lines.join('\n');
       // the batch delete reaches the delete-row decision through its map, and every branch of it settles
       expect(text).toMatch(/delete-row {2}switch 'route' {2}3\/3 branches {2}\[via delete-entries, delete-entry\]/);
@@ -60,6 +69,8 @@ describe('the example tree', () => {
       '@http',
       '@reload',
       '@std',
+      '@storage',
+      '@storage-memory',
     ]);
   });
 });
@@ -141,7 +152,7 @@ describe('plugin packages and hooks', () => {
     const dir = project([{ use: '@std' }, { use: '@fake', settings: { greeting: 'hi' } }]);
     const loaded = loadTree(dir, { ...BUILTIN_PLUGINS, '@fake': fake });
     expect(checkTree(loaded).items).toEqual([]);
-    const { stop } = await start(loaded, { log: () => {} });
+    const { stop } = await start(loaded, { log: () => {}, profile: 'live' });
     expect(calls).toEqual(['up:hi:string']);
     await stop();
     expect(calls).toEqual(['up:hi:string', 'down']);
@@ -158,7 +169,7 @@ describe('branch rehearsal', () => {
     const doc = JSON.parse(readFileSync(at, 'utf8'));
     edit(doc);
     writeFileSync(at, JSON.stringify(doc));
-    const run = await rehearse(loadTree(dir, PLUGINS), { seed: 1 });
+    const run = await rehearse(loadTree(dir, PLUGINS), { seed: 1, profile: 'live' });
     rmSync(dir, { recursive: true, force: true });
     return run.lines;
   }

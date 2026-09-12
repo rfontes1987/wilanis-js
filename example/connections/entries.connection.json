@@ -1,0 +1,7 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/connection.schema.json",
+  "label": "Entries",
+  "description": "Where the entries are kept under the local profile: a store in memory, living exactly as long as the process. It has no settings at all, so there is nothing here to get wrong; a production profile points the same store at a database by naming a connection of another engine's kind.",
+  "kind": "@storage-memory/memory.connection-kind.json",
+  "settings": {}
+}

@@ -84,7 +84,7 @@ describe('sabotage: ports, bindings and secrets', () => {
       sabotage('features/hello/data/greeting.binding.json', binding => {
         binding.port = '@http/http.port.json';
       }),
-    ).toEqual(['B002', 'B003']);
+    ).toEqual(['B002', 'B002', 'B003']);
   });
   it('C001 settings that read anything but a secret', () => {
     expect(

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "A wilanis project: pure JSON documents, run by @wilanis/runtime with the @http, @blob, @reload and @auth plugin packages, against a public REST API.",
+  "description": "A wilanis project: pure JSON documents, run by @wilanis/runtime with the @http, @blob, @reload, @auth and @storage plugin packages, against a public REST API or a store of its own.",
   "scripts": {
     "check": "wilanis check .",
     "rehearse": "wilanis rehearse .",
@@ -19,6 +19,8 @@
     "@wilanis/plugin-blob": "0.1.0",
     "@wilanis/plugin-reload": "^0.1.0",
     "@wilanis/plugin-auth": "0.1.0",
-    "@wilanis/access": "0.1.0"
+    "@wilanis/access": "0.1.0",
+    "@wilanis/plugin-storage": "0.1.0",
+    "@wilanis/plugin-storage-memory": "0.1.0"
   }
 }

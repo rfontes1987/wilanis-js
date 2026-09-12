@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/graph.schema.json",
+  "label": "List what is kept, by method",
+  "description": "Data graph behind monitor.listByMethod under the local profile: the records whose method is the one asked for. The filter names a field of the collection's shape, and the checker holds it to that.",
+  "in": "@monitor/domain/Method.shape.json",
+  "out": {
+    "type": "@monitor/domain/Entry.shape.json[]",
+    "from": [
+      "rows"
+    ]
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "rows",
+      "label": "Read the entries of one method",
+      "run": "@storage/store.port.json#find",
+      "in": {
+        "store": "@monitor/data/entries.store.json",
+        "collection": "entries",
+        "where": {
+          "method": "{{in.method}}"
+        },
+        "order": [
+          {
+            "by": "url"
+          }
+        ]
+      }
+    }
+  ]
+}

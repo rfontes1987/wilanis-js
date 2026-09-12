@@ -163,6 +163,9 @@
     "export": {
       "description": "Every entry as a CSV file.",
       "returns": "blob"
+    },
+    "prepare": {
+      "description": "Make the storage this profile chose ready to answer, once, before anything is served. Over a store it creates the collections the store declares; over the REST API it reads the collection once, so a tree whose upstream is unreachable refuses to serve rather than answering every route with a fault."
     }
   }
 }

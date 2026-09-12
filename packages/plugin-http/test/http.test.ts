@@ -6,6 +6,8 @@ import { loadTree } from '@wilanis/core';
 import auth from '@wilanis/plugin-auth';
 import blobs from '@wilanis/plugin-blob';
 import reload from '@wilanis/plugin-reload';
+import storage from '@wilanis/plugin-storage';
+import memory from '@wilanis/plugin-storage-memory';
 import { BUILTIN_PLUGINS, start } from '@wilanis/runtime';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import http, { encode } from '../src/index.js';
@@ -41,11 +43,19 @@ beforeAll(async () => {
   // a copy outside the workspace cannot resolve plugins[].from through node_modules, so the plugins are handed in
   const load = loadTree(
     dir,
-    { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs, '@reload': reload, '@auth': auth },
+    {
+      ...BUILTIN_PLUGINS,
+      '@http': http,
+      '@blob': blobs,
+      '@reload': reload,
+      '@auth': auth,
+      '@storage': storage,
+      '@storage-memory': memory,
+    },
     INCLUDES,
   );
   expect(checkTree(load).items).toEqual([]);
-  ({ stop } = await start(load, { log: line => logs.push(line) }));
+  ({ stop } = await start(load, { log: line => logs.push(line), profile: 'live' }));
   token = await signInAsRecorder();
 });
 

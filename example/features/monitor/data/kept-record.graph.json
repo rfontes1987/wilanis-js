@@ -1,0 +1,77 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/graph.schema.json",
+  "label": "Keep a record",
+  "description": "Data graph behind monitor.record under the local profile: ask for a key, then write the whole record under it. Nothing is filled in silently -- the key comes from a node a reader can see.",
+  "in": "@monitor/domain/EntryRecord.shape.json",
+  "out": {
+    "type": "@monitor/domain/Entry.shape.json",
+    "from": [
+      "row",
+      "failed"
+    ]
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "key",
+      "label": "A key no record has",
+      "run": "@storage/store.port.json#newKey",
+      "in": {
+        "store": "@monitor/data/entries.store.json",
+        "collection": "entries"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "saved",
+      "label": "Write the record under that key",
+      "run": "@storage/store.port.json#put",
+      "in": {
+        "store": "@monitor/data/entries.store.json",
+        "collection": "entries",
+        "record": {
+          "id": "{{key}}",
+          "url": "{{in.url}}",
+          "method": "{{in.method}}",
+          "ua": "{{in.ua}}"
+        }
+      }
+    },
+    {
+      "type": "@wilanis/node/switch.schema.json",
+      "id": "route",
+      "label": "Was it written?",
+      "in": {
+        "record": "{{saved.record}}"
+      },
+      "rules": [
+        {
+          "when": "has(record)",
+          "to": "row"
+        }
+      ],
+      "else": "failed"
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "row",
+      "label": "The record",
+      "run": "@std/object.port.json#make",
+      "in": {
+        "value": "{{saved.record}}",
+        "type": "@monitor/domain/Entry.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "failed",
+      "label": "Nothing was written",
+      "run": "@std/outcome.port.json#refuse",
+      "in": {
+        "reason": "upstream",
+        "message": "the store answered no record for {{in.url}}",
+        "type": "@monitor/domain/Entry.shape.json"
+      }
+    }
+  ]
+}

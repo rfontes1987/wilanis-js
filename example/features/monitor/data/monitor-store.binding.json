@@ -1,26 +1,26 @@
 {
   "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/binding.schema.json",
-  "label": "REST storage",
-  "description": "monitor.port.json over the REST API: one data graph per operation, each a declared request plus the decision of what its status means.",
+  "label": "Monitor over a store",
+  "description": "How the monitor port is met when the entries are kept rather than fetched: the six data graphs read and write one collection through @storage, and the business graphs are the same ones the REST binding uses -- which is the point of a port.",
   "port": "@monitor/domain/monitor.port.json",
   "operations": {
     "listAll": {
-      "graph": "@monitor/data/list-rows.graph.json"
+      "graph": "@monitor/data/kept-list.graph.json"
     },
     "listByMethod": {
-      "graph": "@monitor/data/list-rows-by-method.graph.json"
+      "graph": "@monitor/data/kept-list-by-method.graph.json"
     },
     "get": {
-      "graph": "@monitor/data/get-row.graph.json"
+      "graph": "@monitor/data/kept-get.graph.json"
     },
     "record": {
-      "graph": "@monitor/data/create-row.graph.json"
+      "graph": "@monitor/data/kept-record.graph.json"
     },
     "update": {
-      "graph": "@monitor/data/update-row.graph.json"
+      "graph": "@monitor/data/kept-update.graph.json"
     },
     "remove": {
-      "graph": "@monitor/data/delete-row.graph.json"
+      "graph": "@monitor/data/kept-remove.graph.json"
     },
     "removeMany": {
       "description": "The business graph that fans one removal out per id and waits for all of them.",
@@ -53,13 +53,10 @@
       "graph": "@monitor/domain/export-entries.graph.json"
     },
     "prepare": {
-      "description": "Reading the collection once is what readiness means for an upstream API: there is nothing to create, and a tree that cannot reach it refuses to serve.",
-      "run": "@http/http.port.json#request",
+      "description": "Create the collections the store declares, and leave alone any that are there. The startup step names this operation, so what a tree prepares is what its project.json says it prepares.",
+      "run": "@storage/storage.port.json#ensure",
       "in": {
-        "connection": "@connections/monitor-api.connection.json",
-        "method": "GET",
-        "path": "/monitor",
-        "produces": "application/json"
+        "store": "@monitor/data/entries.store.json"
       }
     }
   }
