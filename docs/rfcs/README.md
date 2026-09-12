@@ -25,13 +25,13 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0017](0017-migration-planner.md) | Migrations derived from store declarations | accepted |
 | [0018](0018-scenario-generation.md) | Scenario generation from the branch solver | accepted |
 | [0019](0019-diagnostics-for-repair-loops.md) | Diagnostics designed for an agent's repair loop | accepted |
-| [0020](0020-security-model.md) | The security model: what is guaranteed, what is enforced, what is the application's | stub |
+| [0020](0020-security-model.md) | The security model: what is guaranteed, what is enforced, what is the application's | draft |
 | [0021](0021-higher-level-constructs.md) | Higher-level constructs: state machines and resources | accepted |
 | [0022](0022-storage-engines.md) | More storage engines: SQLite, MySQL, and declared capabilities | accepted |
 | [0023](0023-adapters.md) | Adapters: search, email, payment | accepted |
 | [0024](0024-cloud-deployment.md) | Kubernetes deployment: a Helm chart and a local cluster | stub |
 | [0025](0025-ai-provider-integrations.md) | AI model calls as an effect | accepted |
-| [0026](0026-application-manifest.md) | The application manifest | stub |
+| [0026](0026-application-manifest.md) | The application manifest | draft |
 | [0027](0027-fitness-functions.md) | Fitness functions: decisions about the code, held by the tests that record them | implemented |
 | [0028](0028-principles-hold.md) | The principles hold: four sentences of `CLAUDE.md` that nothing held, and the two claims not to write | implemented |
 | [0029](0029-named-reads.md) | `reads`: a document names each read it takes from the request | accepted |
