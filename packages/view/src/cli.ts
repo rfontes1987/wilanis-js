@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
-/** wilanis-view [root] [--port n] [--host h] [--open]: serve the viewer for a tree. */
+/** wilanis-view [root] [--port n] [--host h] [--open] [--static dir]: serve the viewer for a tree, or write it. */
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { serveView } from './serve.js';
+import { writeSite } from './static.js';
 
-const USAGE = `wilanis-view [root] [--port 4400] [--host 127.0.0.1] [--open]
+const USAGE = `wilanis-view [root] [--port 4400] [--host 127.0.0.1] [--open] [--static <dir>]
 
 Serves every document of the tree as a page: graphs as a canvas of nodes, ports and edges; every reference
 one click away; the browser's back button walks back. Open http://127.0.0.1:4400/#@features/... to land on
-a document.`;
+a document.
+
+--static <dir> writes the same page and every answer behind it into <dir> and exits, for a tree published
+from a host that runs nothing. Paths are written relative to the tree's parent, so the site names no disk.`;
 
 /** What a flag is worth: what follows its `=`, else the next word when that is not a flag, else just being there. */
 function flagValue(argv: string[], at: number, written: string | undefined): { value: string; next: number } {
@@ -53,6 +57,15 @@ async function main() {
   if (!existsSync(join(root, 'project.json'))) {
     console.error(`no project.json in ${root}`);
     process.exit(2);
+  }
+  if (flags.static !== undefined) {
+    if (flags.static === 'true') {
+      console.error('--static needs a directory to write into: --static site/example');
+      process.exit(2);
+    }
+    const written = await writeSite(root, flags.static);
+    console.log(`wrote ${written.length} files to ${flags.static}`);
+    return;
   }
   const { url } = await serveView(root, {
     port: flags.port ? Number(flags.port) : undefined,
