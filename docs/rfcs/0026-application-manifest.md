@@ -3,7 +3,7 @@
 - **Status:** draft (stub)
 - **Areas:** `area:runtime`
 - **Tracking issue:** #28
-- **Depends on:** RFC 0016 (capability-aware compilation)
+- **Depends on:** RFC 0013 (the profile, and `reachOf`, which is what the manifest prints), RFC 0016 (`permits`, printed beside it)
 
 ## Summary
 
