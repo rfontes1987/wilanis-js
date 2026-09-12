@@ -4,9 +4,9 @@
 contracts between the parts and how data flows through them. A compiler reads every file and proves they fit
 together before anything runs. A small engine runs them.
 
-The example in this repository serves **fourteen HTTP routes and three commands**: a REST resource over a
-rate-limited upstream, CSV import and export, sign-in against two directories, sessions, and role-based
-policies over every write. It is **57 JSON files and zero lines of JavaScript**.
+The example in this repository serves a REST resource over a rate-limited upstream, CSV import and export,
+sign-in against two directories, sessions, and role-based policies over every write. **Every file in it is a
+JSON document, and there is no JavaScript at all.** `wilanis check example` says how many documents that is.
 
 *Pre-1.0 and moving. Nothing is on npm yet, so clone and build to try it. See [Status](#status).*
 
@@ -40,8 +40,8 @@ under the same policies, and neither the engine nor the compiler knows what HTTP
 
 ## What it does is a graph
 
-Behind the port, one file per operation. Two of the five nodes in the one behind `get`, the decision and
-one of the outcomes it routes to:
+Behind the port, one file per operation. Two nodes of the one behind `get`: the decision, and one of the
+outcomes it routes to.
 
 ```json
 {
@@ -92,11 +92,10 @@ features/monitor/data/get-row  switch 'route'  3/3 branches
   ok  when status == 404               refused on purpose at 'missing' as missing: "no entry golf"
   ok  when status == 200 && has(body)  answered from 'row'
   ok  anything else                    refused on purpose at 'failed' as upstream: "the monitor API answered 500"
-
-every branch settled -- 37 branch(es), 15 decision(s), 15 graph(s).
 ```
 
-A rule that no input can satisfy is reported as `NEVER RUN`: dead logic, or a hole in your routing, found
+It ends by saying every branch settled, or which did not. A rule that no input can satisfy is reported as
+`NEVER RUN`: dead logic, or a hole in your routing, found
 without writing a test. `wilanis fuzz` writes runs out as scenarios, files of their own, and `wilanis regress`
 replays them and compares node by node, so an edit that changes what the service does says so before it
 ships.
@@ -134,13 +133,13 @@ npx wilanis start example          # serve it on :8080
 |---|---|
 | **Shape** | A type: named fields, required unless said otherwise. An `edge` shape is what the outside world sends; a `core` shape is yours. |
 | **Port** | A contract: operations with what they accept and return. |
-| **Binding** | How a port is met, one graph per operation. Swap it and the same code runs against a different store, or a fake. |
+| **Binding** | How a port is met: the graph, or the delegation, behind each operation. Swap it and the same code runs against a different store, or a fake. |
 | **Graph** | A data flow: nodes that run an operation, route on a condition, or fan out over a list. A node runs when its inputs are ready. |
 | **Trigger** | An entry point: an HTTP route, a command, whatever a plugin offers. It names the operation to fire and the policies that gate it. |
 | **Policy** | A gate on a trigger. It allows by answering, or refuses with a reason. A trigger with no policies is public. |
 | **Connection** | Where an effect goes and how it is paced: an address, credentials read from secrets, a throttle. A graph names the connection, never the address. |
 | **Profile** | Which binding meets which port, chosen per environment, so the same documents run against a fake or the real thing. |
-| **Feature** | A directory of three: `edge/`, `domain/`, `data/`. The directory is the layer, and the checker reads it off the path. |
+| **Feature** | A directory with `edge/`, `domain/` and `data/` inside. The directory is the layer, and the checker reads it off the path. |
 | **Plugin** | An npm package that ships JSON documents and one handler per operation. It is the only place code lives. |
 
 [`docs/model.md`](docs/model.md) is the full reference: every rule, every refusal code, `project.json`, and
@@ -150,7 +149,7 @@ what a tree starts.
 
 | Package | |
 |---|---|
-| [`@wilanis/engine`](packages/engine) | The kernel: stateless, clockless, 650 lines, and it imports nothing |
+| [`@wilanis/engine`](packages/engine) | The kernel: stateless, clockless, and it imports nothing |
 | [`@wilanis/core`](packages/core) | The document language: schemas, model, type system, loader |
 | [`@wilanis/compiler`](packages/compiler) | Judges a loaded tree, and lowers its graphs to engine specs |
 | [`@wilanis/runtime`](packages/runtime) | Embedder, `rehearse`, `fuzz`, `regress`, startup, and the `wilanis` CLI |
