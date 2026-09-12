@@ -21,14 +21,19 @@ privately, the way [SECURITY.md](SECURITY.md) says, never as an issue.
 
 ## Finding something to work on
 
+One milestone is worked at a time: the open one with the earliest due date, since `docs/roadmap.md`
+numbers them in the order their RFCs allow.
+
 ```
-gh issue list -R wilanis/wilanis-js --label status:ready --no-assignee
+gh api repos/wilanis/wilanis-js/milestones --jq '[.[] | select(.state == "open")] | sort_by(.due_on)[0].title'
+gh issue list -R wilanis/wilanis-js --label status:ready --search "no:assignee" --milestone "<that title>"
 gh issue list -R wilanis/wilanis-js --label "help wanted"
 ```
 
-Prefer the lowest milestone. Pick one, assign yourself, read its RFC, then work. If you use Claude Code, `/roadmap` does exactly
-this, `/rfc` walks through proposing a new RFC, and `/review` briefs the maintainer on a pull request or
-an RFC and acts on their word. The skills live in `.claude/skills/`.
+Pick one, assign yourself, read its RFC, then work. If nothing under the milestone is `status:ready`, its
+remaining steps wait on one in flight: say which, rather than reaching into the next milestone. If you use
+Claude Code, `/roadmap` does exactly this, `/rfc` walks through proposing a new RFC, and `/review` briefs
+the maintainer on a pull request or an RFC and acts on their word. The skills live in `.claude/skills/`.
 
 ## Branches
 
@@ -36,7 +41,13 @@ A branch is named after the issue it serves: `<issue>-<short-title>`, as in `4-s
 request from a branch named otherwise fails its `branch name` check. `main` takes pull requests only, with
 the checks green, and never a force push. A branch lives while it is worked on: with no open pull request
 it is deleted 14 days after its last commit; with one, the pull request is marked stale after 30 quiet days
-and closed 14 days later. Merging deletes the head branch.
+and closed 14 days later. Merging deletes the head branch on the remote, and not your copy of it:
+delete that too, or the clone collects branches whose remote is gone.
+
+```
+git switch main && git pull --ff-only && git branch -D <issue>-<short-title>
+git fetch --prune
+```
 
 ## The rules the code follows
 
