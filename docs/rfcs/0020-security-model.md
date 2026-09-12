@@ -1,10 +1,12 @@
 # RFC 0020: The security model: what is guaranteed, what is enforced, what is the application's
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:process` (`docs/security-model.md`, `SECURITY.md`, two fitness functions under `fitness/`, a
   sentence in `CONTRIBUTING.md`), `area:runtime` (one sentence in `packages/runtime/templates/CLAUDE.md`; the
   README's *Reference: the model in one page* section points at the page). Nothing in the engine, the compiler
-  or a plugin: this RFC adds no rule and changes no behaviour.
+  or a plugin: this RFC adds no rule and changes no behaviour. Accepting it removed one dead line of core --
+  the unread return value of `Registry.add`, whose comment cited a D002 no rule made -- because a page that
+  cites a code the code does not make is the thing this RFC exists to prevent.
 - **Schemas:** none
 - **Packages:** none new
 - **Tracking issue:** #22
@@ -174,10 +176,11 @@ today (`packages/core/src/{documents,validate,load,placement}.ts`, `packages/com
 
 | Line | Codes |
 |---|---|
-| every document is JSON of a kind the schemas know, once, in the directory its kind lives in | D000 D001 D002 D003 D004 D005 D008 |
+| every document is JSON of a kind the schemas know, once, in the directory its kind lives in | D000 D001 D003 D004 D005 D008 |
 | every reference resolves, and only to what its layer may see | R001 L005 |
 | a document's layer is its directory; a type crosses a layer only where the layer allows | D008 L001 |
 | a plugin or include is an npm package the project names; an include's plugins are the project's | D006 D009 D010 |
+| an alias names one thing: not a plugin root, not a reserved root, not a folder, and not two things across an include | D007 |
 | a domain graph reaches no effect and reads no request; a data graph runs no domain operation | L002 |
 | a data graph reaches only the effects its feature allows | L003 |
 | a domain graph does more than forward; a binding lives inside a feature | L007 |
@@ -279,9 +282,13 @@ Two fitness functions, one decision each (RFC 0027; `fitness/README.md`):
 - **`fitness/the-security-model-cites-live-codes.fitness.ts`.** Claim: *every refusal code the security model
   cites is one the checker or a plugin makes, and every line under Guaranteed cites at least one*. `gather` reads
   `docs/security-model.md` and the codes emitted from the sources, as `every-refusal-code-is-proved-by-a-sabotage`
-  gathers them today. `judge`: a cited code nobody makes is a violation naming the line and saying *the rule is
-  gone: remove the line or say which code holds it now*; a line under *Guaranteed* with no code is a violation
-  saying *a guarantee names the code that proves it*. Sabotage: a page citing `L099`; a line with no bracket.
+  gathers them today. `judge` reads both directions: a cited code nobody makes is a violation naming the line and
+  saying *the rule is gone: remove the line or say which code holds it now*; a code the checker or a plugin makes
+  that no line cites is a violation saying *a rule the page does not account for: add it to the line it holds, or
+  say why it guarantees nothing*; a line under *Guaranteed* with no code is a violation saying *a guarantee names
+  the code that proves it*. The second direction is the one this RFC needed and did not have: D007 was emitted and
+  uncited through a full review of the draft. Sabotage: a page citing `L099`; a made code no line cites; a line
+  with no bracket.
 - **`fitness/a-document-never-runs-code.fitness.ts`.** Claim: *no source under `packages/*/src` evaluates a
   string or loads a module from a path a document could supply*. `gather` reads every source file. `judge`: `eval(`,
   `new Function(`, `vm.`, and a dynamic `import(` or `require(` whose argument is not a string literal or a
@@ -333,21 +340,34 @@ Steps 1 to 3 in any order; step 4 after 1.
 
 ## Open questions
 
-Before `accepted`:
+Decided before `accepted`:
 
-- **Whether the page names threats it does not address as a fourth section**, or leaves the supply chain to
-  `CONTRIBUTING.md` alone. This RFC recommends the section, one paragraph, as shown: a boundary stated, a
-  procedure left to `CONTRIBUTING.md`.
-- **Whether each guaranteed line cites its codes in the text.** This RFC recommends yes, held by the fitness
-  function; the alternative leaves the join between sentence and code in a reader's head.
-- **Who may change the page.** This RFC recommends: a line is added by the pull request that makes it true,
-  removed or weakened by an RFC alone, wording by an ordinary pull request, and no hook beyond the fitness
-  function.
-- **Whether the redaction depth is stated or lifted before the page is published.** This RFC recommends stating
-  it in the first version, as the table does, and lifting it in a task of RFC 0006 or a fix if the bound has no
-  reason a comment explains; the line then loses its clause.
-- **Whether `SECURITY.md` states a response time.** This RFC recommends no number: one maintainer, and a promise
-  of days that cannot be kept is worse than "acknowledged, then fixed ahead of every other piece of work".
+- **The page names threats it does not address**, as the fourth section *Outside the model*, one paragraph: a
+  reader who is not told the supply chain is outside the model will assume `permits` covers a hostile plugin,
+  and it does not. The boundary is stated here; the procedure for this repository's own packages stays in
+  `CONTRIBUTING.md`.
+- **Each guaranteed line cites its codes in the text**, held by the first fitness function. The alternative
+  leaves the join between sentence and code in a reader's head, and leaves nothing for a build to check.
+- **Who may change the page**: a line is added by the pull request that makes it true; removed or weakened by an
+  RFC alone; wording by an ordinary pull request. No hook beyond the fitness function.
+- **The redaction depth is stated, not lifted.** The first version says "to a depth of six fields inside a
+  type", as the table does. `SECRET_DEPTH` in `packages/compiler/src/lower.ts:76` is a recursion guard with no
+  reason a comment explains; lifting it is a change to the compiler and belongs to a task of its own, not to a
+  docs-only RFC whose areas are `area:process` and `area:runtime`. The line loses its clause when that task
+  lands.
+- **`SECURITY.md` states no response time.** One maintainer: a promise of days that cannot be kept is worse than
+  "acknowledged, then fixed ahead of every other piece of work".
+
+Settled while reviewing this draft, each a correction the page's own fitness function is now specified to catch:
+
+- **D002 is gone.** It was cited on the first guaranteed line and emitted by no rule; its only trace was a doc
+  comment on `Registry.add`, whose displaced-document return value no caller read. A path collision cannot
+  happen inside one tree, and D009 refuses the case across an include, so there was no rule to land: the dead
+  return value and the comment are removed, and the line cites `D000 D001 D003 D004 D005 D008`.
+- **D007 has a line.** It is emitted twice in `packages/core/src/load.ts` and was cited nowhere in the draft --
+  the direction the fitness function did not read. *Guaranteed* gains "an alias names one thing".
+- **X104 never existed.** `packages/runtime/templates/CLAUDE.md` attributed to it what X103 already refuses; the
+  template now says X103, agreeing with its own summary line, and the X set on this page is X101-X103.
 
 During implementation:
 
