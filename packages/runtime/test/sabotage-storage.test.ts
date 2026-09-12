@@ -3,9 +3,9 @@
  * `defaults` name fields of the shape a collection declares, and a name the shape lacks, a default the field
  * would not accept or a reference that leaves the store is refused before anything runs (C003 to C008).
  *
- * What a store *means* at a call site -- a filter over it, a patch of it -- is @storage's to judge (X206 to
- * X211). The example keeps nothing yet (RFC 0002 step 8), so every case plants the store it breaks, and the
- * connection is simply one the example already has.
+ * What a store *means* at a call site -- a filter over it, a patch of it -- is @storage's to judge (X208 to
+ * X213, renumbered after RFC 0002's X207). The example keeps nothing yet (RFC 0002 step 8), so every case
+ * plants the store it breaks, and the connection is simply one the example already has.
  */
 import { schemaUrl } from '@wilanis/core';
 import { describe, expect, it } from 'vitest';

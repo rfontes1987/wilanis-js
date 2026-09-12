@@ -15,13 +15,13 @@ import { entriesUnder, packageDirs, sourceFiles, textOf } from './lib/sources.js
 
 const CODE = /'[A-Z]\d{3}'/g;
 
-/** Where a test may prove a code: the suites that break a tree and read the refusals back. */
-const SUITES = [
-  'packages/runtime/test',
-  'packages/plugin-auth/test',
-  'packages/plugin-http/test',
-  'libraries/access/test',
-];
+/**
+ * Where a test may prove a code: the suite beside every package, and the tree under `libraries/`. Derived
+ * rather than listed, because a plugin that has rules of its own proves them in its own test directory --
+ * RFC 0002 puts `@storage`'s X rules there -- so a list would need editing for each new plugin, and editing
+ * this file is meant to be a change of decision rather than a consequence of adding a package.
+ */
+const suites = () => [...packageDirs().map(dir => `${dir}/test`), 'libraries/access/test'];
 
 /** The claim this module holds, and the title the runner gives its test. */
 export const claim = 'every refusal code is proved by a sabotage';
@@ -32,7 +32,7 @@ export const gather = () => ({
     ...new Set(packageDirs().flatMap(dir => sourceFiles(`${dir}/src`).flatMap(file => codesIn(textOf(file))))),
   ].sort(),
   named: [
-    ...new Set(SUITES.flatMap(dir => entriesUnder(dir, ['.test.ts']).flatMap(file => codesIn(textOf(file))))),
+    ...new Set(suites().flatMap(dir => entriesUnder(dir, ['.test.ts']).flatMap(file => codesIn(textOf(file))))),
   ].sort(),
 });
 
