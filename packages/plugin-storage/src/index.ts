@@ -7,6 +7,7 @@
 import { fileURLToPath } from 'node:url';
 import type { PluginModule } from '@wilanis/core';
 import { handlers } from './handlers.js';
+import { check } from './rules.js';
 
 export type { At, Engine, Engines, Order, Query, Record_ } from './engine.js';
 export { engines } from './engine.js';
@@ -17,5 +18,6 @@ const plugin: PluginModule = {
   root: '@storage',
   docs: fileURLToPath(new URL('../docs', import.meta.url)),
   handlers,
+  check,
 };
 export default plugin;
