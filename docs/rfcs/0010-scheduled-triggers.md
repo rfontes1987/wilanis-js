@@ -501,7 +501,7 @@ example's scheduled trigger page.
 7. **A process that runs only the schedule** (`area:runtime`): blocked on RFC 0013. See *Drawbacks*, first item.
 8. **`wilanis run --at`**: decided during implementation (*Open questions*); one small pull request either way.
 9. **README**: a paragraph beside "Every branch runs before you deploy" on the clock as a way in, and the roadmap's
-   M08 row updated with the example's nightly digest.
+   M10 row updated with the example's nightly digest.
 
 ## Drawbacks and alternatives
 

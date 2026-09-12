@@ -508,7 +508,7 @@ the printed lines and the exit code for a clean plan, a refused step, `--apply`,
 7. `@storage`: the `migrate` member over `plan.ts` and the engines; the stale-`renamed` line; the postgres end-to-end
    test's `apply`, `--allow-destructive`, `--adopt` and `--history` cases.
 8. Discoverability: `describe`'s two lines, the viewer's page, the `@storage` README. (`good first issue`)
-9. The example, for M12: the shape change and the store's `renamed`, a page in the example's README that walks the
+9. The example, for M05: the shape change and the store's `renamed`, a page in the example's README that walks the
    three commands above, and a test in `packages/runtime/test/example.test.ts` that the example's plan against an
    empty record is all `create`.
 
@@ -558,7 +558,7 @@ None open. Settled at acceptance, with the edits in the text above:
    documents from one IR version to the next; that command does not exist yet and is planned for when there is a
    second version. A database migrates and a tree's documents move up a version, so this RFC keeps `migrate`, the
    word every database tool uses, and RFC 0008's unbuilt command becomes `wilanis upgrade`, edited there with the
-   reason in the commit as RFC 0001 provides for a change to an accepted RFC. The roadmap's M12 spells the command
+   reason in the commit as RFC 0001 provides for a change to an accepted RFC. The roadmap's M05 spells the command
    as this RFC does.
 2. **The hook, and only the hook.** `wilanis migrate` composes every plugin's `migrate` member, and there is no
    second route: `@storage` grants no `migrate` operation, so a schema change is never a declared operation that a

@@ -614,7 +614,7 @@ its trigger; `map` prints the queue line. View, in `packages/view/test`: the exa
     RFC 0002's implementation (and 9 for the join).
 11. **A worker process** (`area:runtime`): blocked on RFC 0013. See *Drawbacks*, first item.
 12. **README**: a "Work off the request" paragraph beside "Every branch runs before you deploy", and the roadmap's
-    M08 row updated with the example's route and worker.
+    M10 row updated with the example's route and worker.
 
 ## Drawbacks and alternatives
 

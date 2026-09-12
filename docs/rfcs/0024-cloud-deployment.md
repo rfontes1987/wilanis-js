@@ -68,7 +68,7 @@ reading four documents and writing YAML by hand. Five things are wrong with that
   agent; nothing writes a `Dockerfile` for a build.
 - **The roadmap depends on infrastructure it does not ship.** `docs/roadmap.md` promises "every piece of
   infrastructure a demo needs runs on a local Kubernetes cluster from an open-source chart the repository
-  ships (see RFC 0024)", and M02, M04, M05, M06 and M10 each need one: PostgreSQL, an object store speaking
+  ships (see RFC 0024)", and M02, M03, M07, M08 and M11 each need one: PostgreSQL, an object store speaking
   the S3 API (RFC 0005 `:176` names MinIO and this chart by name), a collector (RFC 0006), Meilisearch for
   RFC 0023 (`0023:172`). There is no `charts/` and no `scripts/`.
 - **A deployment recipe drifts from the tree that produced it.** A hand-written Compose file keeps the port
@@ -544,8 +544,8 @@ dependencies:
 | Switch | Chart | For |
 |---|---|---|
 | `postgresql` | CloudNativePG: the operator chart as the dependency, one `Cluster` resource in our templates behind the switch; a CNCF project whose images pull without an account | RFC 0002's engine (M02), and RFC 0009's broker, which is a table in the same connection (`0009:49-51`) -- so the chart ships no broker |
-| `minio` | the MinIO project's own chart | the S3 API of RFC 0005 (M05) |
-| `jaeger` | the Jaeger chart, OTLP in | RFC 0006's collector (M06) |
+| `minio` | the MinIO project's own chart | the S3 API of RFC 0005 (M08) |
+| `jaeger` | the Jaeger chart, OTLP in | RFC 0006's collector (M03) |
 
 Each is off by default and pinned by version, and none is provisioned by the chart for production: a
 production connection names a host the operator runs, and the switches exist so that the roadmap's demos
@@ -707,7 +707,7 @@ stale.
    it*; the `templates/CLAUDE.md` sentence. (`area:process`; the README and the template sentence are a
    `good first issue` once the script works)
 
-Steps 1 and 2 are what M10 needs first and what RFC 0026's manifest is incomplete without; steps 3 and 4
+Steps 1 and 2 are what M11 needs first and what RFC 0026's manifest is incomplete without; steps 3 and 4
 give the demo its image; steps 5 and 6 give it the cluster. Nothing here blocks another RFC: RFC 0005,
 RFC 0006, RFC 0009 and RFC 0022 each add a switch to the chart of step 5 when they land, in their own
 plans.
