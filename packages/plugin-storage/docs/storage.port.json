@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/port.schema.json",
+  "label": "The engine behind a store",
+  "description": "What is asked of the engine itself rather than of the records. A startup step reaches ensure through a domain port bound to a data graph, so what a tree prepares is what its project.json says it prepares.",
+  "operations": {
+    "ensure": {
+      "description": "Create every collection of the store that does not exist yet, from the shape it declares, and leave one that does alone. What that means is the engine's: nothing at all, for one that keeps records in memory. Answers how many collections the store declares.",
+      "accepts": {
+        "store": {
+          "type": "string",
+          "static": true,
+          "description": "the path of the store document to prepare"
+        }
+      },
+      "returns": {
+        "fields": {
+          "collections": {
+            "type": "number",
+            "description": "how many collections the store declares"
+          }
+        }
+      }
+    }
+  }
+}

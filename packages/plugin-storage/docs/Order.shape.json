@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/shape.schema.json",
+  "label": "Order",
+  "description": "One ordering of a find: the field to order by, and the direction. Several of them order by the first, then the second where the first ties.",
+  "layer": "edge",
+  "fields": {
+    "by": {
+      "type": "string",
+      "description": "the field of the collection's shape to order by"
+    },
+    "dir": {
+      "type": "string",
+      "required": false,
+      "enum": [
+        "asc",
+        "desc"
+      ],
+      "description": "ascending unless it says otherwise"
+    }
+  }
+}
