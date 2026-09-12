@@ -3,17 +3,17 @@
  * collection; everything else -- the connection, its kind and settings, the record's shape, the field that
  * identifies one -- is read from documents the tree already holds, the way @http reads a connection.
  */
+import type { Resolves } from '@wilanis/core';
 import type { At, Engine } from './engine.js';
 import { engines } from './engine.js';
 
 type Connection = { kind: string; settings: Record<string, unknown> };
-type Resolving = { document: (ref: string) => unknown; type: (ref: string) => import('@wilanis/core').Type };
 
 /** The environment a handler reads: what the runtime built for the tree it is running. */
 interface Env {
   canon?: (ref: string) => string;
   connections?: Record<string, Connection>;
-  resolving?: Resolving;
+  resolving?: Resolves;
 }
 
 /** One collection as a store document declares it. */

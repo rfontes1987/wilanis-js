@@ -107,6 +107,7 @@ describe('what a filter may not say', () => {
 
   it('a list operator takes a list, a combinator takes what it combines, and a filter is an object', () => {
     expect(() => parse({ url: { in: 'x' } })).toThrow(/'url.in' takes a list/);
+    expect(() => parse({ tags: { has: 'yes' } })).toThrow(/'tags.has' takes a boolean/);
     expect(() => parse({ all: { url: 'x' } })).toThrow(/'all' takes a list of filters/);
     expect(() => parse('url')).toThrow(/a filter is an object of fields and combinators/);
   });

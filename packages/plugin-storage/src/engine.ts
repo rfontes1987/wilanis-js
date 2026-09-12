@@ -91,15 +91,28 @@ export class Engines {
 const tables = new WeakMap<object, Engines>();
 
 /**
+ * What one environment is keyed by. The embedder hands a handler `{ ...env, blobs }` whenever a run carries a
+ * blob scope -- the http listener does on every request -- so the object a handler is given is not the object
+ * an engine registered on. `connections` is built once for the tree by `buildEnv` and carried by every copy,
+ * so it names the environment where the copy does not. An environment without one is keyed by itself.
+ */
+function keyOf(env: object): object {
+  const connections = (env as { connections?: unknown }).connections;
+  return connections && typeof connections === 'object' ? connections : env;
+}
+
+/**
  * The engines of one environment, created on first use by whichever side reaches it first. @storage builds
  * nothing in its own `postLoad`, so an engine that registers before @storage is loaded finds no emptier a
- * table than one that registers after.
+ * table than one that registers after. A handler reaching it through a copy of the environment finds the
+ * table the engine registered in, since both are keyed by the tree's `connections`.
  */
 export function engines(env: object): Engines {
-  let table = tables.get(env);
+  const key = keyOf(env);
+  let table = tables.get(key);
   if (!table) {
     table = new Engines();
-    tables.set(env, table);
+    tables.set(key, table);
   }
   return table;
 }
