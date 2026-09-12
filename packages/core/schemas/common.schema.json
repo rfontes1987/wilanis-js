@@ -114,7 +114,7 @@
           "type": "boolean"
         },
         "resolves": {
-          "description": "Native contracts only, on a static field. Variable -> where its type is written down, so no call site repeats it: this field's literal names a document, and the path is walked within it to a value that must be a type reference. A path is dot-separated field names; a segment may take a key instead of a fixed name, by another static input of the same call ([input]) or by a field beside the one just read ({sibling}); and a path that reaches a type reference and goes on follows it into the shape it names. So collections[collection].of reads the store this field names, takes the collection the `collection` input names, and binds the variable to its `of`; collections[collection].of.{key} goes on into that shape and takes the field whose name the collection's `key` holds, which is the key's type. Nothing else is a path: a malformed one is refused here, and a contract that is not static, or takes a key by an input it has not got, when the plugin loads (D011).",
+          "description": "Native contracts only, on a static field. Variable -> where its type is written down, so no call site repeats it: this field's literal names a document, and the path is walked within it to a value that must be a type reference. A path is dot-separated field names; a segment may take a key instead of a fixed name, by another static input of the same call ([input]) or by a field beside the one just read ({sibling}); and a path that reaches a type reference and goes on follows it into the shape it names. So collections[collection].of reads the store this field names, takes the collection the `collection` input names, and binds the variable to its `of`; collections[collection].of{key}.type goes on into that shape and takes the field whose name the collection's `key` holds, which is the key's type. Nothing else is a path: a malformed one is refused here, and a contract that is not static, or takes a key by an input it has not got, when the plugin loads (D011).",
           "type": "object",
           "propertyNames": {
             "description": "The variable this path binds: $ followed by an upper-case name, as $T.",
@@ -122,7 +122,7 @@
             "pattern": "^\\$[A-Z][A-Za-z0-9]*$"
           },
           "additionalProperties": {
-            "description": "The path within the named document whose value is the type: field names separated by dots, a segment optionally taking a key by a static input ([input]) or by a sibling field ({sibling}), as collections[collection].of and collections[collection].of.{key}.",
+            "description": "The path within the named document whose value is the type: field names separated by dots, a segment optionally taking a key by a static input ([input]) or by a sibling field ({sibling}), as collections[collection].of and collections[collection].of{key}.type.",
             "type": "string",
             "pattern": "^[a-z][A-Za-z0-9_]*(\\[[a-z][A-Za-z0-9_]*\\]|\\{[a-z][A-Za-z0-9_]*\\})?(\\.[a-z][A-Za-z0-9_]*(\\[[a-z][A-Za-z0-9_]*\\]|\\{[a-z][A-Za-z0-9_]*\\})?)*$"
           },
