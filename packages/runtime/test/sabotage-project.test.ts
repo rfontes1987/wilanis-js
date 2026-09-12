@@ -1,6 +1,6 @@
 import { schemaUrl } from '@wilanis/core';
 import { describe, expect, it } from 'vitest';
-import { plantedAll, sabotage } from './example-harness.js';
+import { plantedAll, plantedEditing, sabotage } from './example-harness.js';
 
 describe('sabotage: the project, its plugins and its startup', () => {
   it('X003 a throttle that lets nothing through', () => {
@@ -171,8 +171,17 @@ describe('sabotage: a store names a connection and the shapes it keeps', () => {
     expect(plantedAll(keeping('monitor', '@monitor/domain/Nope.shape.json'))).toContain('R001');
   });
 
+  /** The store in a feature that depends on the monitor, so what the monitor exports is the only question left. */
+  const dependingOn = (of: string) =>
+    plantedEditing(keeping('hello', of), 'features/hello/feature.json', feature => {
+      feature.dependsOn = [...feature.dependsOn, 'monitor'];
+    });
+
   it("L005 a collection over another feature's shape that feature does not export", () => {
-    // the monitor exports Entry and its port, and nothing else: EntryRecord is its own business
-    expect(plantedAll(keeping('hello', '@monitor/domain/EntryRecord.shape.json'))).toContain('L005');
+    // the monitor exports Entry and its port, and nothing else: EntryRecord is its own business.
+    // hello is made to depend on the monitor first, or visibility would refuse at the dependency
+    // and never reach the export -- which would pass for a reason this case is not about
+    expect(dependingOn('@monitor/domain/EntryRecord.shape.json')).toContain('L005');
+    expect(dependingOn('@monitor/domain/Entry.shape.json')).toEqual([]);
   });
 });

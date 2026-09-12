@@ -82,18 +82,32 @@ export function without(file: string): string[] {
 
 /** Copy the example, add a document at a path it does not have, and answer the refusal codes. */
 export function planted(file: string, doc: unknown): string[] {
-  return codesAfter(dir => {
-    mkdirSync(dirname(join(dir, file)), { recursive: true });
-    writeFileSync(join(dir, file), JSON.stringify(doc));
-  });
+  return plantedAll({ [file]: doc });
 }
 
 /** Copy the example, add several documents at paths it does not have, and answer the refusal codes. */
 export function plantedAll(docs: Record<string, unknown>): string[] {
+  return codesAfter(dir => write(dir, docs));
+}
+
+/**
+ * Copy the example, add documents at paths it does not have and edit one it has, and answer the refusal
+ * codes: what a case needs when the document it plants is only refused once another says it may be named.
+ */
+export function plantedEditing(docs: Record<string, unknown>, file: string, edit: (doc: any) => void): string[] {
   return codesAfter(dir => {
-    for (const [file, doc] of Object.entries(docs)) {
-      mkdirSync(dirname(join(dir, file)), { recursive: true });
-      writeFileSync(join(dir, file), JSON.stringify(doc));
-    }
+    write(dir, docs);
+    const path = join(dir, file);
+    const doc = JSON.parse(readFileSync(path, 'utf8'));
+    edit(doc);
+    writeFileSync(path, JSON.stringify(doc));
   });
+}
+
+/** Write each document into the copy, making the directories it needs. */
+function write(dir: string, docs: Record<string, unknown>): void {
+  for (const [file, doc] of Object.entries(docs)) {
+    mkdirSync(dirname(join(dir, file)), { recursive: true });
+    writeFileSync(join(dir, file), JSON.stringify(doc));
+  }
 }
