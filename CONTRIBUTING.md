@@ -16,6 +16,9 @@ RFC 0001, `docs/rfcs/0001-the-rfc-process.md`; this page is the short form.
 4. **A fix that changes no rule and makes no promise** needs no RFC: open a `bug` issue or just a pull
    request.
 
+Everyone taking part is held to the [Code of Conduct](CODE_OF_CONDUCT.md), and a vulnerability is reported
+privately, the way [SECURITY.md](SECURITY.md) says, never as an issue.
+
 ## Finding something to work on
 
 ```
