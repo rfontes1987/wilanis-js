@@ -22,13 +22,18 @@ const parse = (filter: unknown) => parseWhere(filter, SHAPE);
 
 describe('what a filter says', () => {
   it('a bare value is equality, whatever the value is', () => {
+    // a bare value is written at the field, so that is where its test points: there is no `eq` key
     expect(parse({ url: 'https://x' })).toEqual({
       kind: 'field',
       field: 'url',
-      tests: [{ op: 'eq', value: 'https://x' }],
+      tests: [{ op: 'eq', value: 'https://x', at: ['url'] }],
     });
-    expect(parse({ ok: false })).toEqual({ kind: 'field', field: 'ok', tests: [{ op: 'eq', value: false }] });
-    expect(parse({ hits: 0 })).toEqual({ kind: 'field', field: 'hits', tests: [{ op: 'eq', value: 0 }] });
+    expect(parse({ ok: false })).toEqual({
+      kind: 'field',
+      field: 'ok',
+      tests: [{ op: 'eq', value: false, at: ['ok'] }],
+    });
+    expect(parse({ hits: 0 })).toEqual({ kind: 'field', field: 'hits', tests: [{ op: 'eq', value: 0, at: ['hits'] }] });
   });
 
   it('an object of operators is a predicate, and several of them test one field together', () => {
@@ -36,8 +41,8 @@ describe('what a filter says', () => {
       kind: 'field',
       field: 'hits',
       tests: [
-        { op: 'gte', value: 2 },
-        { op: 'lt', value: 9 },
+        { op: 'gte', value: 2, at: ['hits', 'gte'] },
+        { op: 'lt', value: 9, at: ['hits', 'lt'] },
       ],
     });
   });
@@ -46,7 +51,11 @@ describe('what a filter says', () => {
     const given: Record<string, unknown> = { has: true, in: ['x'], notIn: ['x'] };
     for (const op of OPERATORS) {
       const value = op in given ? given[op] : 'x';
-      expect(parse({ url: { [op]: value } })).toEqual({ kind: 'field', field: 'url', tests: [{ op, value }] });
+      expect(parse({ url: { [op]: value } })).toEqual({
+        kind: 'field',
+        field: 'url',
+        tests: [{ op, value, at: ['url', op] }],
+      });
     }
   });
 
@@ -54,15 +63,19 @@ describe('what a filter says', () => {
     expect(parse({ url: 'x', hits: 1 })).toEqual({
       kind: 'all',
       of: [
-        { kind: 'field', field: 'url', tests: [{ op: 'eq', value: 'x' }] },
-        { kind: 'field', field: 'hits', tests: [{ op: 'eq', value: 1 }] },
+        { kind: 'field', field: 'url', tests: [{ op: 'eq', value: 'x', at: ['url'] }] },
+        { kind: 'field', field: 'hits', tests: [{ op: 'eq', value: 1, at: ['hits'] }] },
       ],
     });
+    // and a filter under a combinator knows where it sits, so a refusal points at the document
     expect(parse({ any: [{ url: 'x' }, { not: { hits: 1 } }] })).toEqual({
       kind: 'any',
       of: [
-        { kind: 'field', field: 'url', tests: [{ op: 'eq', value: 'x' }] },
-        { kind: 'not', of: { kind: 'field', field: 'hits', tests: [{ op: 'eq', value: 1 }] } },
+        { kind: 'field', field: 'url', tests: [{ op: 'eq', value: 'x', at: ['any', '0', 'url'] }] },
+        {
+          kind: 'not',
+          of: { kind: 'field', field: 'hits', tests: [{ op: 'eq', value: 1, at: ['any', '1', 'not', 'hits'] }] },
+        },
       ],
     });
   });
@@ -89,7 +102,7 @@ describe('what a filter may not say', () => {
     expect(parse({ tags: { has: true } })).toEqual({
       kind: 'field',
       field: 'tags',
-      tests: [{ op: 'has', value: true }],
+      tests: [{ op: 'has', value: true, at: ['tags', 'has'] }],
     });
     expect(() => parse({ tags: { eq: ['x'] } })).toThrow(/only 'has' may test one/);
     expect(() => parse({ at: { contains: 'x' } })).toThrow(/only 'has' may test one/);

@@ -63,7 +63,7 @@ describe('what a collection may keep, and what identifies one record', () => {
     );
     expect(found).toHaveLength(1);
     expect(found[0].at).toBe('collections/entries/key');
-    expect(found[0].message).toMatch(/\(fields: id, url, ua\)/);
+    expect(found[0].message).toMatch(/\(fields: id, url, hits, ok, tags, ua\)/);
   });
 
   it('X202 a key that may be absent, since a key identifies every record', () => {
@@ -143,6 +143,85 @@ describe('two stores over one connection', () => {
 
   it('the same name with the same shape is how two features share a collection on purpose', () => {
     expect(codes(alsoKeeping(SHAPE))).toEqual([]);
+  });
+});
+
+describe('what a call may ask of the records', () => {
+  const where = (filter: unknown) =>
+    graph(doc => {
+      doc.nodes[0].in.where = filter;
+    });
+  const only = (filter: unknown, code: string) => at(where(filter), code);
+
+  it('X208 a filter naming a field the shape does not have, at any nesting', () => {
+    expect(only({ methd: 'GET' }, 'X208')[0].at).toBe('nodes/asked/in/where/methd');
+    expect(only({ any: [{ nope: 1 }] }, 'X208')).toHaveLength(1);
+  });
+
+  it('X208 an order by a field the shape does not have', () => {
+    const found = at(
+      graph(doc => {
+        doc.nodes[0].in.order = [{ by: 'nope' }];
+      }),
+      'X208',
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0].at).toBe('nodes/asked/in/order/0/by');
+  });
+
+  it('X209 a literal the field would not accept', () => {
+    expect(only({ url: 7 }, 'X209')).toHaveLength(1);
+    expect(only({ ua: { has: 'yes' } }, 'X209')).toHaveLength(1);
+    expect(only({ hits: { in: ['a'] } }, 'X209')).toHaveLength(1);
+    expect(only({ hits: 7 }, 'X209')).toEqual([]);
+  });
+
+  it('X210 an operator the grammar does not name, or one the field type does not admit', () => {
+    expect(only({ url: { like: 'x' } }, 'X210')).toHaveLength(1);
+    expect(only({ hits: { contains: '2' } }, 'X210')).toHaveLength(1);
+    expect(only({ ok: { gt: false } }, 'X210')).toHaveLength(1);
+    expect(only({ tags: { eq: ['a'] } }, 'X210')).toHaveLength(1);
+    expect(only({ tags: { has: true } }, 'X210')).toEqual([]);
+  });
+
+  it('X209 a read of the graph in, typed by the shape the graph declares', () => {
+    // `hits` is a number and `in.id` a string: the graph's in shape is a document, so this is judgeable
+    const found = only({ hits: '{{in.id}}' }, 'X209');
+    expect(found).toHaveLength(1);
+    expect(found[0].at).toBe('nodes/asked/in/where/hits');
+    expect(only({ url: '{{in.id}}' }, 'X209')).toEqual([]);
+  });
+
+  it('a read is judged by the type it reads, never by the shape of the read itself', () => {
+    // `{{in.urls}}` is not an array until it is read, and `{{in.tagged}}` is not a boolean; judging either by
+    // how it is spelled would refuse a filter the run then accepts, which is the opposite of the promise
+    expect(codes(tree())).toEqual([]);
+    expect(only({ url: { in: '{{in.urls}}' } }, 'X210')).toEqual([]);
+    expect(only({ tags: { has: '{{in.tagged}}' } }, 'X209')).toEqual([]);
+    // and the type it reads is still judged: a list of the wrong thing, and a boolean that is not one
+    expect(only({ hits: { in: '{{in.urls}}' } }, 'X209')).toHaveLength(1);
+    expect(only({ tags: { has: '{{in.id}}' } }, 'X209')).toHaveLength(1);
+  });
+
+  it("a read of an earlier node is left unjudged: that table is the graph checker's, not a plugin's", () => {
+    // the gap RFC 0003 records beside X209: a plugin sees documents, and a node's output is not one
+    const found = graph(doc => {
+      doc.nodes.unshift({
+        id: 'said',
+        type: '@wilanis/node/run.schema.json',
+        run: '@std/object.port.json#make',
+        in: { value: { text: '{{in.id}}' }, type: '@features/monitor/edge/EntryRow.shape.json' },
+      });
+      doc.nodes[1].in.where = { hits: '{{said.id}}' };
+    });
+    expect(found.filter(one => one.code === 'X209')).toEqual([]);
+  });
+
+  it('a refusal points where the document says it, under a combinator and at a bare value', () => {
+    expect(only({ any: [{ methd: 'x' }] }, 'X208')[0].at).toBe('nodes/asked/in/where/any/0/methd');
+    // a bare value has no `eq` key to point at, so the field is where it points
+    expect(only({ url: 7 }, 'X209')[0].at).toBe('nodes/asked/in/where/url');
+    expect(only({ url: { contains: 7 } }, 'X209')[0].at).toBe('nodes/asked/in/where/url/contains');
   });
 });
 
