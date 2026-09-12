@@ -8,7 +8,7 @@
   rules). Nothing in the engine.
 - **Schemas:** `intent.schema.json` is new; `invariant.schema.json` gains `access.kinds` (additive)
 - **Packages:** `@wilanis/plugin-model`
-- **Tracking issue:** #NNN (opened when the RFC is proposed)
+- **Tracking issue:** #288
 - **Depends on:** RFC 0025 for the connection kinds that name a model and the wire modules that speak to one: the
   detector here is one of those connections, and nothing lands before RFC 0025's steps 2 and 3. RFC 0007 for the
   access invariant this RFC gives one more field and for the reach walk (`operationsReachable`) it is judged over;
