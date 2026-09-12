@@ -48,11 +48,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - name: the example checks and rehearses
+      - name: the example checks and rehearses, under each of its profiles
         run: |
           npx wilanis check example
           npx wilanis check libraries/access
-          npx wilanis rehearse example
+          npx wilanis rehearse example --profile local
+          npx wilanis rehearse example --profile live
         env:
           MONITOR_JWT_SECRET: ci-only-not-a-secret
 
