@@ -13,7 +13,7 @@ import {
   type TriggerDoc,
   type TriggerKindDoc,
 } from '@wilanis/core';
-import { fieldLine, portLines, shower } from './lines.js';
+import { fieldLine, portLines, shower, storeLines } from './lines.js';
 
 // ---- discovery --------------------------------------------------------------------------------------
 
@@ -81,6 +81,7 @@ function shapeLines(doc: Loaded, scope: Scope, load: LoadResult): string[] {
   const lines = [JSON.stringify(doc.doc, null, 2)];
   const writers = [...graphWriters(load, doc.path, scope), ...bindingWriters(load, doc.path, scope)];
   if (writers.length) lines.push('made or written by (the attributes each gives):', ...writers);
+  lines.push(...heldBy(load, doc.path, scope));
   return lines;
 }
 
@@ -140,6 +141,15 @@ function writerLine(
   return `    ${call.file}#${call.where}  via ${call.run}${named.length ? `  (${named.join(', ')})` : ''}`;
 }
 
+/** Every collection of every store that keeps records of this shape, so a shape says where it is kept. */
+function heldBy(load: LoadResult, shape: string, scope: Scope): string[] {
+  const out: string[] = [];
+  for (const store of load.registry.all('store'))
+    for (const [name, collection] of Object.entries(store.doc.collections))
+      if (scope.canon(collection.of) === shape) out.push(`held by  ${store.path}#${name}`);
+  return out;
+}
+
 /** A policy: what decides it, what it can answer, and the triggers it gates. */
 function policyLines(doc: Loaded, load: LoadResult): string[] {
   const lines: string[] = [];
@@ -181,6 +191,7 @@ function kindBody(doc: Loaded, load: LoadResult, scope: Scope, showType: (spec: 
   if (doc.kind === 'trigger-kind' || doc.kind === 'connection-kind' || doc.kind === 'plugin')
     return kindLines(doc, showType);
   if (doc.kind === 'shape') return shapeLines(doc, scope, load);
+  if (doc.kind === 'store') return storeLines(doc);
   if (doc.kind === 'policy') return policyLines(doc, load);
   if (doc.kind === 'trigger') return triggerLines(doc);
   return [JSON.stringify(doc.doc, null, 2)];

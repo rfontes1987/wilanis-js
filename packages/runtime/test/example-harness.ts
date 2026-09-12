@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkTree } from '@wilanis/compiler';
-import { loadTree, type ResolvedInclude } from '@wilanis/core';
+import { type LoadResult, loadTree, type ResolvedInclude } from '@wilanis/core';
 import auth from '@wilanis/plugin-auth';
 import blobs from '@wilanis/plugin-blob';
 import http from '@wilanis/plugin-http';
@@ -101,6 +101,17 @@ export function plantedPointing(docs: Record<string, unknown>): string[] {
   const out = refusalsAt(dir);
   rmSync(dir, { recursive: true, force: true });
   return out;
+}
+
+/**
+ * Copy the example, add documents, and answer the tree as loaded together with the directory it sits in --
+ * what a case needs when it reads what `describe` says rather than what the checker refuses. The caller
+ * removes the directory.
+ */
+export function loadedWith(docs: Record<string, unknown>): { load: LoadResult; dir: string } {
+  const dir = copyOfExample();
+  write(dir, docs);
+  return { load: loadTree(dir, PLUGINS, INCLUDES), dir };
 }
 
 /**
