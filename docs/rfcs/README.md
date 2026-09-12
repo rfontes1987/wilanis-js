@@ -30,13 +30,13 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0022](0022-storage-engines.md) | More storage engines: SQLite, MySQL, and declared capabilities | accepted |
 | [0023](0023-adapters.md) | Adapters: search, email, payment | accepted |
 | [0024](0024-cloud-deployment.md) | Kubernetes deployment: a Helm chart and a local cluster | stub |
-| [0025](0025-ai-provider-integrations.md) | AI model calls as an effect | draft |
+| [0025](0025-ai-provider-integrations.md) | AI model calls as an effect | accepted |
 | [0026](0026-application-manifest.md) | The application manifest | stub |
 | [0027](0027-fitness-functions.md) | Fitness functions: decisions about the code, held by the tests that record them | implemented |
 | [0028](0028-principles-hold.md) | The principles hold: four sentences of `CLAUDE.md` that nothing held, and the two claims not to write | implemented |
 | [0029](0029-named-reads.md) | `reads`: a document names each read it takes from the request | accepted |
 | [0030](0030-cache.md) | `cache`: one word on a node, a graph or an operation, lowered to the nodes it stands for | accepted |
-| [0031](0031-intent-triggers.md) | Intent triggers: a model fills a trigger's input from what a person said | draft |
+| [0031](0031-intent-triggers.md) | Intents: a sentence fires a route, under the route's own policies | accepted |
 
 Which milestone first shows an RFC is said once, in [`../roadmap.md`](../roadmap.md); the tracking issue
 carries it as GitHub's milestone. Where this list and the outside assessment that seeded it differ, the
