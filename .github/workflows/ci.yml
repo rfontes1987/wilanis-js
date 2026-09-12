@@ -16,6 +16,24 @@ jobs:
           b="${{ github.head_ref }}"
           echo "$b" | grep -Eq '^[0-9]+-[a-z0-9-]+$' && echo "ok: $b" || { echo "branch '$b' must be <issue>-<short-title>, e.g. 4-storage-plugin"; exit 1; }
 
+      - name: the issue it names is claimed by its author, and by no one else
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n="${{ github.head_ref }}"; n="${n%%-*}"
+          author="${{ github.event.pull_request.user.login }}"
+          holders=$(gh api "repos/${{ github.repository }}/issues/$n" --jq '[.assignees[].login] | join(" ")' 2>/dev/null) || {
+            echo "issue #$n does not exist: name the branch after the issue it serves"; exit 1; }
+          others=$(gh pr list -R "${{ github.repository }}" --state open --search "$n in:title,body" \
+            --json number,headRefName,author \
+            --jq "[.[] | select(.headRefName | startswith(\"$n-\")) | select(.number != ${{ github.event.pull_request.number }}) | \"#\(.number) by \(.author.login)\"] | join(\", \")")
+          [ -n "$others" ] && { echo "issue #$n is already served by $others: one author per task"; exit 1; }
+          case " $holders " in
+            *" $author "*) echo "ok: #$n claimed by $author" ;;
+            "  ") echo "issue #$n has no assignee: claim it with 'gh issue edit $n --add-assignee @me'"; exit 1 ;;
+            *) echo "issue #$n is assigned to $holders, not $author: one author per task"; exit 1 ;;
+          esac
+
   test:
     name: lint, build, test
     runs-on: ubuntu-latest

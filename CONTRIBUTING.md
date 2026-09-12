@@ -30,7 +30,20 @@ gh issue list -R wilanis/wilanis-js --label status:ready --search "no:assignee" 
 gh issue list -R wilanis/wilanis-js --label "help wanted"
 ```
 
-Pick one, assign yourself, read its RFC, then work. If nothing under the milestone is `status:ready`, its
+Pick one, **claim it by pushing its branch**, then read its RFC and work. The claim is the branch, not
+the assignee: GitHub accepts a second assignee as readily as the first, so two people who both read
+`no:assignee` both start. Creating a ref is the one thing the server refuses twice.
+
+```
+git switch -c <issue>-<short-title>
+git push --force-with-lease=refs/heads/<issue>-<short-title>: -u origin <issue>-<short-title>
+gh issue edit <issue> -R wilanis/wilanis-js --add-assignee @me
+```
+
+The empty lease says *this ref must not exist*; a rejection means someone holds the task already, so take
+another rather than forcing or renaming. Assigning yourself records the claim afterwards and does not make
+it. Before taking anything, check the ref as well as the label: `git ls-remote --heads origin
+'refs/heads/<issue>-*'`. If nothing under the milestone is `status:ready`, its
 remaining steps wait on one in flight: say which, rather than reaching into the next milestone. If you use
 Claude Code, `/roadmap` does exactly this, `/rfc` walks through proposing a new RFC, and `/review` briefs
 the maintainer on a pull request or an RFC and acts on their word. The skills live in `.claude/skills/`.
