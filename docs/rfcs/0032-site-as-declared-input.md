@@ -28,7 +28,7 @@ handler that a reader cannot find under the node's `in`, and no operation receiv
 
 A handler today is handed its inputs, a signal, the environment and a `RunContext` whose `nodePath` is a list of node
 ids. It does not know which file called it, which feature that file belongs to, which layer it is in, or what the
-author called the node. Three consumers want that, and each has a worse answer without it.
+author called the node. Four consumers want that, and each has a worse answer without it.
 
 **An audit.** RFC 0002's `raw` is the escape hatch: a statement the checker cannot judge, whose contents the security
 model (RFC 0020) lists among what is the application's. The first question an operator asks of a raw statement in a
@@ -39,6 +39,11 @@ site is not where the operator is looking.
 that throws names what it knows, and the runtime's report adds the node id and the handler; the file is added later,
 by whoever reads the report against the tree. A plugin that could say `at features/monitor/data/save.graph.json#nodes/saved`
 in its own message would say it once, where the message is made.
+
+**A log line.** A logging adapter -- `@log/log.port.json#write`, a plugin in RFC 0023's shape, or `console.log` behind
+a test port -- writes what the author hands it and nothing about where. An operation that declares `provided: site`
+writes `file` and `at` on every line without the author repeating them at every call, and a reader of the log finds
+the node the way a reader of `wilanis check` finds a refusal: by the same two strings.
 
 **A model's context.** RFC 0025's `complete` is told `instructions`, a literal, and `input`, the caller's data. The
 node's `description` is the author's sentence on what this particular call is for -- "classify the ticket for the
@@ -227,6 +232,9 @@ sees the site; nothing is generated for it, since it is a literal and not a read
 - `wilanis describe <graph>`: nothing new; the author wrote nothing.
 - The viewer's node panel lists `site` under the node's inputs, marked `provided` and greyed, with the value the
   compiler would write, so a reader sees what the handler is handed without running anything.
+- RFC 0006's span rows carry `wilanis.graph` and `wilanis.node`. Carrying the same `file` and `at` instead, or beside
+  them, would let a log line a plugin wrote from its site, the span the runtime emitted for the node, and a refusal the
+  checker printed be joined on one address. That is RFC 0006's to adopt, and this RFC gives it the strings.
 - `packages/runtime/templates/CLAUDE.md`, the sentence on `in`: "a field the port marks `provided` is written by the
   compiler; never give it."
 
