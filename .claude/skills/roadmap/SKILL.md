@@ -31,19 +31,48 @@ stop.
 - The RFC file, whole: the Reference section states every rule, code, hint and test the step needs.
 - `CLAUDE.md`, the "How to change things" entry that matches the step (a new rule, a new kind, ...).
 
-## 3. Claim and branch
+## 3. Claim, by pushing the branch
+
+The claim is the branch on the remote, not the assignee. Assigning is additive: GitHub answers the same
+whether or not someone else is already assigned, so two authors who read `no:assignee` a second apart both
+"claim" and both start. Creating a ref is the one operation the server refuses twice. So the branch is
+pushed first, empty, before a line is written, and whoever loses that race stops.
+
+```
+git switch main && git pull --ff-only
+git switch -c N-short-title        # the issue number first: the branch-name check requires it
+git push --force-with-lease=refs/heads/N-short-title: -u origin N-short-title
+```
+
+The lease is empty on purpose: it says *this ref must not exist*. If it does, the push is rejected
+(`stale info`) and the task is already taken. **Do not force, do not pick another name for the same issue,
+do not carry on locally.** Say who holds it and pick something else:
+
+```
+gh pr list -R wilanis/wilanis-js --head N-short-title --state all --json author,url
+```
+
+A plain `git push -u origin N-short-title` is not enough: if the other author has pushed a commit, a
+fast-forward would hand you their branch and both of you would work on it.
+
+Only once the push is yours does the rest follow -- these record the claim, they do not make it, so a
+failure here is worth retrying and never worth abandoning the branch over:
 
 ```
 gh issue edit N -R wilanis/wilanis-js --add-assignee @me
-git switch main && git pull --ff-only
-git switch -c N-short-title        # the issue number first: the branch-name check requires it
-```
-
-Move the issue's card to *In Progress*, so the board says what is being worked and not only what is left:
-
-```
 gh project item-edit 1 --owner wilanis --field Status --value "In Progress" \
   --url https://github.com/wilanis/wilanis-js/issues/N
+```
+
+If `--add-assignee` shows someone else already there, they claimed without a branch. Stop and ask; the
+branch says who is working, the assignee says who said they would.
+
+Before taking anything, check both: the label and the ref.
+
+```
+gh issue list -R wilanis/wilanis-js --label status:ready --search "no:assignee" \
+  --milestone "<that title>" --json number,title
+git ls-remote --heads origin 'refs/heads/N-*'      # empty means nobody holds it
 ```
 
 ## 4. Implement
