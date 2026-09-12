@@ -120,8 +120,8 @@
   const $ = (id) => document.getElementById(id);
   const state = { index: null, view: null, selected: null, version: null, transform: { x: 40, y: 40, k: 1 }, current: null, fit: false, source: false };
   const ARROW = '↗', ELLIPSIS = '…', SEP = ' › ', TO = ' → ', FROM = '← ';
-  const KIND_NAMES = { project: 'Project', feature: 'Features', trigger: 'Triggers', policy: 'Policies', resolvers: 'Request reads', graph: 'Graphs', port: 'Ports', binding: 'Bindings', shape: 'Shapes', connection: 'Connections', scenario: 'Scenarios', plugin: 'Plugins', 'trigger-kind': 'Trigger kinds', 'connection-kind': 'Connection kinds', codec: 'Codecs' };
-  const KIND_ONE = { project: 'project', feature: 'feature', trigger: 'trigger', policy: 'policy', resolvers: 'request reads', graph: 'graph', port: 'port', binding: 'binding', shape: 'shape', connection: 'connection', scenario: 'scenario', plugin: 'plugin', 'trigger-kind': 'trigger kind', 'connection-kind': 'connection kind', codec: 'codec' };
+  const KIND_NAMES = { project: 'Project', feature: 'Features', trigger: 'Triggers', policy: 'Policies', resolvers: 'Request reads', graph: 'Graphs', port: 'Ports', binding: 'Bindings', shape: 'Shapes', store: 'Stores', connection: 'Connections', scenario: 'Scenarios', plugin: 'Plugins', 'trigger-kind': 'Trigger kinds', 'connection-kind': 'Connection kinds', codec: 'Codecs' };
+  const KIND_ONE = { project: 'project', feature: 'feature', trigger: 'trigger', policy: 'policy', resolvers: 'request reads', graph: 'graph', port: 'port', binding: 'binding', shape: 'shape', store: 'store', connection: 'connection', scenario: 'scenario', plugin: 'plugin', 'trigger-kind': 'trigger kind', 'connection-kind': 'connection kind', codec: 'codec' };
   /** A read path shown: request.headers['user-agent'] → request › headers › user-agent. */
   const showRead = (read) => String(read).split(/\.|\[['"]|['"]\]/).filter(Boolean).join(SEP);
   const PALETTE = ['#6cb6ff', '#f0b350', '#7bd88f', '#c792ea', '#ff8a65', '#4ecdc4', '#f78c6c', '#82aaff', '#e57fb3', '#b5d66a', '#ffd166', '#64d3ff'];
@@ -213,7 +213,7 @@
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(d);
     }
-    const order = ['project', 'feature', 'trigger', 'policy', 'resolvers', 'graph', 'port', 'binding', 'shape', 'connection', 'scenario'];
+    const order = ['project', 'feature', 'trigger', 'policy', 'resolvers', 'graph', 'port', 'binding', 'shape', 'store', 'connection', 'scenario'];
     const rank = (k) => { const i = order.findIndex(o => k.startsWith(KIND_NAMES[o])); return (i < 0 ? 99 : i) + (k.includes(' / ') ? 50 : 0); };
     const keys = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
     for (const k of keys) {
@@ -492,6 +492,19 @@
       }
       case 'shape': {
         page.appendChild(el('h2', null, 'Fields')); page.appendChild(fieldsTable(d.fields, { open: d.open }));
+        break;
+      }
+      case 'store': {
+        const chain = el('div', 'chain'); chain.appendChild(step('kept behind', link(d.connection))); page.appendChild(chain);
+        page.appendChild(el('h2', null, 'Collections'));
+        page.appendChild(el('p', null, 'What this feature keeps, by name. The collection is where the record type is written down, so a graph names the store and the collection and never repeats the shape.'));
+        const t = el('table'); const hd = el('tr'); for (const h of ['collection', 'records of', 'keyed by', 'holds']) hd.appendChild(el('th', null, h)); t.appendChild(hd);
+        for (const [name, c] of Object.entries(d.collections)) {
+          const tr = el('tr'); tr.appendChild(el('td', 'name', name));
+          tr.appendChild(el('td')).appendChild(typeEl(c.of)); tr.appendChild(el('td', 'mono', c.key)); tr.appendChild(el('td', 'desc', c.description || ''));
+          t.appendChild(tr);
+        }
+        page.appendChild(t);
         break;
       }
       case 'connection': {

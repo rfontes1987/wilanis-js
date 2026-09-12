@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/store.schema.json",
+  "title": "store",
+  "description": "What a feature keeps: the connection its records live behind, and the collections kept there -- each a shape, under a name, keyed by one of its fields. A store declares; it runs nothing. Data graphs read and write its collections through the operations of @storage/store.port.json, naming the store and the collection and nothing else: the collection is where the record type is written down. Lives in a feature's data/ directory, since how records are kept is the data layer's job.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "The kind of this document: its published schema URL, or the alias @wilanis/store.schema.json.",
+      "enum": [
+        "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/store.schema.json",
+        "@wilanis/store.schema.json"
+      ]
+    },
+    "description": {
+      "description": "What this store keeps, in one or two sentences.",
+      "type": "string",
+      "minLength": 1
+    },
+    "label": {
+      "description": "A short human name for this document, shown wherever a reader sees it instead of its path. Absent: the file name stands in.",
+      "type": "string",
+      "minLength": 1
+    },
+    "connection": {
+      "description": "The connection the records live behind, by path. Its kind must be one a storage engine plugin grants -- one whose connection kind document says \"storage\": true.",
+      "$ref": "common.schema.json#/$defs/path"
+    },
+    "collections": {
+      "description": "name -> what is kept under it. The name is how a call site names the collection, and it is the name the engine keeps the records under, so two stores over one connection that declare the same name mean the same collection.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "common.schema.json#/$defs/ident"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "of": {
+            "description": "The record type: the path of a core shape, or of a shape a plugin grants. This is the one place the type is written; a call site names the store and the collection instead of repeating it.",
+            "$ref": "common.schema.json#/$defs/typeRef"
+          },
+          "key": {
+            "description": "The field of `of` that identifies a record: required, and of whatever type the shape gives it -- that is the type get, patch and remove take and newKey answers.",
+            "$ref": "common.schema.json#/$defs/ident"
+          },
+          "description": {
+            "description": "What this collection holds, for a reader of a graph that reads or writes it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "of",
+          "key"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "$schema",
+    "description",
+    "connection",
+    "collections"
+  ],
+  "additionalProperties": false
+}

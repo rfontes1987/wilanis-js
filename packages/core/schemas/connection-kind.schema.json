@@ -24,6 +24,10 @@
     },
     "settings": {
       "$ref": "common.schema.json#/$defs/inlineObject"
+    },
+    "storage": {
+      "description": "true: a connection of this kind reaches a storage engine, so an @storage store may name it. The plugin that grants the kind registers the engine behind it.",
+      "type": "boolean"
     }
   },
   "required": [

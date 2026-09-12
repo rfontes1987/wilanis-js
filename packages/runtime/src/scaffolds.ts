@@ -30,6 +30,15 @@ function into(target: string, layer: 'edge' | 'domain' | 'data', kind: string): 
 /** The published URL of a kind's schema. */
 const schemaOf = (kind: Kind) => schemaUrl(kind);
 
+/** The one collection a scaffolded store declares: the file's stem as an identifier -- audit-log becomes auditLog. */
+function collectionOf(file: string): string {
+  const stem = (file.split('/').pop() ?? '').replace(/\.store\.json$/, '');
+  const words = stem.split(/[^A-Za-z0-9]+/).filter(word => word.length > 0);
+  const camel = words.map((word, at) => (at ? word.charAt(0).toUpperCase() + word.slice(1) : word)).join('');
+  const named = camel.charAt(0).toLowerCase() + camel.slice(1);
+  return /^[a-z]/.test(named) ? named : 'records';
+}
+
 const SCAFFOLDS: Record<string, (target: string, opts: Record<string, string | undefined>) => [string, unknown][]> = {
   project: (target, _opts) => {
     return [
@@ -153,6 +162,27 @@ const SCAFFOLDS: Record<string, (target: string, opts: Record<string, string | u
       ],
     ];
   },
+  store: (target, opts) => {
+    // one collection, named after the file and keyed by `id`; which shape it keeps is --of, the connection the author's
+    const placed = into(target, 'data', 'store');
+    return [
+      [
+        placed,
+        {
+          $schema: schemaOf('store'),
+          description: 'TODO',
+          connection: '@connections/TODO.connection.json',
+          collections: {
+            [collectionOf(placed)]: {
+              of: opts.of ?? '@features/TODO/domain/TODO.shape.json',
+              key: 'id',
+              description: 'TODO',
+            },
+          },
+        },
+      ],
+    ];
+  },
   policy: (target, opts) => {
     // a gate: decides through a domain operation over what the guard hands, and says what each reason means
     return [
@@ -182,7 +212,7 @@ export function scaffold(
   const build = SCAFFOLDS[kind];
   if (!build)
     throw new Error(
-      `unknown kind '${kind}'; one of project, feature, shape, port, graph, binding, trigger, policy, resolvers`,
+      `unknown kind '${kind}'; one of project, feature, shape, port, graph, binding, store, trigger, policy, resolvers`,
     );
   const files = build(target, opts);
   const written: string[] = [];
