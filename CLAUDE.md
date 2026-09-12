@@ -17,6 +17,7 @@ packages/plugin-auth/  @wilanis/plugin-auth  index.ts store.ts, docs/           
 packages/view/         @wilanis/view       model.ts serve.ts cli.ts, client/index.html, bin/   → core, compiler, runtime
 libraries/access/      @wilanis/access     a tree to include: features/access (sign-in, sessions, policies, otp), features/access-dev (its own binding), connections/, project.json, test/
 example/               a consumer project: JSON documents + package.json; includes @wilanis/access and binds its identity port in features/directories
+reserved/wilanis/      a name held on npm with no code under it; not a workspace member, never built (reserved/README.md)
 ```
 
 Dependencies point one way: engine ← core ← compiler ← runtime ← view, and plugins depend on core and
