@@ -18,10 +18,10 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0010](0010-scheduled-triggers.md) | Scheduled triggers | accepted |
 | [0011](0011-effect-semantics-retry-idempotency-timeout.md) | Retry, idempotency and timeout as declared properties of an operation | accepted |
 | [0012](0012-limits-and-cancellation.md) | Resource limits, timeouts and cancellation of a run | accepted |
-| [0013](0013-deployment-and-profiles.md) | A deployment model: profiles, environments and what a tree needs to run | stub |
+| [0013](0013-deployment-and-profiles.md) | A deployment model: profiles, environments and what a tree needs to run | draft |
 | [0014](0014-outcome-semantics.md) | Outcome semantics: refusals, failures and faults, end to end | accepted |
 | [0015](0015-tenant-and-resource-scoping.md) | Tenant and resource scoping as a provenance rule | accepted |
-| [0016](0016-capability-aware-compilation.md) | Capability-aware compilation: what a tree requires against what an environment permits | stub |
+| [0016](0016-capability-aware-compilation.md) | Capability-aware compilation: what a tree requires against what an environment permits | draft |
 | [0017](0017-migration-planner.md) | Migrations derived from store declarations | accepted |
 | [0018](0018-scenario-generation.md) | Scenario generation from the branch solver | accepted |
 | [0019](0019-diagnostics-for-repair-loops.md) | Diagnostics designed for an agent's repair loop | accepted |
