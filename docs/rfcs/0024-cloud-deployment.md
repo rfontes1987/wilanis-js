@@ -4,8 +4,8 @@
 - **Areas:** `area:core` (one additive key on `port.schema.json`, one on `connection-kind.schema.json`;
   `Operation` and `ConnectionKindDoc`), `area:compiler` (two rules in `check/contracts.ts`, and the first
   judgement of a connection kind document), `area:runtime` (three fields on RFC 0026's manifest and the one
-  function that resolves them), `area:plugin-http` and `area:plugin-auth` (three plugin documents say what
-  they already do in code), `area:deploy` (a new package, `@wilanis/deploy`, with a new label beside
+  function that resolves them), `area:plugin-http` and `area:plugin-auth` (plugin documents say what they
+  already do in code, and `@http` gains the `host` it never had), `area:deploy` (a new package, `@wilanis/deploy`, with a new label beside
   `area:view`), and `area:process` (the chart, the cluster script, one CI job). Nothing in the engine,
   nothing in `PluginModule`.
 - **Schemas:** `port.schema.json` gains `operations.<name>.listens`; `connection-kind.schema.json` gains
@@ -30,8 +30,10 @@ connections dial. Between the manifest and any of those files sits one pure func
 is a **plan**: one *workload* per profile, its command, its ports, its variables by name, its probe, and what
 the environment must provide. A target is a renderer from the plan; three ship (`image`, `compose`, `helm`),
 a fourth is a function and no new walk. Two facts a deployment needs and no document said become declarations
-a reader can open: an operation that `holds` may say it `listens` and where its port number comes from, and a
-connection kind may say which of its settings is the `endpoint`. Nothing is guessed, nothing is a plugin the
+a reader can open: an operation that `holds` may say it `listens`, and where the address it binds -- the
+interface and the port -- comes from; and a connection kind may say which of its settings is the `endpoint`.
+`@http` gains the `host` it never had, so a tree can say 127.0.0.1 on a laptop and every interface in a
+container, and a deployment that would bind an address no container has is refused before it is written. Nothing is guessed, nothing is a plugin the
 tool knows by name, and no secret's value is ever written to a file.
 
 ## Motivation
@@ -40,7 +42,7 @@ A tree is documents plus `node_modules`, started by `wilanis start --profile <na
 with a virtual machine needs nothing more. Everyone else needs a recipe, and today the recipe is a person
 reading four documents and writing YAML by hand. Five things are wrong with that, each visible in the code:
 
-- **The port a tree listens on is written in a handler and nowhere a reader can open.**
+- **The address a tree listens on is half written in a handler and half not written at all.**
   `packages/plugin-http/src/serve.ts:201` is `Number(input.port ?? settings.port ?? 8080)`: the startup
   step's `in.port`, then the `@http` plugin's `settings.port`, then 8080. Three places, in an order only the
   handler knows. `@http/server.port.json` says `holds: true` and describes an accepted `port`, and a reader
@@ -50,6 +52,11 @@ reading four documents and writing YAML by hand. Five things are wrong with that
   the route, because the manifest's `startup` rows carry `label`, `run`, `required` and `profiles` and its
   `plugins` rows carry no settings. The one fact every deployment begins with is the one fact the manifest
   does not have.
+- **The interface is not written anywhere, and cannot be.** `serve.ts:227` is `server.listen(port, () =>
+  ...)`: no host argument, so every tree binds every interface, on a laptop as in a cluster. A tree that
+  wants 127.0.0.1 while it is being written, or a specific address on a multi-homed host, has no way to say
+  so -- neither `listen.accepts` nor the `@http` settings has a `host`. It is the same omission as the port,
+  one step worse: the port is at least decided somewhere.
 - **What a tree dials is in a connection's settings under a key only its kind knows.** `baseUrl` for
   `@http/http.connection-kind.json`, `issuer` for `@auth/oidc.connection-kind.json`, and nothing at all for
   `@auth/directory.connection-kind.json`, whose `users` are written in the document. An operator asking
@@ -213,7 +220,7 @@ $ npx wilanis-deploy example --profile production --target plan
       "profile": "production",
       "description": "Behind the load balancer: the same bindings, the real monitor API in place of the test one, nothing watched.",
       "command": ["wilanis", "start", ".", "--profile", "production"],
-      "listens": [{ "operation": "@http/server.port.json#listen", "port": 8080 }],
+      "listens": [{ "operation": "@http/server.port.json#listen", "host": null, "port": 8080 }],
       "holds": ["@http/server.port.json#listen"],
       "needs": [
         { "variable": "MONITOR_API_KEY", "key": "monitorKey", "readBy": ["@connections/monitor-api-production.connection.json"] },
@@ -245,10 +252,29 @@ targets write `Dockerfile`, `compose.yaml`, `values.yaml` and `.env.example`, no
 "listen": {
   "description": "Open the port and answer every http trigger in the tree until the process stops. ...",
   "holds": true,
-  "listens": { "input": "port", "setting": "port", "default": 8080 },
-  "accepts": { "port": { "type": "number", "required": false, "description": "..." } }
+  "listens": {
+    "port": { "input": "port", "setting": "port", "default": 8080 },
+    "host": { "input": "host", "setting": "host" }
+  },
+  "accepts": {
+    "port": { "type": "number", "required": false, "description": "..." },
+    "host": { "type": "string", "required": false, "description": "the interface to bind; absent: every interface" }
+  }
 }
 ```
+
+`host` carries no `default`, and that is deliberate: absent everywhere, the handler calls
+`server.listen(port)` exactly as it does today, which binds every interface on both families. Writing
+`"default": "0.0.0.0"` would have looked tidier and quietly dropped IPv6. So a tree that says nothing keeps
+binding everything, and a tree that wants to choose now can:
+
+```json
+{ "label": "Listen", "run": "@http/server.port.json#listen", "in": { "port": 8080, "host": "127.0.0.1" } }
+```
+
+or, for every profile at once, `"settings": { "port": 8080, "host": "127.0.0.1" }` on the `@http` plugin.
+`192.168.1.12` is as ordinary as either: the value is handed to `server.listen(port, host)` and Node decides
+whether such an address exists.
 
 and `@http/http.connection-kind.json` says which setting is the address:
 
@@ -273,7 +299,7 @@ C0nn  @acme/broker.connection-kind.json#endpoint
     → name a string setting of this kind: host
 ```
 
-and two are the command's, at deploy time, in the shape `start` refuses a missing variable (RFC 0013):
+and three are the command's, at deploy time, in the shape `start` refuses a missing variable (RFC 0013):
 
 ```
 $ npx wilanis-deploy example --profile digest     # a profile whose startup names only the digest run
@@ -285,7 +311,19 @@ $ npx wilanis-deploy example --profile production      # with "port" removed fro
 '@http/server.port.json#listen' listens on a port this tree does not fix: neither the 'Listen' step's
   in.port nor @http settings.port is a number
 → write "in": { "port": 8080 } on the step, or set "port" in the @http plugin's settings
+
+$ npx wilanis-deploy example --profile production      # with "host": "127.0.0.1" on the Listen step
+'@http/server.port.json#listen' binds 127.0.0.1, which nothing outside the container can reach: a
+  published port and a Service both arrive on the container's own address
+→ drop "host" to bind every interface, which is what a container wants; to keep a loopback bind on
+  purpose -- a sidecar sharing the network namespace -- render --target plan and write the objects yourself
 ```
+
+That last one is the whole reason the interface is worth declaring: `host` is the setting a person moves
+between the laptop and production and forgets, and the failure it causes is a container that starts,
+logs `http: listening on :8080`, passes nothing and answers nobody. A wildcard (`0.0.0.0`, `::`), a
+`{{secrets.*}}` read the operator fills in, or no host at all all pass; a fixed address a container will not
+have is refused before a file is written.
 
 **Keeping the recipe honest.** Every generated file's first line says it is generated and how to regenerate
 it. A file without that line is never overwritten. And `--check` writes nothing and exits 1 when anything
@@ -301,13 +339,18 @@ deploy/compose.yaml would change: ports 8080:8080 → 9090:9090
 
 ### Documents and schemas
 
-**`port.schema.json`**, `operations.<name>` gains `listens` (object, optional): "Where the TCP port this
-operation opens comes from. Declared: the operation opens a socket, and its number is the named `in` value
-of the startup step that runs it, else the named setting of the plugin that grants the port, else `default`.
-Absent: the operation opens no socket, or opens one no deployment needs to reach." Properties, all optional
-and at least one required: `input` (an identifier the operation `accepts`), `setting` (an identifier of the
-granting plugin's settings), `default` (a number). `additionalProperties: false`. `Operation` in
-`packages/core/src/model.ts` gains `listens?: { input?: string; setting?: string; default?: number }`.
+**`port.schema.json`**, `operations.<name>` gains `listens` (object, optional): "Where the address this
+operation binds comes from. Declared: the operation opens a TCP socket, and each part of its address is the
+named `in` value of the startup step that runs it, else the named setting of the plugin that grants the
+port, else `default`. Absent: the operation opens no socket, or opens one no deployment needs to reach."
+Two properties, `port` and `host`, at least `port` required, each an object with `input` (an identifier the
+operation `accepts`), `setting` (an identifier of the granting plugin's settings) and `default`, all
+optional and at least one of the three present. `additionalProperties: false` throughout. A `host` with no
+`default` means what it says: nothing fixes the interface, so the operation binds every one -- the RFC
+declines to write `0.0.0.0` as a default because that is IPv4 only, and today's `server.listen(port)` is
+not. `Operation` in `packages/core/src/model.ts` gains
+`listens?: { port: Bound<number>; host?: Bound<string> }` with
+`Bound<T> = { input?: string; setting?: string; default?: T }`.
 
 **`connection-kind.schema.json`** gains `endpoint` (string, optional): "Which of this kind's settings holds
 the address a connection of this kind reaches: a dotted path into `settings`. Declared: a deployment lists
@@ -323,7 +366,7 @@ segment.
 |---|---|---|
 | envelope | `node` | the tree's `package.json → engines.node`, verbatim, or `null` |
 | `connections[]` | `endpoint` | the value the kind's `endpoint` path picks out of `settings`, as written (a `{{secrets.*}}` template stays text), or `null` when the kind declares none |
-| `profiles.<name>` | `listens` | `[{ operation, port }]`: every `holds` operation the profile starts whose port document declares `listens`, with the number resolved, or `null` when nothing fixes it |
+| `profiles.<name>` | `listens` | `[{ operation, host, port }]`: every `holds` operation the profile starts whose port document declares `listens`. `port` is the number when one is fixed, else `null`. `host` is the literal when one is written, the `{{secrets.*}}` text when it is a secret read, and `null` when nothing is written -- which is every interface, not an unknown |
 
 **`packages/deploy/schemas/plan.schema.json`** is new, `$id` under the same published base as RFC 0019's
 `diagnostics.schema.json` and RFC 0026's manifest, `title` `plan`, every property described,
@@ -339,13 +382,22 @@ chart values for one place this tree runs; the tree is the source, so regenerate
 
 ### Ports, operations and kinds granted
 
-None. Three plugin documents *declare* what their code already does, and grant nothing:
+None: no port, kind, codec or shape is granted. Three plugin documents *declare* what their code already
+does, and one of them gains an input `@http` never had:
 
 | Document | Gains | Because |
 |---|---|---|
-| `@http/server.port.json` | `listen.listens: { input: "port", setting: "port", default: 8080 }` | it is `packages/plugin-http/src/serve.ts:201`, said where a reader can open it |
+| `@http/server.port.json` | `listen.listens: { port: { input: "port", setting: "port", default: 8080 }, host: { input: "host", setting: "host" } }` | the port half is `packages/plugin-http/src/serve.ts:201`, said where a reader can open it |
+| `@http/server.port.json` | `listen.accepts.host` (string, optional): "the interface to bind: an address of this host, or absent for every interface" | `serve.ts:227` is `server.listen(port, cb)` and a tree has no way to say otherwise |
+| `@http/plugin.json` | `settings.host` (string, optional), beside `settings.port` | so a tree fixes the interface once for every profile, as it fixes the port |
 | `@http/http.connection-kind.json` | `endpoint: "baseUrl"` | the host an http connection dials |
 | `@auth/oidc.connection-kind.json` | `endpoint: "issuer"` | the issuer an OIDC connection dials |
+
+`packages/plugin-http/src/serve.ts` resolves the host as it resolves the port -- `input.host ??
+settings.host` -- and binds with it only when one is fixed: `host ? server.listen(port, host, ready) :
+server.listen(port, ready)`. A tree that writes no host binds what it binds today, byte for byte. The
+startup log gains the address it actually bound, `http: listening on 127.0.0.1:8080` where a host was
+fixed and `:8080` where none was, so the one line a person reads at startup says which of the two happened.
 
 `@auth/directory.connection-kind.json` declares none, and its description gains the clause that says why:
 its users are written in the document. When RFC 0005's bucket kind, RFC 0002's storage kinds and RFC 0009's
@@ -361,7 +413,7 @@ D010 G013 L008 P003 R001 S001 T006, X103; RFC 0013 and RFC 0016 take C003-C006 b
 | Code | Where it lives | Refuses when | Hint |
 |---|---|---|---|
 | L0nn | `check/contracts.ts`, `checkPort` | an operation declares `listens` without `holds: true` | `add "holds": true, or drop "listens"` |
-| L0nn | `check/contracts.ts`, `checkPort` | `listens.input` names no field of the operation's `accepts`, or that field's type is not `number` | `name a number field this operation accepts: <list>` |
+| L0nn | `check/contracts.ts`, `checkPort` | `listens.port.input` names no field of the operation's `accepts`, or one whose type is not `number`; `listens.host.input` likewise for `string` | `name a <number\|string> field this operation accepts: <list>` |
 | C0nn | `check/contracts.ts`, `checkConnectionKind` (new) | `endpoint` names a path this kind's `settings` do not declare, or one whose type is not a string | `name a string setting of this kind: <list>` |
 
 All three are refusals against a plugin's own documents, so a plugin author meets them and a tree author never
@@ -378,12 +430,15 @@ verifies.
 Nothing the engine, the embedder, `start`, `rehearse`, `fuzz`, `regress` or `run` does changes. Two functions
 are new and one grows:
 
-- **`listensOf(scope, profile): { operation: string; port: number | null }[]`**, new,
+- **`listensOf(scope, profile): { operation: string; host: string | null; port: number | null }[]`**, new,
   `packages/runtime/src/manifest.ts`, beside `manifestOf`. For every startup step that runs under the
-  profile (RFC 0013) whose operation's port document declares `listens`: the number is the step's
-  `in.<input>` when that is a literal number, else the granting plugin's `settings.<setting>` when that is a
-  literal number, else `default`, else `null`. The order is `serve.ts:201`'s, and the test that proves they
-  agree is named under *Tests*. It never runs a handler and never reads the environment.
+  profile (RFC 0013) whose operation's port document declares `listens`, each part of the address is read
+  the same way: the step's `in.<input>`, else the granting plugin's `settings.<setting>`, else `default`,
+  else `null`. A `port` takes only a literal number, so a `{{secrets.*}}` port lands in `null` and is
+  refused later; a `host` takes a literal string *or* a `{{secrets.*}}` read, kept as its template text,
+  because an operator may well fix the interface from the environment. The order is `serve.ts:201`'s and
+  `serve.ts:227`'s, and the test that proves the three agree is named under *Tests*. It never runs a handler
+  and never reads the environment.
 - **`manifestOf`** fills the three new fields: `node` from the tree's `package.json` (which
   `packages/runtime/src/project.ts` already reads), `connections[].endpoint` through the kind's dotted path,
   and `profiles.<name>.listens` from `listensOf`. It stays pure, sorted and free of the clock and the
@@ -397,8 +452,11 @@ are new and one grows:
   (`["wilanis", "start", ".", "--profile", "<name>"]`, and without the flag for the unnamed profile RFC 0026
   keys as `""`), `listens`, `holds`, `needs`, `replicas: 1` and `probe` (the first `listens` port, else
   `null`). `requires` is every connection reached by any asked profile whose row has a non-null `endpoint`,
-  sorted by path, with `reachedBy`. It throws the two refusals of the *Guide*: a profile whose `holds` is
-  empty, and a `listens` whose port is `null`.
+  sorted by path, with `reachedBy`. It throws the three refusals of the *Guide*: a profile whose `holds` is
+  empty; a `listens` whose port is `null`; and a `listens` whose host is a fixed literal that is not a
+  wildcard (`0.0.0.0`, `::`) -- a `null` host (every interface) and a `{{secrets.*}}` host (the operator's)
+  both pass. The last is thrown by the `compose` and `helm` renderers and not by `plan` itself, since a plan
+  is what the tree says and only a published port makes a loopback bind wrong.
 
 `@wilanis/deploy` (`packages/deploy/`, bin `wilanis-deploy`, modelled on `@wilanis/view`: a tool over a
 loaded tree, not a plugin) holds `plan.ts` and one renderer per target, each a pure function from a plan to
@@ -453,11 +511,13 @@ readiness and prints the URL; `down` deletes the cluster. It is the only thing t
 ### Discoverability
 
 - `wilanis describe @http/server.port.json` prints, for an operation that declares `listens`:
-  `listen  (holds until stopped; listens on in.port, else @http settings.port, else 8080)`.
+  `listen  (holds until stopped; port: in.port, else @http settings.port, else 8080; host: in.host, else
+  @http settings.host, else every interface)`.
 - `wilanis describe @connections/monitor-api.connection.json` prints `endpoint  https://.../api/v1
   (baseUrl, by @http/http.connection-kind.json)`; a connection of a kind that declares none prints nothing
   extra, as today.
-- `wilanis manifest` carries `node`, `connections[].endpoint` and `profiles.<name>.listens`; the `jq` lines
+- `wilanis manifest` carries `node`, `connections[].endpoint` and `profiles.<name>.listens` with its host
+  and port; the `jq` lines
   of RFC 0026 answer the deployment questions without this package installed.
 - `wilanis-deploy --help` lists the targets, the flags and what each target writes. `wilanis --help` is
   unchanged: the runtime carries no opinion about containers, so it advertises no deploy command, exactly as
@@ -490,8 +550,15 @@ One behaviour changes for a plugin author, and only for one who opts in: a port 
 `listens` without `holds`, or a connection kind whose `endpoint` names nothing, is refused where it was
 previously accepted -- but no document in this repository or any tree written before this RFC declares
 either, so nothing existing is refused. `@http` and `@auth` gain their declarations in the step that lands
-the rules, and the test that proves `listensOf` agrees with `serve.ts:201` is what keeps the two from
-drifting.
+the rules, and the test that proves `listensOf` agrees with `serve.ts:201` and `:227` is what keeps them
+from drifting.
+
+`@http` gains an input and a setting, `host`, and binds no differently without them: absent everywhere, the
+handler still calls `server.listen(port, ready)`, which is every interface on both families. That is why
+`listens.host` carries no `default` and why the RFC does not write `0.0.0.0` anywhere it would take effect
+-- a default that looked harmless would turn every existing tree IPv4-only on the day it landed. A tree
+that writes `host` is choosing something it could not previously express, so nothing it does is a change of
+meaning.
 
 IR v1 is unaffected: no lowered form carries a port, an endpoint or a plan. `ir` in the manifest follows
 RFC 0008 as before.
@@ -502,7 +569,8 @@ RFC 0008 as before.
 the example hand `@wilanis/access` in as a `ResolvedInclude`):
 
 - give `@http/server.port.json`'s `listen` a `listens` and remove `holds` → L0nn;
-- point `listens.input` at `route` (a field `listen` does not accept) → L0nn; at a string field → L0nn;
+- point `listens.port.input` at `route` (a field `listen` does not accept) → L0nn; at `host` (a string) →
+  L0nn; point `listens.host.input` at `port` (a number) → L0nn;
 - give `@http/http.connection-kind.json` `"endpoint": "url"` → C0nn; `"endpoint": "headers"` (declared, not
   a string) → C0nn;
 - the example unchanged, with the three declarations in place → no refusal.
@@ -513,13 +581,18 @@ the example hand `@wilanis/access` in as a `ResolvedInclude`):
 - `connections[]` for `monitor-api.connection.json` has `endpoint` equal to its `baseUrl`, for
   `employees.connection.json` `null`, and for the production stand-in the template text when a tree writes
   `{{secrets.*}}` there;
-- `profiles.production.listens` is one row, `@http/server.port.json#listen` on 8080, and `profiles.live.listens`
-  the same, with `watch` absent from both because `@reload/watch.port.json#watch` declares no `listens`;
+- `profiles.production.listens` is one row, `@http/server.port.json#listen` on port 8080 with `host: null`,
+  and `profiles.live.listens` the same, with `watch` absent from both because `@reload/watch.port.json#watch`
+  declares no `listens`;
 - with `port` removed from the `@http` settings, the port is `8080` (the declared default); with a `"in": {
   "port": 9090 }` on the step, `9090`; with `"port": "{{secrets.port}}"` in the settings, `null`;
-- **the two agree**: a test in `packages/plugin-http/test` starts the example three ways -- the step's
-  `in.port`, the plugin setting, neither -- and asserts the socket's port equals what `listensOf` answered
-  for the same tree. This is the test that keeps `serve.ts:201` and `server.port.json` from drifting.
+- `host` is `null` for the example as written; `"127.0.0.1"` with it on the step; `"0.0.0.0"` with it in the
+  `@http` settings and nothing on the step; the template text with `"host": "{{secrets.bindHost}}"`;
+- **the three agree**: a test in `packages/plugin-http/test` starts the example six ways -- the step's
+  `in.port`, the plugin setting, neither; and the step's `in.host`, the plugin setting, neither -- and
+  asserts the socket's own `address()` equals what `listensOf` answered for the same tree, with the
+  no-host case asserted to be reachable on both `127.0.0.1` and the machine's own address. This is the
+  test that keeps `serve.ts:201`, `serve.ts:227` and `server.port.json` from drifting.
 
 **The plan**, in `packages/deploy/test/plan.test.ts`, over a committed manifest fixture
 (`test/fixtures/monitor.manifest.json`, written by `wilanis manifest example` and checked in, so the package
@@ -530,6 +603,8 @@ tests without loading a tree):
 - two profiles asked for → two workloads, sorted, and `requires` entries carry both in `reachedBy`;
 - a profile whose `holds` is empty → throws, naming the profile;
 - a `listens` whose port is `null` → throws, naming the operation and both places a number may be written;
+- a `listens` whose host is `"127.0.0.1"` → `compose` and `helm` throw, `plan` does not; `"0.0.0.0"`, `"::"`,
+  `null` and `"{{secrets.bindHost}}"` → all four render;
 - no value of any environment variable set for the test appears in the plan.
 
 **The renderers**, in `packages/deploy/test/render.test.ts`, parsing the output with `yaml`:
@@ -564,8 +639,9 @@ stale.
 ## Implementation plan
 
 1. **`listens` and `endpoint`.** The two schema keys and their `model.ts` interfaces; `checkConnectionKind`
-   and the loop in `checker.ts`; L0nn ×2 and C0nn; the three plugin documents; `describe` for both lines;
-   the sabotage tests. (`area:core`, `area:compiler`, `area:plugin-http`, `area:plugin-auth`)
+   and the loop in `checker.ts`; L0nn ×2 and C0nn; the plugin documents; `@http`'s `host` -- the accepted
+   input, the setting, `serve.ts` binding with it, the startup log line -- and its own tests; `describe` for
+   both lines; the sabotage tests. (`area:core`, `area:compiler`, `area:plugin-http`, `area:plugin-auth`)
 2. **The manifest's three fields.** `listensOf`, `node`, `connections[].endpoint`; `manifest.schema.json`;
    the manifest tests and the agreement test in `packages/plugin-http/test`. Blocked on RFC 0026 steps 1
    and 2. (`area:runtime`, `area:plugin-http`)
@@ -596,6 +672,17 @@ plans.
   Declared on the document, the fact is also in `describe`, in the viewer and in the manifest, where a
   person who never deploys still benefits from it. If the maintainer prefers the coupling, *Open questions*
   says what changes.
+- **`@http` gains a capability, in an RFC about deployment.** A bind address is not a deployment concept --
+  it is what a server does -- and the honest reading is that `@http` was incomplete and this RFC is where
+  the gap showed. The alternative, an RFC of its own for one input and one setting, would have left this one
+  claiming the plan says everything a deployment needs while the plan could not say where the process binds.
+  The change is bounded: one optional input, one optional setting, one branch in `serve.ts`, and no default,
+  so a tree that ignores it binds what it binds today.
+- **A fixed non-wildcard host is refused rather than warned.** There is a legitimate loopback bind in a
+  cluster -- a sidecar sharing the pod's network namespace -- and this refusal catches it too. It is still
+  the right default: the failure it prevents is silent (a container that starts, logs, and answers nobody),
+  and the escape hatch is one flag away, `--target plan`, which is exactly the reader a sidecar deployment
+  already is. A warning would be read by nobody and would be the one line CI does not fail on.
 - **The Helm chart is hand-written, so it is not derived from the tree.** A generated chart is a template
   that generates a template: the tool would emit Go template expressions, which no YAML emitter can produce
   safely and no test can parse. Splitting it -- the chart written once, its values derived -- puts the
@@ -646,11 +733,6 @@ plans.
 
 **Before `accepted`:**
 
-- **Do `listens` and `endpoint` belong on the core schemas?** This draft says yes, for the reasons under
-  *Drawbacks*: the alternative is a deploy tool that knows plugins by name. If the maintainer prefers the
-  coupling, step 1 disappears, `planOf` gains a table of `{ plugin → port setting, kind → endpoint setting }`
-  the package maintains, and the manifest's `profiles.<name>.listens` becomes the deploy tool's own
-  derivation rather than a manifest field -- a smaller diff and a worse document.
 - **Does the chart ship from this repository, or its own?** This draft keeps `charts/wilanis-tree/` here, so
   the cluster script, the chart and the tool that writes its values move together and CI proves all three at
   once. A separate repository would let the chart version independently of the packages, at the cost of a
@@ -658,6 +740,18 @@ plans.
 
 **Settled here, so the reasoning survives:**
 
+- **`listens` and `endpoint` stay on the core schemas.** The alternative was a deploy tool holding a table of
+  `{ plugin → port setting, kind → endpoint setting }`, which would have made "who implements a thing is
+  never a code detail" false of the one tool an operator uses, and would have needed a new row for every
+  plugin that ever listens or dials. Declared on the document, the two facts are also in `describe`, in the
+  viewer and in the manifest, where a person who never deploys still reads them.
+- **A tree can choose its interface, and `@http` gains `host` to make that true.** `listens` names both parts
+  of the address, `port` and `host`, each resolved from the step's `in`, then the plugin's settings, then a
+  declared default. `host` has no default: absent, `server.listen(port)` is called exactly as today, which is
+  every interface on both families, and writing `0.0.0.0` as a default would have made every existing tree
+  IPv4-only. `127.0.0.1`, `192.168.1.12` and `{{secrets.bindHost}}` are each ordinary values; a fixed
+  non-wildcard address is refused by the `compose` and `helm` renderers, because nothing outside a container
+  can reach one, and `--target plan` is the way past that for a sidecar that shares the namespace.
 - **`wilanis image` does not belong in the runtime** (the stub's first question). The runtime carries no
   opinion about containers, exactly as it carries none about the viewer: `@wilanis/deploy` is a tool over a
   manifest, with its own `bin`, its own schema and its own tests, and the runtime's usage text does not grow
