@@ -1,6 +1,6 @@
 # RFC 0016: Capability-aware compilation: what a tree requires against what an environment permits
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:core` (one additive key on `project.schema.json`: `profiles.<name>.permits`; `ProjectDoc`),
   `area:compiler` (three rules in `check/project.ts`, all over RFC 0013's `reachOf`), `area:runtime` (two lines
   of `describe`; the example's `production` profile), `area:view` (the project page). Nothing in the engine,
@@ -277,17 +277,19 @@ No end-to-end test: nothing runs.
 
 ## Open questions
 
-Before `accepted`:
+None before `accepted`.
 
-- Whether a profile without `permits` should make `wilanis check` say so (one line, not a refusal), or stay
-  silent. This RFC recommends silent: the laptop profile of every tree would print it forever, and the
-  manifest and `describe` already say *everything*.
-- Whether the default profile of RFC 0013 may carry `permits`. This RFC says yes; nothing about `default`
-  changes what `permits` means.
+**Settled here, so the reasoning survives.**
 
-During implementation:
+- **A profile without `permits` is silent.** `wilanis check` prints nothing for it, neither a line nor a
+  refusal: the laptop profile of every tree would print it forever, and `describe` and RFC 0026's manifest
+  already say *everything* where a reader looks for it. RFC 0020 is where a production profile is told to
+  write one.
+- **The default profile may carry `permits`.** `default` (RFC 0013) says which profile a start with no name
+  runs; `permits` says what its place allows. Nothing about the one changes what the other means, and a tree
+  whose laptop wants the list held may write it.
 
-- The exact wording of the three messages, and whether the first names every root that reaches the
-  operation or the first found. This RFC says the first found, with a count (`and 3 more`), so a message
-  stays one screen.
-- Whether the `permitted by` lines of `describe` are worth their cost against a tree with many profiles.
+**Left to implementation, deliberately:** the exact wording of the three messages, and whether the first
+names every root that reaches the operation or the first found, which this RFC says is the first found with a
+count (`and 3 more`) so a message stays one screen; and whether the `permitted by` lines of `describe` are
+worth their cost against a tree with many profiles.
