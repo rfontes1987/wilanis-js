@@ -48,7 +48,7 @@ beforeAll(async () => {
   });
   const load = loadTree(dir, PLUGINS, INCLUDES);
   expect(checkTree(load).items).toEqual([]);
-  ({ stop } = await start(load, { log: () => {} }));
+  ({ stop } = await start(load, { log: () => {}, profile: 'live' }));
 });
 
 afterAll(async () => {
@@ -225,7 +225,7 @@ describe('sessions: store on one call, read on another, keyed by the token', () 
 describe('a one-time code on the command line', () => {
   const run = async (ref: string, flags: Record<string, string> = {}) => {
     const load = loadTree(dir, PLUGINS, INCLUDES);
-    const { report, answer } = await runTrigger(load, ref, { flags }, { log: () => {} });
+    const { report, answer } = await runTrigger(load, ref, { flags }, { log: () => {}, profile: 'live' });
     return { report, answer: answer as any };
   };
   it('challenges, issues, unlocks, and spends the challenge', async () => {
@@ -281,7 +281,7 @@ describe('a one-time code on the command line', () => {
   });
   it('a stubbed run is never gated: wilanis run --seed rehearses the command without a code', async () => {
     const load = loadTree(dir, PLUGINS, INCLUDES);
-    const { report } = await runTrigger(load, '@hello/edge/hello-gated.trigger.json', {}, { seed: 3 });
+    const { report } = await runTrigger(load, '@hello/edge/hello-gated.trigger.json', {}, { seed: 3, profile: 'live' });
     expect(report.status).toBe('done');
   });
 });

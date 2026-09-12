@@ -148,12 +148,12 @@ The example talks to a public test API and needs no key. To read it without inst
 ```
 git clone https://github.com/wilanis/wilanis-js && cd wilanis-js
 npm install && npm run build
-npx wilanis check example          # is the tree consistent?
-npx wilanis rehearse example       # run every branch of every route and policy, network stubbed
+npx wilanis check example          # is the tree consistent? (every profile at once)
+npx wilanis rehearse example --profile local   # run every branch of every route and policy, network stubbed
 npx wilanis map example            # how does a request flow, and what gates it?
 npx wilanis-view example           # draw it, on http://127.0.0.1:4400/
 export MONITOR_JWT_SECRET=$(openssl rand -base64 32)
-npx wilanis start example          # serve it on :8080
+npx wilanis start example --profile local      # serve it on :8080, entries kept in memory
 ```
 
 [`example/README.md`](example/README.md) walks through what it serves and who may do what.

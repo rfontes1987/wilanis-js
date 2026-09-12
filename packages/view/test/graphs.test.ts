@@ -170,12 +170,19 @@ describe('the view model of a graph', () => {
       port: '@features/monitor/domain/monitor.port.json',
       portLabel: 'Entry storage',
       native: false,
+      // the port has two bindings now, and the viewer names both: which one answers is the profile's
       bindings: [
         {
           path: '@features/monitor/data/monitor-rest.binding.json',
           label: 'REST storage',
           graph: ByMethod,
           graphLabel: 'List rows by method',
+        },
+        {
+          path: '@features/monitor/data/monitor-store.binding.json',
+          label: 'Monitor over a store',
+          graph: '@features/monitor/data/kept-list-by-method.graph.json',
+          graphLabel: 'List what is kept, by method',
         },
       ],
       implementation: ByMethod,

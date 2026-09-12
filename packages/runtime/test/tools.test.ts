@@ -9,6 +9,8 @@ import auth from '@wilanis/plugin-auth';
 import blobs from '@wilanis/plugin-blob';
 import http from '@wilanis/plugin-http';
 import reload from '@wilanis/plugin-reload';
+import storage from '@wilanis/plugin-storage';
+import memory from '@wilanis/plugin-storage-memory';
 import { describe, expect, it } from 'vitest';
 import { BUILTIN_PLUGINS, fuzz, init, regress, runTrigger, scaffold } from '../src/index.js';
 
@@ -21,7 +23,15 @@ const INCLUDES: ResolvedInclude[] = [
     features: ['access'],
   },
 ];
-const PLUGINS = { ...BUILTIN_PLUGINS, '@http': http, '@blob': blobs, '@reload': reload, '@auth': auth };
+const PLUGINS = {
+  ...BUILTIN_PLUGINS,
+  '@http': http,
+  '@blob': blobs,
+  '@reload': reload,
+  '@auth': auth,
+  '@storage': storage,
+  '@storage-memory': memory,
+};
 const tmp = () => mkdtempSync(join(tmpdir(), 'wilanis-tools-'));
 const read = (path: string) => JSON.parse(readFileSync(path, 'utf8'));
 
@@ -111,7 +121,7 @@ describe('wilanis fuzz and regress', () => {
   it('fuzz writes one scenario per trigger per seed, and regress replays every one as the same', async () => {
     const dir = tmp();
     cpSync(EXAMPLE, dir, { recursive: true, filter: path => !path.includes('node_modules') });
-    const written = await fuzz(loadTree(dir, PLUGINS, INCLUDES), { runs: 2 });
+    const written = await fuzz(loadTree(dir, PLUGINS, INCLUDES), { runs: 2, profile: 'live' });
     // seventeen triggers -- the example's and the included access tree's -- two seeds each
     expect(written).toHaveLength(34);
     expect(readdirSync(join(dir, 'scenarios')).sort()).toEqual(written.map(one => one.split('/').pop()!).sort());
@@ -122,7 +132,7 @@ describe('wilanis fuzz and regress', () => {
     const again = loadTree(dir, PLUGINS, INCLUDES);
     expect(again.registry.all('scenario')).toHaveLength(34);
     expect(checkTree(again).items).toEqual([]);
-    const replayed = await regress(again);
+    const replayed = await regress(again, { profile: 'live' });
     expect(replayed.ok, replayed.lines.join('\n')).toBe(true);
     expect(replayed.lines).toHaveLength(34);
     expect(replayed.lines.every(line => line.endsWith(': same'))).toBe(true);
@@ -133,7 +143,7 @@ describe('wilanis fuzz and regress', () => {
     doc.nodes.find((node: any) => node.id === 'route').rules[1].to = 'entry';
     doc.out.from = ['entry', 'missing', 'failed'];
     writeFileSync(file, JSON.stringify(doc));
-    const changed = await regress(loadTree(dir, PLUGINS, INCLUDES));
+    const changed = await regress(loadTree(dir, PLUGINS, INCLUDES), { profile: 'live' });
     expect(changed.ok).toBe(false);
     expect(changed.lines.some(line => line.includes('get-entry') && !line.endsWith(': same'))).toBe(true);
     expect(existsSync(join(dir, 'scenarios'))).toBe(true);

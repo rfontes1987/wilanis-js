@@ -1,0 +1,62 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/graph.schema.json",
+  "label": "Get what is kept",
+  "description": "Data graph behind monitor.get under the local profile: one record by its key. Absence is answered as `record` absent rather than as a failure, so the switch routes on it and the refusal is a case this graph named.",
+  "in": "@monitor/domain/EntryRef.shape.json",
+  "out": {
+    "type": "@monitor/domain/Entry.shape.json",
+    "from": [
+      "row",
+      "missing"
+    ]
+  },
+  "nodes": [
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "asked",
+      "label": "Read the record",
+      "run": "@storage/store.port.json#get",
+      "in": {
+        "store": "@monitor/data/entries.store.json",
+        "collection": "entries",
+        "key": "{{in.id}}"
+      }
+    },
+    {
+      "type": "@wilanis/node/switch.schema.json",
+      "id": "route",
+      "label": "Is it kept?",
+      "in": {
+        "record": "{{asked.record}}"
+      },
+      "rules": [
+        {
+          "when": "has(record)",
+          "to": "row"
+        }
+      ],
+      "else": "missing"
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "row",
+      "label": "The record",
+      "run": "@std/object.port.json#make",
+      "in": {
+        "value": "{{asked.record}}",
+        "type": "@monitor/domain/Entry.shape.json"
+      }
+    },
+    {
+      "type": "@wilanis/node/run.schema.json",
+      "id": "missing",
+      "label": "No such entry",
+      "run": "@std/outcome.port.json#refuse",
+      "in": {
+        "reason": "missing",
+        "message": "no entry {{in.id}}",
+        "type": "@monitor/domain/Entry.shape.json"
+      }
+    }
+  ]
+}

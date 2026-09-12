@@ -51,6 +51,8 @@
     "@wilanis/plugin-reload": "0.1.0",
     "@wilanis/compiler": "0.1.0",
     "@wilanis/plugin-auth": "0.1.0",
-    "jose": "^6.0.0"
+    "jose": "^6.0.0",
+    "@wilanis/plugin-storage": "0.1.0",
+    "@wilanis/plugin-storage-memory": "0.1.0"
   }
 }

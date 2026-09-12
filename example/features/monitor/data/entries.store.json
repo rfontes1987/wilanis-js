@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/store.schema.json",
+  "label": "Entries",
+  "description": "What the monitor keeps: one record per observed call, identified by its id. The collection is where the record type is written down, so the graphs below name the store and the collection and repeat no shape.",
+  "connection": "@connections/entries.connection.json",
+  "collections": {
+    "entries": {
+      "description": "the observed calls, one row each",
+      "of": "@monitor/domain/Entry.shape.json",
+      "key": "id",
+      "unique": [
+        [
+          "url",
+          "method"
+        ]
+      ]
+    }
+  }
+}

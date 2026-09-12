@@ -100,13 +100,14 @@ describe('sabotage: access, as the example attaches the included policies', () =
     ).toEqual([
       '@connections/customers.connection.json',
       '@connections/employees.connection.json',
+      '@connections/entries.connection.json',
       '@connections/monitor-api.connection.json',
     ]);
   });
   it('the `in` operator: a role check in a switch rule, and a branch the rehearsal can steer both ways', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'wilanis-'));
     cpSync(EXAMPLE, dir, { recursive: true, filter: path => !path.includes('node_modules') });
-    const run = await rehearse(loadTree(dir, PLUGINS, INCLUDES), { seed: 5 });
+    const run = await rehearse(loadTree(dir, PLUGINS, INCLUDES), { seed: 5, profile: 'live' });
     rmSync(dir, { recursive: true, force: true });
     const lines = run.lines.filter(
       line => line.includes("'recorder' in principal.roles") || line.includes('require-recorder'),

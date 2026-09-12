@@ -12,6 +12,8 @@ import { loadTree, type PluginModule, type ResolvedInclude } from '@wilanis/core
 import blobs from '@wilanis/plugin-blob';
 import http from '@wilanis/plugin-http';
 import reload from '@wilanis/plugin-reload';
+import storage from '@wilanis/plugin-storage';
+import memory from '@wilanis/plugin-storage-memory';
 import { BUILTIN_PLUGINS } from '@wilanis/runtime';
 import { exportJWK, generateKeyPair, type KeyLike, SignJWT } from 'jose';
 import auth from '../src/index.js';
@@ -23,6 +25,8 @@ export const PLUGINS: Record<string, PluginModule> = {
   '@blob': blobs,
   '@reload': reload,
   '@auth': auth,
+  '@storage': storage,
+  '@storage-memory': memory,
 };
 
 /** The tree the example includes, as the runtime would resolve it from the example's node_modules. */

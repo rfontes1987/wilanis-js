@@ -1,21 +1,47 @@
 # monitor
 
-A wilanis project: a monitor of observed HTTP calls whose routes talk to a public REST API
-(`https://6aa009e23e0d88d3d7e5525d.mockapi.io/api/v1/monitor`), with sign-in, sessions and policies over its
-writes, and a command-line greeting gated by a one-time code. Everything in this directory is JSON;
-`package.json` installs the runtime and the plugin packages it uses. The API needs no key; the one secret is
-the key our tokens are signed with, `MONITOR_JWT_SECRET`, which `start` and `run` need in the environment.
+A wilanis project: a monitor of observed HTTP calls, with sign-in, sessions and policies over its writes, and
+a command-line greeting gated by a one-time code. Everything in this directory is JSON; `package.json`
+installs the runtime and the plugin packages it uses. The one secret is the key our tokens are signed with,
+`MONITOR_JWT_SECRET`, which `start` and `run` need in the environment.
+
+**Where the entries live is a profile's choice, and nothing else changes.** `live` binds the monitor port to
+`monitor-rest.binding.json` and the routes talk to a public REST API
+(`https://6aa009e23e0d88d3d7e5525d.mockapi.io/api/v1/monitor`, no key needed). `local` binds the same port to
+`monitor-store.binding.json`, and the entries are kept in a store of their own -- `entries.store.json`, one
+collection of `Entry` keyed by `id`, over a connection of the memory engine's kind, so nothing leaves the
+process. The routes, the policies, the domain graphs and the shapes are the same either way: only the data
+graphs behind the port differ, which is what a port is for.
+
+Because the port now has two bindings, **a command that runs the tree names a profile**: `--profile local` or
+`--profile live`. `wilanis check` needs none -- it judges every profile.
 
 ```
 npm install
 export MONITOR_JWT_SECRET=$(openssl rand -base64 32)
-npm run check            # wilanis check .
-npm run rehearse         # every trigger, every policy, every branch of every switch, effects stubbed
-npm run digest           # wilanis run @monitor/edge/digest.trigger.json .  -- the count and one line per entry, for real
-npm run start            # GET /monitor[?method=], POST /monitor, GET|PUT|DELETE /monitor/{id}, DELETE /monitor, GET|POST /monitor.csv,
-                         # POST /api/v1/auth-customers | auth-employees | token/refresh | sign-out, GET|PUT /api/v1/me/preferences on :8080
-npm run hello            # wilanis run @hello/edge/hello-gated.trigger.json .  -- challenged until a one-time code is answered
+npm run check                       # wilanis check .  -- every profile at once
+npm run rehearse -- --profile local # every trigger, every policy, every branch of every switch, effects stubbed
+npm run digest -- --profile local   # the count and one line per entry, for real
+npm run start -- --profile local    # GET /monitor[?method=], POST /monitor, GET|PUT|DELETE /monitor/{id}, DELETE /monitor, GET|POST /monitor.csv,
+                                    # POST /api/v1/auth-customers | auth-employees | token/refresh | sign-out, GET|PUT /api/v1/me/preferences on :8080
+npm run hello -- --profile local    # challenged until a one-time code is answered
 ```
+
+Kept in memory, it answers for itself:
+
+```
+curl -s localhost:8080/monitor                                    # []
+TOKEN=$(curl -s -X POST localhost:8080/api/v1/auth-employees \
+  -H 'content-type: application/json' \
+  -d '{"username":"bo","password":"bo-pass"}' | jq -r .accessToken)
+curl -s -X POST localhost:8080/monitor -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' -d '{"url":"https://example.com/a","method":"GET"}'
+curl -s localhost:8080/monitor                                    # the entry, read back from the store
+```
+
+The store lives exactly as long as the process: stop it and the entries are gone. That is what the memory
+engine is for -- development, tests, and a demo that needs nothing installed. Point `entries.connection.json`
+at another engine's kind and the same documents keep the same records in a database.
 
 ## Who may do what
 

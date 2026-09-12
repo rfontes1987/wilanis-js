@@ -81,10 +81,20 @@ describe('the view model of the example', () => {
   it('says how a trigger answers each refusal it can reach, and which node refuses with it', async () => {
     const seen = await view('@features/monitor/edge/get-entry.trigger.json');
     expect(seen.answers).toEqual([
+      // one reason, refused in both bindings' graphs: the viewer names each, since which one runs is the
+      // profile's choice and a reader of the route wants to see every place the answer can come from
       {
         reason: 'missing',
         answer: 404,
-        from: [{ graph: GET_ROW, graphLabel: 'Get a row', node: 'missing', nodeLabel: 'No such entry' }],
+        from: [
+          { graph: GET_ROW, graphLabel: 'Get a row', node: 'missing', nodeLabel: 'No such entry' },
+          {
+            graph: '@features/monitor/data/kept-get.graph.json',
+            graphLabel: 'Get what is kept',
+            node: 'missing',
+            nodeLabel: 'No such entry',
+          },
+        ],
       },
       {
         reason: 'upstream',
@@ -96,7 +106,10 @@ describe('the view model of the example', () => {
     const batch = await view('@features/monitor/edge/delete-entries.trigger.json');
     expect(batch.answers!.find(answer => answer.reason === 'missing')).toMatchObject({
       answer: 404,
-      from: [{ graph: '@features/monitor/data/delete-row.graph.json', node: 'missing' }],
+      from: [
+        { graph: '@features/monitor/data/delete-row.graph.json', node: 'missing' },
+        { graph: '@features/monitor/data/kept-remove.graph.json', node: 'missing' },
+      ],
     });
     // a kind that maps no refusals has nothing to say here
     expect((await view('@features/monitor/edge/digest.trigger.json')).answers).toBeUndefined();
@@ -234,11 +247,19 @@ describe('the view model of the example', () => {
     expect(port.callers.map(caller => caller.path)).toContain('@features/monitor/data/monitor-rest.binding.json');
     expect(port.callers.map(caller => caller.path)).toContain('@features/monitor/domain/list-entries.graph.json');
     expect(port.refs.map(refusal => refusal.path)).toContain('@features/monitor/domain/Entry.shape.json');
+    // both bindings of the port, so the page says what meets it under either profile
     expect(port.implementations).toEqual([
       {
         path: '@features/monitor/data/monitor-rest.binding.json',
         label: 'REST storage',
         operations: expect.objectContaining({ get: { graph: GET_ROW, graphLabel: 'Get a row' } }),
+      },
+      {
+        path: '@features/monitor/data/monitor-store.binding.json',
+        label: 'Monitor over a store',
+        operations: expect.objectContaining({
+          get: { graph: '@features/monitor/data/kept-get.graph.json', graphLabel: 'Get what is kept' },
+        }),
       },
     ]);
     // a native port has no binding: the page names the plugin that grants it instead

@@ -145,11 +145,11 @@ describe('sabotage: the project, its plugins and its startup', () => {
  * keeps nothing yet (RFC 0002 step 8), so every case plants the store it breaks.
  */
 describe('sabotage: a store names a connection and the shapes it keeps', () => {
-  const kept = '@connections/customers.connection.json';
+  const kept = '@connections/entries.connection.json';
 
   /** One store, in the feature named, over the connection and the shape named. */
   const keeping = (feature: string, of: string, connection = kept) => ({
-    [`features/${feature}/data/entries.store.json`]: {
+    [`features/${feature}/data/planted.store.json`]: {
       $schema: schemaUrl('store'),
       label: 'Entries',
       description: 'The entries recorded so far.',
