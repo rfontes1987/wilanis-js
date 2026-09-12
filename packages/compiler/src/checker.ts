@@ -3,13 +3,13 @@
  * its module under check/:
  *   D documents (the loader)   R references   L layers/effects/visibility   G graphs (graph.ts, inputs.ts)
  *   P static fields/resolvers (resolvers.ts)   B bindings/profiles (bindings.ts, project.ts)
- *   T triggers (triggers.ts)   A access (access.ts)   C connections/settings (project.ts, contracts.ts)
+ *   T triggers (triggers.ts)   A access (access.ts)   C connections/settings/stores (project.ts, contracts.ts)
  *   S scenarios (triggers.ts)   X plugin-specific (each plugin's own `check`)
  */
 import { type LoadResult, type PluginModule, RefusalList, Scope } from '@wilanis/core';
 import { checkPolicy } from './check/access.js';
 import { checkBinding } from './check/bindings.js';
-import { checkConnection, checkPort, checkShape } from './check/contracts.js';
+import { checkConnection, checkPort, checkShape, checkStore } from './check/contracts.js';
 import { checkGraph } from './check/graph.js';
 import { Judge } from './check/judge.js';
 import { checkProject, checkStartup } from './check/project.js';
@@ -35,6 +35,7 @@ function judgeTree(judge: Judge): void {
   for (const shape of registry.all('shape')) checkShape(judge, shape);
   for (const port of registry.all('port')) checkPort(judge, port);
   for (const connection of registry.all('connection')) checkConnection(judge, connection);
+  for (const store of registry.all('store')) checkStore(judge, store);
   for (const resolvers of registry.all('resolvers')) checkResolversDoc(judge, resolvers);
   for (const graph of registry.all('graph')) checkGraph(judge, graph, judge.scope.roleOf(graph.path));
   for (const binding of registry.all('binding')) checkBinding(judge, binding);

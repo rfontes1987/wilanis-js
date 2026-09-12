@@ -1,5 +1,6 @@
+import { schemaUrl } from '@wilanis/core';
 import { describe, expect, it } from 'vitest';
-import { sabotage } from './example-harness.js';
+import { plantedAll, sabotage } from './example-harness.js';
 
 describe('sabotage: the project, its plugins and its startup', () => {
   it('X003 a throttle that lets nothing through', () => {
@@ -132,5 +133,46 @@ describe('sabotage: the project, its plugins and its startup', () => {
         graph.nodes[0].run = '@monitor/nope.port.json#listAll';
       }),
     ).toContain('R001');
+  });
+});
+
+/**
+ * A store names two kinds of document, and `checkStore` is the only rule that judges them for it: the
+ * connection its records live behind, and the shape of every collection. Each must exist (R001) and each
+ * must be the store's to see (L005). What a store *means* -- that the connection reaches a storage engine,
+ * that the key is a required field of the shape -- is @storage's to refuse (X202, X203) once it exists, so
+ * nothing here expects it, and the connection below is simply one the example already has. The example
+ * keeps nothing yet (RFC 0002 step 8), so every case plants the store it breaks.
+ */
+describe('sabotage: a store names a connection and the shapes it keeps', () => {
+  const kept = '@connections/customers.connection.json';
+
+  /** One store, in the feature named, over the connection and the shape named. */
+  const keeping = (feature: string, of: string, connection = kept) => ({
+    [`features/${feature}/data/entries.store.json`]: {
+      $schema: schemaUrl('store'),
+      label: 'Entries',
+      description: 'The entries recorded so far.',
+      connection,
+      collections: { entries: { of, key: 'id' } },
+    },
+  });
+
+  it('passes check when the connection and the shape are both there and both visible', () => {
+    expect(plantedAll(keeping('monitor', '@monitor/domain/Entry.shape.json'))).toEqual([]);
+  });
+
+  it('R001 a connection the tree does not have', () => {
+    const broken = keeping('monitor', '@monitor/domain/Entry.shape.json', '@connections/nope.connection.json');
+    expect(plantedAll(broken)).toContain('R001');
+  });
+
+  it('R001 a collection over a shape the tree does not have', () => {
+    expect(plantedAll(keeping('monitor', '@monitor/domain/Nope.shape.json'))).toContain('R001');
+  });
+
+  it("L005 a collection over another feature's shape that feature does not export", () => {
+    // the monitor exports Entry and its port, and nothing else: EntryRecord is its own business
+    expect(plantedAll(keeping('hello', '@monitor/domain/EntryRecord.shape.json'))).toContain('L005');
   });
 });
