@@ -9,7 +9,7 @@
  */
 import { schemaUrl } from '@wilanis/core';
 import { describe, expect, it } from 'vitest';
-import { plantedAll } from './example-harness.js';
+import { plantedAll, plantedPointing } from './example-harness.js';
 
 const KEPT = '@connections/customers.connection.json';
 const shape = (label: string, fields: Record<string, unknown>) => ({
@@ -25,6 +25,8 @@ const SHAPES = {
   'features/monitor/domain/Note.shape.json': shape('Note', {
     id: { type: 'string' },
     entryId: { type: 'string' },
+    byId: { type: 'string', required: false, description: 'the entry this note answers, where it answers one' },
+    tags: { type: 'string[]' },
     text: { type: 'string' },
   }),
   'features/monitor/domain/Counted.shape.json': shape('Counted', {
@@ -62,6 +64,11 @@ const notes = (extra: Record<string, unknown> = {}) => ({
 });
 const counted = { of: '@monitor/domain/Counted.shape.json', key: 'n' };
 const codesOf = (collections: Record<string, unknown>) => plantedAll(keeping(collections));
+const pointingAt = (collections: Record<string, unknown>) => plantedPointing(keeping(collections));
+
+/** One refusal as a case expects it: the code, and the constraint of the planted store it points at. */
+const STORE = '@features/monitor/data/entries.store.json';
+const at = (code: string, where: string) => [`${code} ${STORE}#collections/${where}`];
 
 describe('sabotage: what a store holds its records to', () => {
   it('passes check when every constraint names a field the shape has, and means what it can mean', () => {
@@ -73,33 +80,42 @@ describe('sabotage: what a store holds its records to', () => {
     ).toEqual([]);
   });
 
-  it('C003 a constraint naming a field the shape does not have', () => {
-    expect(codesOf({ entries: entries({ unique: [['urrl']] }) })).toContain('C003');
-    expect(codesOf({ entries: entries({ defaults: { nope: 1 } }) })).toContain('C003');
-    expect(codesOf({ entries: entries({ refs: { nope: { collection: 'entries' } } }) })).toContain('C003');
+  it('C003 a constraint naming a field the shape does not have, pointing at the constraint that named it', () => {
+    expect(pointingAt({ entries: entries({ unique: [['urrl']] }) })).toEqual(at('C003', 'entries/unique/0'));
+    expect(pointingAt({ entries: entries({ defaults: { nope: 1 } }) })).toEqual(at('C003', 'entries/defaults/nope'));
+    expect(pointingAt({ entries: entries({ refs: { nope: { collection: 'entries' } } }) })).toEqual(
+      at('C003', 'entries/refs/nope'),
+    );
   });
 
   it('C004 a default the field would not accept, or one given for the key', () => {
-    expect(codesOf({ entries: entries({ defaults: { ua: 7 } }) })).toContain('C004');
-    expect(codesOf({ entries: entries({ defaults: { id: 'x' } }) })).toContain('C004');
+    expect(pointingAt({ entries: entries({ defaults: { ua: 7 } }) })).toEqual(at('C004', 'entries/defaults/ua'));
+    expect(pointingAt({ entries: entries({ defaults: { id: 'x' } }) })).toEqual(at('C004', 'entries/defaults/id'));
     expect(codesOf({ entries: entries({ defaults: { ua: 'unknown' } }) })).toEqual([]);
   });
 
   it('C005 a reference to a collection this store does not declare', () => {
     const broken = { entries: entries(), notes: notes({ refs: { entryId: { collection: 'nowhere' } } }) };
-    expect(codesOf(broken)).toContain('C005');
+    expect(pointingAt(broken)).toEqual(at('C005', 'notes/refs/entryId'));
   });
 
   it('C006 a reference of one type to records keyed by another', () => {
     const broken = { counted, notes: notes({ refs: { entryId: { collection: 'counted' } } }) };
-    expect(codesOf(broken)).toContain('C006');
+    expect(pointingAt(broken)).toEqual(at('C006', 'notes/refs/entryId'));
     expect(codesOf({ entries: entries(), notes: notes({ refs: { entryId: { collection: 'entries' } } }) })).toEqual([]);
   });
 
+  it('a reference on a field that may be absent is an ordinary nullable one, and passes', () => {
+    // Nothing in RFC 0003's table forbids it: a note that answers no entry holds no reference, which is what
+    // an optional field says. The rule that would refuse it is not written down, so it is not judged here.
+    const optional = { entries: entries(), notes: notes({ refs: { byId: { collection: 'entries' } } }) };
+    expect(codesOf(optional)).toEqual([]);
+  });
+
   it('C007 a constraint that names the key, which identifies a record and is unique already', () => {
-    expect(codesOf({ entries: entries({ unique: [['id']] }) })).toContain('C007');
+    expect(pointingAt({ entries: entries({ unique: [['id']] }) })).toEqual(at('C007', 'entries/unique/0'));
     const onItsKey = { entries: entries(), notes: notes({ refs: { id: { collection: 'entries' } } }) };
-    expect(codesOf(onItsKey)).toContain('C007');
+    expect(pointingAt(onItsKey)).toEqual(at('C007', 'notes/refs/id'));
   });
 
   it("a constraint naming one field twice is the schema's to refuse, so C007 never has to", () => {
@@ -112,8 +128,23 @@ describe('sabotage: what a store holds its records to', () => {
       key: 'id',
       ...extra,
     });
-    expect(codesOf({ uploads: uploads({ unique: [['file']] }) })).toContain('C008');
-    expect(codesOf({ uploads: uploads({ unique: [['tags']] }) })).toContain('C008');
+    expect(pointingAt({ uploads: uploads({ unique: [['file']] }) })).toEqual(at('C008', 'uploads/unique/0'));
+    expect(pointingAt({ uploads: uploads({ unique: [['tags']] }) })).toEqual(at('C008', 'uploads/unique/0'));
     expect(codesOf({ uploads: uploads({ unique: [['id']] }) })).not.toContain('C008');
+  });
+
+  it('a reference on a list field is C008 alone: a field an engine holds no value of refers to nothing', () => {
+    const broken = { entries: entries(), notes: notes({ refs: { tags: { collection: 'entries' } } }) };
+    expect(pointingAt(broken)).toEqual(at('C008', 'notes/refs/tags'));
+  });
+
+  it('an unknown shape is R001 once, wherever else the collection is looked at', () => {
+    const missing = { entries: { of: '@monitor/domain/Nowhere.shape.json', key: 'id' } };
+    expect(pointingAt(missing)).toEqual(at('R001', 'entries/of'));
+    const referring = {
+      entries: { of: '@monitor/domain/Nowhere.shape.json', key: 'id' },
+      notes: notes({ refs: { entryId: { collection: 'entries' } } }),
+    };
+    expect(pointingAt(referring)).toEqual(at('R001', 'entries/of'));
   });
 });

@@ -227,7 +227,7 @@ None.
 ### Checker rules
 
 All in `check/project.ts`; numbers are assigned when the implementing pull request lands (current highest:
-A006 B008 C002 D010 G013 L008 P003 R001 S001 T006, X103).
+A006 B008 C008 D010 G013 L008 P003 R001 S001 T006, X103; RFC 0003 took C003-C008).
 
 | Code | Where it lives | Refuses when | Hint |
 |---|---|---|---|

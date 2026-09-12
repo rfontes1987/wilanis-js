@@ -457,8 +457,9 @@ broker kinds land, each declares its own `endpoint` in the RFC that lands it; no
 
 `checker.ts:35-43` gains one loop, `for (const kind of registry.all('connection-kind')) checkConnectionKind(judge, kind)`,
 so a connection kind document is judged for the first time on its own rather than only when a connection
-names it. Numbers are assigned when the implementing pull request lands (current highest: A006 B008 C002
-D010 G013 L008 P003 R001 S001 T006, X103; RFC 0013 and RFC 0016 take C003-C006 before this RFC).
+names it. Numbers are assigned when the implementing pull request lands (current highest: A006 B008 C008
+D010 G013 L008 P003 R001 S001 T006, X103; RFC 0003 took C003-C008 over a store's constraints, and
+RFC 0013 and RFC 0016 hold their C rows as `C0nn` still, so each takes the next free one when it lands).
 
 | Code | Where it lives | Refuses when | Hint |
 |---|---|---|---|
