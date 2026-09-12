@@ -94,8 +94,11 @@ export function checkStore(judge: Judge, store: Loaded<StoreDoc>): void {
   for (const [name, collection] of Object.entries(store.doc.collections)) {
     const at = `collections/${name}/of`;
     const shape = judge.scope.get('shape', collection.of);
-    if (shape) judge.visible(store, shape, at);
-    else refuse('R001', `unknown shape '${collection.of}'`, at, 'wilanis ls shape');
+    if (!shape) {
+      refuse('R001', `unknown shape '${collection.of}'`, at, 'wilanis ls shape');
+      continue;
+    }
+    judge.visible(store, shape, at);
     const type = judge.type(collection.of, store.path, at);
     if (type) checkConstraints({ judge, refuse, store, name, collection, fields: fieldsOf(type) });
   }
@@ -112,6 +115,9 @@ interface Kept {
 }
 
 const fieldsOf = (type: Type): Record<string, ObjField> => (type.kind === 'object' ? type.fields : {});
+
+/** Whether an engine holds no single value of a field: bytes live in the blob registry, and neither a shape nor a list is one value to index. */
+const unholdable = (type: Type): boolean => type.kind === 'blob' || type.kind === 'object' || type.kind === 'list';
 
 /** What every constraint of a collection is held to, each rule reading the shape the collection declares. */
 function checkConstraints(kept: Kept): void {
@@ -161,8 +167,7 @@ function checkNames(kept: Kept): void {
       continue;
     }
     if (constraint === 'defaults') continue;
-    const kind = declared.type.kind;
-    if (kind === 'blob' || kind === 'object' || kind === 'list')
+    if (unholdable(declared.type))
       refuse(
         'C008',
         `'${field}' is ${show(declared.type)}, and a constraint names a value an engine can hold: a string, a number or a boolean`,
@@ -205,11 +210,16 @@ function checkRefs(kept: Kept): void {
   }
 }
 
-/** C006: what a reference holds is what the collection it names is keyed by. */
+/**
+ * C006: what a reference holds is what the collection it names is keyed by. A field C008 already refused
+ * holds no value to compare, and the target's shape is looked up quietly -- an unknown one is refused once,
+ * where the collection declaring it is judged.
+ */
 function checkRefType(kept: Kept, field: string, at: string, target: Collection): void {
-  const { judge, refuse, store, fields } = kept;
+  const { judge, refuse, fields } = kept;
   const held = fields[field];
-  const targetType = judge.type(target.of, store.path, at);
+  if (held && unholdable(held.type)) return;
+  const targetType = judge.quiet(target.of);
   const key = targetType && fieldsOf(targetType)[target.key];
   if (!held || !key) return;
   if (show(held.type) === show(key.type)) return;

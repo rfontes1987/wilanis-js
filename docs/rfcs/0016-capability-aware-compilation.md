@@ -164,8 +164,8 @@ None.
 All in `check/project.ts`, in one function `checkPermits(judge, name, profile)` called from `checkProject`
 for every profile with `permits`, reading `reachOf(judge.scope, name)` (RFC 0013): its `effects` and its
 `connections`, the latter already resolved through the profile's `connections` map, so a stand-in is what is
-compared. Numbers are assigned when the implementing pull request lands (current highest: A006 B008 C002 D010
-G013 L008 P003 R001 S001 T006, X103; RFC 0013 takes the C codes before this one).
+compared. Numbers are assigned when the implementing pull request lands (current highest: A006 B008 C008 D010
+G013 L008 P003 R001 S001 T006, X103; RFC 0003 took C003-C008, and RFC 0013 takes its C codes before this one).
 
 | Code | Where it lives | Refuses when | Hint |
 |---|---|---|---|

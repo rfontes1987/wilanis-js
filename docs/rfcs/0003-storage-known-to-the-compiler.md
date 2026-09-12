@@ -202,17 +202,29 @@ store, so `checkInputs` in `packages/compiler/src/check/inputs.ts` already holds
 
 Compiler rules extend `checkStore` in `packages/compiler/src/check/contracts.ts` (RFC 0002), family C
 ("connections, settings and stores"); when the module passes the 300-line house rule they move together to
-`check/stores.ts`. Codes below are placeholders: numbers are assigned in the implementing pull request from
-the next free in the family (the families stand at A006 B008 C002 D010 G013 L008 P003 R001 S001 T006 today).
+`check/stores.ts`. The codes were assigned in the implementing pull request from the next free in the family, C002 having
+been the highest (the other families stand at A006 B008 D010 G013 L008 P003 R001 S001 T006 today).
 
 | Code | Where it lives | Refuses when | Hint |
 |---|---|---|---|
-| C0nn | `checkStore` | a name in `unique`, `refs` or `defaults` is not a field of the shape | `wilanis describe <shape>` |
-| C0nn | `checkStore` | a `defaults` value is not assignable to its field's type, or is given for the key | `write a literal of type <type>; a key is never defaulted` |
-| C0nn | `checkStore` | a `refs` entry names a collection this store does not declare | `a reference stays within one store; declare the collection here, or read it by a second get` |
-| C0nn | `checkStore` | a `refs` field's type is not the type of the referenced collection's key | `<field> is <type>; <collection> is keyed by <type>` |
-| C0nn | `checkStore` | a `refs` field is the collection's own key, or a `unique` list repeats a field | `a key is unique already; a constraint names each field once` |
-| C0nn | `checkStore` | a `unique` or `refs` entry names a field an engine cannot constrain | `wilanis describe <the connection's kind>` |
+| C003 | `checkStore` | a name in `unique`, `refs` or `defaults` is not a field of the shape | `wilanis describe <shape>` |
+| C004 | `checkStore` | a `defaults` value is not assignable to its field's type, or is given for the key | `write a literal of type <type>; a key is never defaulted` |
+| C005 | `checkStore` | a `refs` entry names a collection this store does not declare | `a reference stays within one store; declare the collection here, or read it by a second get` |
+| C006 | `checkStore` | a `refs` field's type is not the type of the referenced collection's key | `<field> is <type>; <collection> is keyed by <type>` |
+| C007 | `checkStore` | a `refs` field is the collection's own key, or a `unique` list names it | `a key is unique already; a constraint names each field once` |
+| C008 | `checkStore` | a `unique` or `refs` entry names a field an engine holds no single value of: a `blob`, a shape or a list | `wilanis describe <the connection>` |
+
+Two notes on what landed against what this table asked for. **A `unique` list that repeats a field** is not
+C007's: the schema already refuses it as D001, through the `uniqueItems` this RFC puts on the inner list, and
+a rule lives in one place. C007 is the key half alone, and a test asserts D001 answers the other.
+**C008 is judged by type rather than by engine.** `checkStore` is a compiler rule and knows no engine, so it
+reads the fact every engine shares -- a `blob` is a handle to bytes the registry holds, and neither a shape
+nor a list is one value to index -- and a genuinely per-engine constraint belongs in the X band beside
+X201-X207. A field C008 refuses is not then judged by C006: it holds no value to compare.
+
+Neither of two rows in *Tests* below became a rule. A `refs` on an optional field is an ordinary nullable
+reference and nothing in this table forbids it, so it is a passing case. Two collections named `Entries` and
+`entries` are D001's, through `ident`, and X223's for postgres.
 
 Plugin rules live in `packages/plugin-storage/src/rules.ts`, the plugin's `check`, given `PluginCheckContext`
 (`packages/core/src/plugin.ts`), continuing RFC 0002's table. They walk every run and map node of every graph

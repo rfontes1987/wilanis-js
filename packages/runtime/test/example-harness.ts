@@ -29,6 +29,10 @@ export const INCLUDES: ResolvedInclude[] = [
 /** The refusal codes a tree answers with. */
 export const codes = (root: string) => checkTree(loadTree(root, PLUGINS, INCLUDES)).items.map(refusal => refusal.code);
 
+/** The refusals a tree answers with, as `code file#at`: what a case needs when where it points is the claim. */
+export const refusalsAt = (root: string) =>
+  checkTree(loadTree(root, PLUGINS, INCLUDES)).items.map(one => `${one.code} ${one.file}${one.at ? `#${one.at}` : ''}`);
+
 /** A plugin's docs directory, written from name -> document. */
 export function docsDir(docs: Record<string, unknown>): string {
   const dir = mkdtempSync(join(tmpdir(), 'wilanis-docs-'));
@@ -88,6 +92,15 @@ export function planted(file: string, doc: unknown): string[] {
 /** Copy the example, add several documents at paths it does not have, and answer the refusal codes. */
 export function plantedAll(docs: Record<string, unknown>): string[] {
   return codesAfter(dir => write(dir, docs));
+}
+
+/** Copy the example, add several documents, and answer each refusal as `code file#at`. */
+export function plantedPointing(docs: Record<string, unknown>): string[] {
+  const dir = copyOfExample();
+  write(dir, docs);
+  const out = refusalsAt(dir);
+  rmSync(dir, { recursive: true, force: true });
+  return out;
 }
 
 /**
