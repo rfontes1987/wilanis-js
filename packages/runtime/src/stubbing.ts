@@ -9,6 +9,8 @@ import {
   hasVars,
   type Loaded,
   policyPath,
+  type Resolves,
+  resolvedHere,
   rng,
   Scope,
   schemaUrl,
@@ -31,13 +33,17 @@ const hash = (text: string) => {
   return hash_ >>> 0;
 };
 
-/** The type variables this call binds, read from the `type` inputs the operation declares. */
-function boundHere(info: EffectInfo, given: Record<string, unknown>, resolve: (ref: string) => Type) {
-  const subst: Record<string, Type> = {};
+/**
+ * The type variables this call binds, through both channels: the `type` inputs the operation declares, and
+ * the static inputs whose `resolves` says where the type is written down. The same core resolution the
+ * checker and the compiler use, so a stubbed effect answers the type a real one would.
+ */
+function boundHere(info: EffectInfo, given: Record<string, unknown>, tree: Resolves) {
+  const subst: Record<string, Type> = resolvedHere(info.op.accepts, given, tree);
   for (const [name, field] of Object.entries(info.op.accepts ?? {})) {
     if (!field.binds || field.type !== 'type' || typeof given[name] !== 'string') continue;
     try {
-      subst[field.binds] = resolve(given[name] as string);
+      subst[field.binds] = tree.type(given[name] as string);
     } catch {
       /* unknown */
     }
@@ -46,22 +52,17 @@ function boundHere(info: EffectInfo, given: Record<string, unknown>, resolve: (r
 }
 
 /** What an effect answers at this call site: its return type with the variables this call binds filled in. */
-function answerType(
-  info: EffectInfo,
-  given: Record<string, unknown>,
-  resolve: ((ref: string) => Type) | undefined,
-): Type | undefined {
+function answerType(info: EffectInfo, given: Record<string, unknown>, tree: Resolves | undefined): Type | undefined {
   const returns = info.returns;
-  if (!returns || !hasVars(returns) || !resolve) return returns;
-  return substitute(returns, boundHere(info, given, resolve));
+  if (!returns || !hasVars(returns) || !tree) return returns;
+  return substitute(returns, boundHere(info, given, tree));
 }
 
 /** Every effectful native operation answers a generated value of its declared type, deterministic per seed and node path. */
 export function stubEffects(seed: number, record?: Record<string, unknown>, types?: Record<string, Type>) {
   return (info: EffectInfo): Handler =>
     async ({ in: input, ctx }) => {
-      const resolve = ctx.env.resolveType as ((ref: string) => Type) | undefined;
-      const type = answerType(info, input, resolve);
+      const type = answerType(info, input, ctx.env.resolving as Resolves | undefined);
       const key = ctx.nodePath.join('.');
       const value = type ? generate(type, rng(seed ^ hash(key))) : undefined;
       if (record) record[key] = value;
