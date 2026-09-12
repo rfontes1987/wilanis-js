@@ -68,6 +68,11 @@ without an `else`.
 
 ![The same graph, drawn by wilanis-view](docs/viewer-get-row.png)
 
+Every document of the example is at **[wilanis.dev](https://wilanis.dev)**, drawn the same way: the routes,
+the graphs behind them, the policies over each write, and what every reference points at, in both
+directions. That page is this viewer with its answers written out as files, so nothing runs there and
+nothing is installed here.
+
 ## The compiler reads it before it runs
 
 Rename an operation in the port and forget the route that calls it:
@@ -100,6 +105,31 @@ without writing a test. `wilanis fuzz` writes runs out as scenarios, files of th
 replays them and compares node by node, so an edit that changes what the service does says so before it
 ships.
 
+## There is no code in a document
+
+A document names operations and routes between them. The only place it states a condition is a switch
+rule, and this grammar is the whole of what a rule may say:
+
+```
+expr    := or
+or      := and ('||' and)*
+and     := unary ('&&' unary)*
+unary   := '!' unary | cmp
+cmp     := primary (('==' | '!=' | '<' | '<=' | '>' | '>=' | 'in') primary)?
+primary := number | string | true | false | path | 'has' '(' path ')' | 'len' '(' expr ')' | '(' expr ')'
+```
+
+No calls, no arithmetic, no assignment, no loops, and nothing that reaches a file or a socket. Every rule is
+typed against that node's inputs before it runs, and a read through a value that may be missing is refused
+unless a `has()` on the left of the same `&&` proved it present: `has(principal) && 'recorder' in
+principal.roles` reads what it proved, and dropping the `has()` is a refusal with the file and the path in
+it.
+
+That is a limit, on purpose. When a tree needs something the language cannot say, the answer is never a
+bigger expression: it is a plugin -- an npm package that ships its ports and kinds as JSON documents and
+implements one handler each, in TypeScript. Code lives there, behind a contract the checker holds it to,
+and a graph reaches it only through a port its feature declares.
+
 ## Why this suits code a model writes
 
 Every file has a schema, so a key is either allowed or refused and there is no free-form syntax to invent
@@ -112,7 +142,8 @@ on the roadmap, not a claim we have measured: break the example, and repair it f
 
 ## Try it
 
-The example talks to a public test API and needs no key.
+The example talks to a public test API and needs no key. To read it without installing anything, open
+[wilanis.dev](https://wilanis.dev) instead.
 
 ```
 git clone https://github.com/wilanis/wilanis-js && cd wilanis-js
@@ -162,6 +193,27 @@ what a tree starts.
 
 Dependencies point one way, engine ← core ← compiler ← runtime, and a plugin depends on core and engine
 only. A project installs the runtime, the plugins it uses, and the trees it includes.
+
+## What this is not
+
+**Not a workflow engine.** Step Functions, Airflow and Temporal run a graph you hand them, written as JSON,
+as YAML or as code; what it touches is the runtime's business at the moment it touches it. Here a graph is
+one document kind among a dozen, and the point is what the compiler does with all of them at once: that a
+route answers a shape its graph can produce, that the port behind it is met by a binding, that every reason
+the graphs and policies behind it can refuse with is given an answer, and that none is answered which they
+cannot reach -- one judgement over the whole tree, before anything starts.
+
+**Not a low-code tool.** n8n, Node-RED and Zapier are a canvas first and files second. Here the files are the
+source. They are diffed, reviewed and merged like any others, and the viewer is read-only: it draws a tree
+and grants it nothing. No editor owns the truth.
+
+**Not a configuration language.** Dhall, CUE, Jsonnet and Pkl make configuration safe to write and generate.
+Nothing is generated here. The documents are the program, and what the checker knows about them is a
+service: layers, ports, policies, effects and the types that flow between them.
+
+**Not JSON for its own sake.** The format is the least interesting decision -- JSON because every editor,
+schema, diff and model already reads it. What is worth having is the checker, and it would judge the same
+tree written any other way.
 
 ## Status
 
