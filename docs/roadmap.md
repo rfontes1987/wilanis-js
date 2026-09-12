@@ -1,7 +1,8 @@
 # Roadmap
 
 A milestone is a demo: something a person runs and sees that the example could not do before. The
-GitHub milestones of `wilanis/wilanis-js` mirror this page, one per heading, and the issues under each are
+GitHub milestones of `wilanis/wilanis-js` mirror this page, one per milestone heading -- *Unscheduled* and
+*Process RFCs* are the two headings that are not milestones -- and the issues under each are
 the RFCs it draws on and the tasks that build it. A milestone closes when its demo runs, by hand and in
 the test suite. The RFCs themselves live in [`rfcs/`](rfcs/README.md); this page is the only place that
 says which milestone shows which RFC.
@@ -104,4 +105,13 @@ RFC 0020.
 ## Unscheduled
 
 RFC 0021 (higher-level constructs), RFC 0022 (more storage engines), RFC 0023 (adapters), RFC 0025 (AI
-model calls), RFC 0030 (the cache) and RFC 0031 (intent triggers) each get a milestone with its own demo when someone picks them up.
+model calls), RFC 0030 (the cache), RFC 0031 (intent triggers) and RFC 0032 (the site as a declared
+input) each get a milestone with its own demo when someone picks them up. RFC 0032 waits on a consumer
+rather than on work: the operation it was written for, RFC 0002's `raw`, is left out of that RFC on
+purpose, and the next consumer is the fault message RFC 0019 asks for, under M13.
+
+## Process RFCs
+
+RFC 0001 (the RFC process), RFC 0027 (fitness functions) and RFC 0028 (the principles hold) change how
+this repository works, not what a tree can say. They show in no demo, so they carry no milestone; their
+tracking issues sit on the board with none, and RFC 0027 and RFC 0028 are implemented.

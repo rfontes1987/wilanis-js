@@ -35,10 +35,12 @@ says its status and its tracking issue; which milestone shows it is the roadmap'
 tracking issue carries it as GitHub's own milestone field, so it is written once.
 
 **A tracking issue** is one GitHub issue per RFC, opened with the "RFC" issue form, labelled `rfc` and
-`status:draft`, assigned to the milestone `docs/roadmap.md` names for it. It links the RFC file. When the RFC is accepted the
+`status:draft`, assigned to the milestone `docs/roadmap.md` names for it -- a process RFC shows in no
+demo and carries none. It links the RFC file. When the RFC is accepted the
 label becomes `status:accepted`; its implementation plan becomes sub-issues labelled `task`; a task
 that is unblocked and unclaimed is labelled `status:ready`, and `help wanted` when we want someone
-outside to take it.
+outside to take it. When every task is closed the label becomes `status:implemented` and the issue
+closes, so the file's status and the issue's label say the same word.
 
 **The lifecycle** of an RFC:
 
@@ -54,7 +56,7 @@ draft ──► accepted ──► implemented
   pull request that proposes it, and its implementation plan becomes task issues. Nothing is implemented
   before this. The pull request merges when every full spec in it is accepted or moved out; a stub in it
   merges as a stub.
-- *implemented*: every task closed. The RFC stays as the record of why.
+- *implemented*: every task closed, `status:implemented` on the issue. The RFC stays as the record of why.
 - *withdrawn*: merged with the reason, so the next person does not propose it again.
 
 **A change to an accepted RFC** is a pull request editing the file, with the reason in the commit. An
