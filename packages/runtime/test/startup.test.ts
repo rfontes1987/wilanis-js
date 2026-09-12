@@ -15,6 +15,8 @@ describe("the project's startup steps", () => {
    */
   const tree = (startup: unknown[], onBoot: () => unknown) => {
     const calls: string[] = [];
+    /** What the fake listener was given as `env.serving`: the way a test asks the tree to load itself again. */
+    let serving: { reload: () => Promise<{ ok: boolean }> } | undefined;
     const fake: PluginModule = {
       root: '@fake',
       docs: docsDir({
@@ -43,6 +45,7 @@ describe("the project's startup steps", () => {
         },
         '@fake/server.port.json#listen': async ({ ctx }: any) => {
           calls.push('listening');
+          serving = ctx.env.serving;
           ctx.env.hold({
             label: 'fake listener',
             stop: async () => {
@@ -54,6 +57,9 @@ describe("the project's startup steps", () => {
       },
       postLoad: async () => {
         calls.push('postLoad');
+        return async () => {
+          calls.push('postLoadDown');
+        };
       },
     };
     const dir = mkdtempSync(join(tmpdir(), 'wilanis-startup-'));
@@ -87,7 +93,7 @@ describe("the project's startup steps", () => {
         warm: { run: '@fake/boot.port.json#open', in: { name: '{{in.name}}' } },
       },
     });
-    return { dir, calls, plugins: { ...BUILTIN_PLUGINS, '@fake': fake } };
+    return { dir, calls, plugins: { ...BUILTIN_PLUGINS, '@fake': fake }, serving: () => serving };
   };
 
   const step = (extra: Record<string, unknown> = {}) => ({
@@ -96,6 +102,24 @@ describe("the project's startup steps", () => {
     ...extra,
   });
   const listen = { run: '@fake/server.port.json#listen' };
+
+  it('a reload sets the new tree up before serving it, and undoes what the old one set up', async () => {
+    // the listener never closed, so nothing but the tree behind it changed -- and a plugin that registered
+    // something against the old environment has to register it again, or the new tree asks an environment
+    // no plugin has seen. An engine is the case that made this visible: it answered until the first reload.
+    const { dir, calls, plugins, serving } = tree([listen], () => 'ok');
+    const { stop } = await start(loadTree(dir, plugins), { log: () => {} });
+    expect(calls).toEqual(['postLoad', 'listening']);
+
+    const again = await serving()?.reload();
+    expect(again?.ok).toBe(true);
+    // the new tree's plugins first, then the old tree's teardown: never a moment with neither
+    expect(calls).toEqual(['postLoad', 'listening', 'postLoad', 'postLoadDown']);
+
+    await stop();
+    // one listener was ever held, and the tree serving now is the one whose teardown runs last
+    expect(calls).toEqual(['postLoad', 'listening', 'postLoad', 'postLoadDown', 'stopped', 'postLoadDown']);
+  });
 
   it('every step runs in order, after postLoad, and the listener is one of them', async () => {
     const { dir, calls, plugins } = tree(
@@ -108,7 +132,7 @@ describe("the project's startup steps", () => {
     expect(calls).toEqual(['postLoad', 'open:db', 'open:queue', 'listening']);
     expect(held).toBe(1);
     await stop();
-    expect(calls).toEqual(['postLoad', 'open:db', 'open:queue', 'listening', 'stopped']);
+    expect(calls).toEqual(['postLoad', 'open:db', 'open:queue', 'listening', 'stopped', 'postLoadDown']);
     rmSync(dir, { recursive: true, force: true });
   });
 

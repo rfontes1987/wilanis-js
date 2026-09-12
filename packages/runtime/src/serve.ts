@@ -17,29 +17,39 @@ import type { Embedder } from './embed.js';
 import { loadProject } from './project.js';
 import { embedderFor } from './tools.js';
 
-/** Run every plugin's postLoad hook in project.json order; answers a teardown that runs theirs in reverse. */
+/**
+ * Run every plugin's postLoad hook in project.json order; answers a teardown that runs theirs in reverse.
+ * Where one throws, what already ran is undone before the throw is passed on, so a load that does not finish
+ * holds nothing.
+ */
 export async function postLoad(
   load: LoadResult,
   emb: Embedder,
   log: (line: string) => void,
 ): Promise<() => Promise<void>> {
   const downs: (() => Promise<void>)[] = [];
-  for (const plugin of load.plugins) {
-    if (!plugin.postLoad) continue;
-    const settings = (emb.env.plugins as Record<string, Record<string, unknown>>)[plugin.root] ?? {};
-    const down = await plugin.postLoad({
-      root: load.root,
-      registry: load.registry,
-      scope: emb.scope,
-      settings,
-      env: emb.env,
-      log,
-    });
-    if (down) downs.push(down);
-  }
-  return async () => {
-    for (const down of downs.reverse()) await down();
+  const teardown = async () => {
+    for (const down of [...downs].reverse()) await down();
   };
+  try {
+    for (const plugin of load.plugins) {
+      if (!plugin.postLoad) continue;
+      const settings = (emb.env.plugins as Record<string, Record<string, unknown>>)[plugin.root] ?? {};
+      const down = await plugin.postLoad({
+        root: load.root,
+        registry: load.registry,
+        scope: emb.scope,
+        settings,
+        env: emb.env,
+        log,
+      });
+      if (down) downs.push(down);
+    }
+  } catch (error) {
+    await teardown();
+    throw error;
+  }
+  return teardown;
 }
 
 /**
@@ -82,11 +92,28 @@ function failureOf(report: Report): string {
  * one load, so `swap` can put a freshly loaded tree behind a socket that never closed -- what `@reload` does.
  */
 export class Served {
+  /**
+   * What the plugins of the tree now being served set up in their postLoad. A reload replaces it, since the
+   * tree it belongs to is the one being replaced: an engine registered against the old environment is not
+   * registered against the new one, and nothing else would notice until a graph asked for it.
+   */
+  private down: () => Promise<void> = async () => {};
+
   constructor(
     private current: { load: LoadResult; emb: Embedder },
     readonly log: (line: string) => void,
     private readonly profile?: string,
   ) {}
+
+  /** Take what the plugins of this tree set up, so a reload can replace it and stopping can undo it. */
+  setDown(down: () => Promise<void>): void {
+    this.down = down;
+  }
+
+  /** Undo what the plugins of the tree being served set up. */
+  stopPlugins(): Promise<void> {
+    return this.down();
+  }
   /** The embedder of the tree being served now, so a swap is seen by whoever asks next. */
   get emb() {
     return this.current.emb;
@@ -102,7 +129,10 @@ export class Served {
    * a tree that refuses leaves the last good one serving.
    */
   async reload(): Promise<{ ok: true; documents: number } | { ok: false; refusals: string }> {
-    const load = await loadProject(this.load.root);
+    // the modules this tree was started with, so a reload serves the same plugins rather than whatever the
+    // directory resolves to now: one started with a module of its own could not otherwise reload at all
+    const plugins = Object.fromEntries(this.load.plugins.map(plugin => [plugin.root, plugin]));
+    const load = await loadProject(this.load.root, { plugins });
     const refusals = checkTree(load);
     if (!refusals.ok) return { ok: false, refusals: refusals.format() };
     const emb = embedderFor(load, { profile: this.profile });
@@ -110,7 +140,18 @@ export class Served {
     emb.serve(this);
     // what the old embedder held is still running and still ours: the new one answers for it when we stop
     emb.held.push(...this.emb.held);
+    // the new tree's plugins set themselves up before it is served, so nothing is asked of an environment
+    // they have not seen; a plugin that will not start leaves the last good tree serving, as a refusal does
+    let down: () => Promise<void>;
+    try {
+      down = await postLoad(load, emb, this.log);
+    } catch (error) {
+      return { ok: false, refusals: `a plugin did not load: ${(error as Error).message}` };
+    }
+    const before = this.down;
     this.swap(load, emb);
+    this.setDown(down);
+    await before();
     return { ok: true, documents: load.registry.files.length };
   }
   /** Put a newly loaded tree behind whatever is already listening. The old embedder's held things are not stopped: the listener is the same one. */
@@ -156,10 +197,10 @@ export async function start(
   if (emb.missingSecrets.length) throw new Error(`missing secrets: ${emb.missingSecrets.join(', ')}`);
   const served = new Served({ load, emb }, log, opts.profile);
   emb.serve(served);
-  const down = await postLoad(load, emb, log);
+  served.setDown(await postLoad(load, emb, log));
   const bye = async () => {
     for (const holding of [...served.emb.held].reverse()) await holding.stop();
-    await down();
+    await served.stopPlugins();
     if (emb.blobs instanceof FileBlobStore) emb.blobs.destroy();
   };
   try {
