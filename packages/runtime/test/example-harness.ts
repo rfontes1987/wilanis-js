@@ -87,3 +87,13 @@ export function planted(file: string, doc: unknown): string[] {
     writeFileSync(join(dir, file), JSON.stringify(doc));
   });
 }
+
+/** Copy the example, add several documents at paths it does not have, and answer the refusal codes. */
+export function plantedAll(docs: Record<string, unknown>): string[] {
+  return codesAfter(dir => {
+    for (const [file, doc] of Object.entries(docs)) {
+      mkdirSync(dirname(join(dir, file)), { recursive: true });
+      writeFileSync(join(dir, file), JSON.stringify(doc));
+    }
+  });
+}

@@ -1,9 +1,10 @@
 /**
  * Shapes, ports and connections. A shape's fields resolve and speak their own layer (R001, L001, L005). A
  * port's operations resolve; a domain operation speaks core shapes and fixes no value itself (L001, L006).
- * A connection names a kind and its settings fit it, reading secrets only (R001, C001, C002).
+ * A connection names a kind and its settings fit it, reading secrets only (R001, C001, C002). A store's
+ * connection and the shape of every collection resolve and are visible to it (R001, L005).
  */
-import type { ConnectionDoc, Loaded, Operation, PortDoc, ShapeDoc } from '@wilanis/core';
+import type { ConnectionDoc, Loaded, Operation, PortDoc, ShapeDoc, StoreDoc } from '@wilanis/core';
 import type { Judge } from './judge.js';
 import { mismatch } from './typing.js';
 
@@ -63,4 +64,23 @@ export function checkConnection(judge: Judge, connection: Loaded<ConnectionDoc>)
   const read = judge.settingsRead(connection.doc.settings, connection.path, 'settings');
   const bad = mismatch(read?.type, declared);
   if (bad) refuse('C002', `settings: ${bad}`, 'settings', `wilanis describe ${connection.doc.kind}`);
+}
+
+/**
+ * The refusals for a store: the connection it names and every collection's shape exist (R001) and are
+ * visible to it (L005). Nothing here judges what a store *means* -- that a connection reaches an engine and
+ * that a key is a required field of its shape are `@storage`'s (X202, X203), since only the plugin granting
+ * the port knows them. Later RFCs extend this function with the C rules over a store's own declarations.
+ */
+export function checkStore(judge: Judge, store: Loaded<StoreDoc>): void {
+  const refuse = judge.refuser(store.path);
+  const connection = judge.scope.get('connection', store.doc.connection);
+  if (connection) judge.visible(store, connection, 'connection');
+  else refuse('R001', `unknown connection '${store.doc.connection}'`, 'connection', 'wilanis ls connection');
+  for (const [name, collection] of Object.entries(store.doc.collections)) {
+    const at = `collections/${name}/of`;
+    const shape = judge.scope.get('shape', collection.of);
+    if (shape) judge.visible(store, shape, at);
+    else refuse('R001', `unknown shape '${collection.of}'`, at, 'wilanis ls shape');
+  }
 }
