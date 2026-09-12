@@ -489,8 +489,9 @@ Ollama and once against Anthropic, one connection edit between them, and `--trac
   the one an author makes by accident, and the half it sees is where the accident happens.
 - **Data leaves the tree to a third party.** `input` is sent to whoever the connection names, which is the point and
   is a fact a reviewer must be able to see: `feature.json → effects` lists the operation, RFC 0016's `permits` is how a
-  production profile forbids it, and RFC 0020's page lists "a model's answer is data" among what the checker
-  guarantees and "what is sent to a model" among what is the application's.
+  production profile forbids it, and RFC 0020's page lists "a model's answer is validated against the declared
+  shape before any node reads it" among what the runtime enforces and "what is sent to a model and what is done
+  with its answer" among what is the application's.
 - **A call is slow.** Seconds, not milliseconds, against every provider. A site's `timeoutMs` bounds it (RFC 0011),
   RFC 0012's deadline bounds the run, and a route that triages synchronously answers slowly by design; the tree that
   minds puts the triage on RFC 0009's queue.

@@ -25,7 +25,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0017](0017-migration-planner.md) | Migrations derived from store declarations | accepted |
 | [0018](0018-scenario-generation.md) | Scenario generation from the branch solver | accepted |
 | [0019](0019-diagnostics-for-repair-loops.md) | Diagnostics designed for an agent's repair loop | accepted |
-| [0020](0020-security-model.md) | The security model: what is guaranteed, what is enforced, what is the application's | draft |
+| [0020](0020-security-model.md) | The security model: what is guaranteed, what is enforced, what is the application's | accepted |
 | [0021](0021-higher-level-constructs.md) | Higher-level constructs: state machines and resources | accepted |
 | [0022](0022-storage-engines.md) | More storage engines: SQLite, MySQL, and declared capabilities | accepted |
 | [0023](0023-adapters.md) | Adapters: search, email, payment | accepted |

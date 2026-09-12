@@ -64,12 +64,10 @@ export class RefusalList {
 export class Registry {
   private byPath = new Map<string, Loaded>();
   readonly files: Loaded[] = [];
-  /** Take one loaded document in, answering the one it displaced when a path was already taken (D002). */
-  add(entry: Loaded): Loaded | undefined {
-    const dup = this.byPath.get(entry.path);
+  /** Take one loaded document in, under its canonical path. */
+  add(entry: Loaded): void {
     this.byPath.set(entry.path, entry);
     this.files.push(entry);
-    return dup;
   }
   /** The document at a canonical path when it is of the kind asked for; nothing when it is absent or another kind. */
   get<K extends Kind>(kind: K, path: string): Loaded<DocByKind[K]> | undefined {
