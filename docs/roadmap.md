@@ -68,9 +68,15 @@ run is cancelled and still answers a report. Draws on RFC 0011, RFC 0012 and RFC
 
 ## M10 Ship it
 
-One command produces the image and the manifest; the Helm chart stands the example up on a local `kind`
-cluster; a tree that requires an effect the environment does not permit is refused before it listens.
+One command reads the manifest and writes the image recipe, the Compose file and the chart values: `docker
+compose up` runs the example on a laptop, and the Helm chart stands the same tree up on a local `kind`
+cluster. A tree that requires an effect the environment does not permit is refused before it listens.
 Draws on RFC 0013, RFC 0016, RFC 0024 and RFC 0026.
+
+```
+npx wilanis-deploy example --profile production
+scripts/cluster.sh up     # → http://localhost:8080/monitor
+```
 
 ## M11 Tenants by construction
 

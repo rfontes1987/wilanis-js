@@ -1,66 +1,682 @@
-# RFC 0024: Kubernetes deployment: a Helm chart and a local cluster
+# RFC 0024: Deployment: one plan, a Compose file and a Helm chart
 
-- **Status:** draft (stub)
-- **Areas:** `area:runtime`
+- **Status:** draft
+- **Areas:** `area:core` (one additive key on `port.schema.json`, one on `connection-kind.schema.json`;
+  `Operation` and `ConnectionKindDoc`), `area:compiler` (two rules in `check/contracts.ts`, and the first
+  judgement of a connection kind document), `area:runtime` (three fields on RFC 0026's manifest and the one
+  function that resolves them), `area:plugin-http` and `area:plugin-auth` (three plugin documents say what
+  they already do in code), `area:deploy` (a new package, `@wilanis/deploy`, with a new label beside
+  `area:view`), and `area:process` (the chart, the cluster script, one CI job). Nothing in the engine,
+  nothing in `PluginModule`.
+- **Schemas:** `port.schema.json` gains `operations.<name>.listens`; `connection-kind.schema.json` gains
+  `endpoint` (both additive). RFC 0026's `manifest.schema.json` gains three fields.
+  `packages/deploy/schemas/plan.schema.json` is new: the shape of a command's output, beside RFC 0019's
+  `diagnostics.schema.json` and RFC 0026's manifest.
+- **Packages:** `@wilanis/deploy` (`packages/deploy/`), depending on `@wilanis/core` and `@wilanis/runtime`
 - **Tracking issue:** #26
-- **Depends on:** RFC 0013 (deployment and profiles), RFC 0026 (manifest)
+- **Depends on:** RFC 0013 (a profile is one place a tree runs; `reachOf`; `holds`, `starts` and `needs` per
+  profile) and RFC 0026 (the manifest, which this RFC reads and adds three fields to). RFC 0005 is what makes
+  a second replica safe and what puts a bucket and a database behind ports the chart can stand up; RFC 0006's
+  collector, RFC 0009's broker and RFC 0022's engines each become a switch on the chart when they land.
+  RFC 0016 and RFC 0020 are read, not changed.
 
 ## Summary
 
-A tree deploys to Kubernetes, and to nothing else that costs money: a generated container image, a Helm chart
-for the tree and for what its connections need (PostgreSQL, MinIO, a queue, Jaeger), and a script that stands
-the whole thing up on a local cluster so anyone can run the example the way it runs in production.
+After this RFC a tree deploys, and the recipe is derived rather than written: `wilanis-deploy <root>
+--profile <name>` reads RFC 0026's manifest and writes a `Dockerfile`, a Compose file and a values file for
+one Helm chart this repository ships, from the facts the tree already states -- the Node it needs, the
+profile's start command, the port its `listen` opens, the variables its secrets name, the hosts its
+connections dial. Between the manifest and any of those files sits one pure function, `planOf`, whose answer
+is a **plan**: one *workload* per profile, its command, its ports, its variables by name, its probe, and what
+the environment must provide. A target is a renderer from the plan; three ship (`image`, `compose`, `helm`),
+a fourth is a function and no new walk. Two facts a deployment needs and no document said become declarations
+a reader can open: an operation that `holds` may say it `listens` and where its port number comes from, and a
+connection kind may say which of its settings is the `endpoint`. Nothing is guessed, nothing is a plugin the
+tool knows by name, and no secret's value is ever written to a file.
 
 ## Motivation
 
-A tree is deployed as documents plus `node_modules`, started by `wilanis start --profile <name>`
-(RFC 0013). That is enough for a virtual machine and a person. It is not enough for an agent asked to "put
-this in production": it needs a recipe that turns the tree into an artifact a cluster accepts, and a way to
-know what the environment must provide (the variables of `project.json → secrets`, the port `listen` opens,
-the store the connection names). The manifest (RFC 0026) is that knowledge; this RFC is what reads it.
+A tree is documents plus `node_modules`, started by `wilanis start --profile <name>` (RFC 0013). A person
+with a virtual machine needs nothing more. Everyone else needs a recipe, and today the recipe is a person
+reading four documents and writing YAML by hand. Five things are wrong with that, each visible in the code:
 
-The project's rule: no vendor. Every piece of infrastructure the roadmap depends on runs on Kubernetes from
-an open-source chart, and the repository ships the charts and the instructions, so a reader can reproduce
-every milestone demo on a laptop with `kind` or `k3d`. Managed services that speak the same protocols
-(PostgreSQL, the S3 API, AMQP) work by construction, but none is required and none is documented here.
+- **The port a tree listens on is written in a handler and nowhere a reader can open.**
+  `packages/plugin-http/src/serve.ts:201` is `Number(input.port ?? settings.port ?? 8080)`: the startup
+  step's `in.port`, then the `@http` plugin's `settings.port`, then 8080. Three places, in an order only the
+  handler knows. `@http/server.port.json` says `holds: true` and describes an accepted `port`, and a reader
+  of the port document cannot tell that the number resolves that way -- nor that `listen` opens a TCP socket
+  at all, as against `@reload/watch.port.json#watch`, which holds a watcher and opens nothing. RFC 0026
+  wrote "a health route if the http plugin grants one" (`0026:42-43`) and then printed neither the port nor
+  the route, because the manifest's `startup` rows carry `label`, `run`, `required` and `profiles` and its
+  `plugins` rows carry no settings. The one fact every deployment begins with is the one fact the manifest
+  does not have.
+- **What a tree dials is in a connection's settings under a key only its kind knows.** `baseUrl` for
+  `@http/http.connection-kind.json`, `issuer` for `@auth/oidc.connection-kind.json`, and nothing at all for
+  `@auth/directory.connection-kind.json`, whose `users` are written in the document. An operator asking
+  "what must resolve from inside this cluster" reads every connection and knows each kind. RFC 0002's
+  `storage` and RFC 0009's `delivery` and `connection` are the precedent: a fact about a kind belongs on the
+  kind, declared once, and every tool reads it the same way.
+- **No command turns a tree into an artifact.** `packages/runtime/src/cli.ts:14-31` lists eleven commands;
+  none writes a file a container runtime or a cluster accepts. `wilanis init` writes `CLAUDE.md` for an
+  agent; nothing writes a `Dockerfile` for a build.
+- **The roadmap depends on infrastructure it does not ship.** `docs/roadmap.md` promises "every piece of
+  infrastructure a demo needs runs on a local Kubernetes cluster from an open-source chart the repository
+  ships (see RFC 0024)", and M02, M04, M05, M06 and M10 each need one: PostgreSQL, an object store speaking
+  the S3 API (RFC 0005 `:176` names MinIO and this chart by name), a collector (RFC 0006), Meilisearch for
+  RFC 0023 (`0023:172`). There is no `charts/` and no `scripts/`.
+- **A deployment recipe drifts from the tree that produced it.** A hand-written Compose file keeps the port
+  the tree had last month. Nothing notices.
 
-## Sketch
+This RFC does not build or push an image: it writes the `Dockerfile` and prints the command, and `docker`
+does the rest, so the package depends on no container runtime. It does not add a document kind, a port, a
+trigger kind or a plugin hook. It does not decide TLS, ingress hostnames, autoscaling or resource requests:
+those are the cluster's, and they are values on a chart. It does not detect that a profile writes to disk --
+RFC 0005 is what removes the disk, and until then every workload defaults to one replica and says why. And
+it does not add a provider recipe for Fly, Render, Cloud Run or ECS: each costs money to test and adds
+nothing the plan does not already say.
 
-- **`wilanis image <root>`** writes a `Dockerfile` (or prints it) from the manifest: the Node version from
-  `engines`, the tree and its `node_modules`, the profile as the start command, the port as `EXPOSE`, every
-  secret as a documented variable, a health route if the http plugin grants one. The recipe is generated,
-  never hand-edited; the tree is the source.
-- **A Helm chart for a tree**, `charts/wilanis-tree/`, templated from the manifest: a Deployment (replicas
-  are safe once RFC 0005 holds no state on disk), a Service on the listened port, a Secret per
-  `project.json → secrets` entry, a ConfigMap naming the profile, and a readiness probe on the health route.
-- **Charts for what the tree needs**, as dependencies the chart's `values.yaml` switches on: PostgreSQL
-  (CloudNativePG or Bitnami), MinIO for the S3 API (RFC 0005), a queue (RFC 0009), Jaeger or the
-  OpenTelemetry collector (RFC 0006). Each is an upstream chart pinned by version, not one we maintain.
-- **A local cluster script**, `scripts/cluster.sh`: creates a `kind` cluster, installs the chart with the
-  example's values, waits for readiness, and prints the URL. Every milestone demo that needs infrastructure
-  runs on this; CI runs the same script on a `kind` cluster in GitHub Actions.
-- **Development without a cluster** stays what it is: the `memory` engine, the file blob store, no queue.
-  The cluster is for the production profile and for the demos.
+## Guide-level explanation
 
-## Checker rules, tests, implementation plan
+**The words.** A **plan** is what one deployment of one tree is, derived from the manifest: pure data, no
+YAML, no cluster. A **workload** is one profile's process -- RFC 0013 already made a worker a profile
+(`0013:370-373`), so one profile is one workload and nothing new says how a tree is split. A **target** is a
+renderer from a plan to files: `image` writes a `Dockerfile`, `compose` writes a Compose file, `helm` writes
+the values of the one chart this repository ships, `plan` writes the plan itself so that somebody else's
+target needs nothing from us. **`requires`** is what the environment must provide: every connection the
+profile reaches whose kind declares an `endpoint`, with the host it names.
 
-Written when this RFC is expanded to a full spec.
+**One command.**
+
+```
+$ npx wilanis-deploy example --profile production
+plan: 1 workload (production), 1 port, 2 variables, 1 host required
+wrote example/deploy/Dockerfile
+wrote example/deploy/.dockerignore
+wrote example/deploy/compose.yaml
+wrote example/deploy/.env.example
+→ docker compose -f example/deploy/compose.yaml up --build
+```
+
+`deploy/compose.yaml`, in full, for the example as RFC 0013 leaves it:
+
+```yaml
+# generated by wilanis-deploy from example (profile production) -- do not edit
+# regenerate: npx wilanis-deploy example --profile production
+services:
+  monitor-production:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: monitor:0.1.0
+    command: ["wilanis", "start", ".", "--profile", "production"]
+    ports: ["8080:8080"]
+    env_file: [.env]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('node:net').connect(8080).on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 2s
+      retries: 6
+```
+
+and `deploy/.env.example`, which holds names and never values:
+
+```
+# every variable profile 'production' needs; fill these in and save as .env
+MONITOR_API_KEY=        # secrets.monitorKey, read by @connections/monitor-api-production.connection.json
+MONITOR_JWT_SECRET=     # secrets.jwt, read by @auth settings
+```
+
+**Why the healthcheck is a socket and not a route.** A tree opens its port because a startup step said so,
+and `runStartup` runs the steps in order: the socket exists only after every step before `Listen` succeeded.
+So the socket *is* the readiness contract the tree already wrote, and a health route would be a second,
+weaker statement of it -- and a route `@http` granted would be a route no trigger declares, which is the one
+thing the tree's routes are not. RFC 0026 asked whether the http plugin grants a health route; it grants
+none, and none is needed.
+
+**The chart.** The Helm chart is not generated. `charts/wilanis-tree/` is written once, reviewed like code,
+`helm lint`-ed in CI, and installed by every tree; what differs per tree is its values, which the tool
+derives:
+
+```
+$ npx wilanis-deploy example --profile production --target helm
+wrote example/deploy/values.yaml
+→ helm install monitor charts/wilanis-tree -f example/deploy/values.yaml
+```
+
+```yaml
+# generated by wilanis-deploy from example (profile production) -- do not edit
+# regenerate: npx wilanis-deploy example --profile production --target helm
+name: monitor
+image:
+  repository: monitor
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+workloads:
+  - profile: production
+    command: ["wilanis", "start", ".", "--profile", "production"]
+    replicas: 1                     # RFC 0005 is what makes a second safe: until then this tree may hold state on disk
+    ports: [{ name: http, port: 8080 }]
+    probe: { tcpSocket: { port: 8080 } }   # an httpGet here instead probes a route the tree declares
+    env:
+      - { name: MONITOR_API_KEY, secretKey: MONITOR_API_KEY }
+      - { name: MONITOR_JWT_SECRET, secretKey: MONITOR_JWT_SECRET }
+secret:
+  existingSecret: ""                # created by the operator; the chart never holds a value
+  keys: [MONITOR_API_KEY, MONITOR_JWT_SECRET]
+requires:
+  - connection: "@connections/monitor-api-production.connection.json"
+    kind: "@http/http.connection-kind.json"
+    endpoint: "https://monitor.internal/api/v1"
+# What the chart may stand up beside the tree, all off by default; charts/wilanis-tree/values-local.yaml
+# turns on what the example's local cluster needs.
+postgresql: { enabled: false }
+minio: { enabled: false }
+jaeger: { enabled: false }
+```
+
+`requires` is not consumed by a template: it is the list an operator reads to know what must resolve, and
+what the chart's own `NOTES.txt` prints after an install. The tree said it; nobody retyped it.
+
+**The local cluster.**
+
+```
+$ scripts/cluster.sh up
+kind: cluster 'wilanis' ready (1 node, 8080 → 30080)
+pack: 10 tarballs from packages/ and libraries/, installed into a staging copy of example/
+docker: built monitor:0.1.0
+helm: installed monitor (charts/wilanis-tree -f example/deploy/values.yaml -f charts/wilanis-tree/values-local.yaml)
+ready: deployment/monitor-production 1/1
+→ http://localhost:8080/monitor
+$ scripts/cluster.sh down
+```
+
+The image is built from a staging copy of `example/` into which the workspace's packages are installed as
+`npm pack` tarballs -- the same artifacts `npm run release` would publish -- so the demo proves the packages
+as they ship, not as they are symlinked.
+
+**The plan, for anyone else's target.**
+
+```
+$ npx wilanis-deploy example --profile production --target plan
+```
+```json
+{
+  "format": 1,
+  "name": "monitor",
+  "node": ">=22",
+  "image": { "context": ".", "dockerfile": "deploy/Dockerfile", "reference": "monitor:0.1.0" },
+  "workloads": [
+    {
+      "profile": "production",
+      "description": "Behind the load balancer: the same bindings, the real monitor API in place of the test one, nothing watched.",
+      "command": ["wilanis", "start", ".", "--profile", "production"],
+      "listens": [{ "operation": "@http/server.port.json#listen", "port": 8080 }],
+      "holds": ["@http/server.port.json#listen"],
+      "needs": [
+        { "variable": "MONITOR_API_KEY", "key": "monitorKey", "readBy": ["@connections/monitor-api-production.connection.json"] },
+        { "variable": "MONITOR_JWT_SECRET", "key": "jwt", "readBy": ["@auth settings"] }
+      ],
+      "replicas": 1,
+      "probe": { "tcp": 8080 }
+    }
+  ],
+  "requires": [
+    {
+      "connection": "@connections/monitor-api-production.connection.json",
+      "kind": "@http/http.connection-kind.json",
+      "endpoint": "https://monitor.internal/api/v1",
+      "reachedBy": ["production"]
+    }
+  ]
+}
+```
+
+The plan goes to stdout and never to a file inside the tree: `packages/core/src/load.ts:2` reads *every*
+`*.json` under the root, so a `deploy/plan.json` would be a document the loader must refuse. The other
+targets write `Dockerfile`, `compose.yaml`, `values.yaml` and `.env.example`, none of which is JSON, and
+`deploy/` is therefore invisible to `wilanis check`.
+
+**The documents that gain a line.** `@http/server.port.json` says what its handler already does:
+
+```json
+"listen": {
+  "description": "Open the port and answer every http trigger in the tree until the process stops. ...",
+  "holds": true,
+  "listens": { "input": "port", "setting": "port", "default": 8080 },
+  "accepts": { "port": { "type": "number", "required": false, "description": "..." } }
+}
+```
+
+and `@http/http.connection-kind.json` says which setting is the address:
+
+```json
+{ "$schema": "@wilanis/connection-kind.schema.json", "endpoint": "baseUrl", "settings": { "fields": { "baseUrl": ... } } }
+```
+
+`@auth/oidc.connection-kind.json` says `"endpoint": "issuer"`. `@auth/directory.connection-kind.json` says
+nothing: its `users` are written in the document, it reaches no host, and a kind that declares no `endpoint`
+never appears in `requires`. A plugin that grants neither is unaffected, and `@reload/watch.port.json#watch`
+stays a `holds` that opens no socket, which is exactly what `listens` distinguishes.
+
+**The refusals an author meets.** Two are the checker's, on a plugin's own documents:
+
+```
+L0nn  @acme/server.port.json#operations/serve
+    operation 'serve' declares 'listens' but not 'holds' -- only something that keeps running can listen
+    → add "holds": true, or drop "listens"
+
+C0nn  @acme/broker.connection-kind.json#endpoint
+    'endpoint' names 'url', which this kind's settings do not declare
+    → name a string setting of this kind: host
+```
+
+and two are the command's, at deploy time, in the shape `start` refuses a missing variable (RFC 0013):
+
+```
+$ npx wilanis-deploy example --profile digest     # a profile whose startup names only the digest run
+profile 'digest' holds nothing: every startup step it runs answers and ends
+→ a deployed profile keeps something running; deploy a profile whose startup opens a listener, a consumer
+  or a scheduler, and run a one-shot profile with wilanis start
+
+$ npx wilanis-deploy example --profile production      # with "port" removed from the @http settings
+'@http/server.port.json#listen' listens on a port this tree does not fix: neither the 'Listen' step's
+  in.port nor @http settings.port is a number
+→ write "in": { "port": 8080 } on the step, or set "port" in the @http plugin's settings
+```
+
+**Keeping the recipe honest.** Every generated file's first line says it is generated and how to regenerate
+it. A file without that line is never overwritten. And `--check` writes nothing and exits 1 when anything
+would change, which is what CI runs:
+
+```
+$ npx wilanis-deploy example --profile production --check
+deploy/compose.yaml would change: ports 8080:8080 → 9090:9090
+→ npx wilanis-deploy example --profile production
+```
+
+## Reference
+
+### Documents and schemas
+
+**`port.schema.json`**, `operations.<name>` gains `listens` (object, optional): "Where the TCP port this
+operation opens comes from. Declared: the operation opens a socket, and its number is the named `in` value
+of the startup step that runs it, else the named setting of the plugin that grants the port, else `default`.
+Absent: the operation opens no socket, or opens one no deployment needs to reach." Properties, all optional
+and at least one required: `input` (an identifier the operation `accepts`), `setting` (an identifier of the
+granting plugin's settings), `default` (a number). `additionalProperties: false`. `Operation` in
+`packages/core/src/model.ts` gains `listens?: { input?: string; setting?: string; default?: number }`.
+
+**`connection-kind.schema.json`** gains `endpoint` (string, optional): "Which of this kind's settings holds
+the address a connection of this kind reaches: a dotted path into `settings`. Declared: a deployment lists
+the connection among what the environment must provide. Absent: a connection of this kind reaches nothing
+outside the tree, or reaches something no deployment provisions." `ConnectionKindDoc` in `model.ts` mirrors
+it. The path is dotted so a nested setting (`broker.url`) can be named; today's three kinds need one
+segment.
+
+**RFC 0026's `manifest.schema.json`** gains three fields, by the procedure that RFC set out (`0026:312-315`)
+-- named here, added to the schema, and filled by the step of this RFC's plan that lands them:
+
+| Where | Field | Is |
+|---|---|---|
+| envelope | `node` | the tree's `package.json → engines.node`, verbatim, or `null` |
+| `connections[]` | `endpoint` | the value the kind's `endpoint` path picks out of `settings`, as written (a `{{secrets.*}}` template stays text), or `null` when the kind declares none |
+| `profiles.<name>` | `listens` | `[{ operation, port }]`: every `holds` operation the profile starts whose port document declares `listens`, with the number resolved, or `null` when nothing fixes it |
+
+**`packages/deploy/schemas/plan.schema.json`** is new, `$id` under the same published base as RFC 0019's
+`diagnostics.schema.json` and RFC 0026's manifest, `title` `plan`, every property described,
+`additionalProperties: false` on the envelope. It takes RFC 0019's promise as RFC 0026 took it: a field is
+added and never removed or retyped, `format` is bumped for a breaking change, every array is sorted. Its
+shape is the JSON of the *Guide*.
+
+`HOME` in `packages/core/src/placement.ts`: no change -- this RFC adds no document kind, and `deploy/`,
+`charts/` and `scripts/` hold no document. `packages/runtime/templates/CLAUDE.md` gains one sentence under
+the commands: "`wilanis-deploy <root> --profile <name>` writes the Dockerfile, the Compose file and the
+chart values for one place this tree runs; the tree is the source, so regenerate rather than edit them."
+`wilanis new` scaffolds nothing new.
+
+### Ports, operations and kinds granted
+
+None. Three plugin documents *declare* what their code already does, and grant nothing:
+
+| Document | Gains | Because |
+|---|---|---|
+| `@http/server.port.json` | `listen.listens: { input: "port", setting: "port", default: 8080 }` | it is `packages/plugin-http/src/serve.ts:201`, said where a reader can open it |
+| `@http/http.connection-kind.json` | `endpoint: "baseUrl"` | the host an http connection dials |
+| `@auth/oidc.connection-kind.json` | `endpoint: "issuer"` | the issuer an OIDC connection dials |
+
+`@auth/directory.connection-kind.json` declares none, and its description gains the clause that says why:
+its users are written in the document. When RFC 0005's bucket kind, RFC 0002's storage kinds and RFC 0009's
+broker kinds land, each declares its own `endpoint` in the RFC that lands it; none is this RFC's to write.
+
+### Checker rules
+
+`checker.ts:35-43` gains one loop, `for (const kind of registry.all('connection-kind')) checkConnectionKind(judge, kind)`,
+so a connection kind document is judged for the first time on its own rather than only when a connection
+names it. Numbers are assigned when the implementing pull request lands (current highest: A006 B008 C002
+D010 G013 L008 P003 R001 S001 T006, X103; RFC 0013 and RFC 0016 take C003-C006 before this RFC).
+
+| Code | Where it lives | Refuses when | Hint |
+|---|---|---|---|
+| L0nn | `check/contracts.ts`, `checkPort` | an operation declares `listens` without `holds: true` | `add "holds": true, or drop "listens"` |
+| L0nn | `check/contracts.ts`, `checkPort` | `listens.input` names no field of the operation's `accepts`, or that field's type is not `number` | `name a number field this operation accepts: <list>` |
+| C0nn | `check/contracts.ts`, `checkConnectionKind` (new) | `endpoint` names a path this kind's `settings` do not declare, or one whose type is not a string | `name a string setting of this kind: <list>` |
+
+All three are refusals against a plugin's own documents, so a plugin author meets them and a tree author never
+does -- the same footing as D0nn on `requires.ports` (RFC 0005) and X101-X103 (`@auth`). Nothing about a
+tree changes: a tree with no `listens` anywhere checks exactly as it does today.
+
+The two deploy-time refusals in the *Guide* are **not** checker rules, on RFC 0013's reasoning (`0013:241-242`):
+a tree that never deploys is not wrong for holding nothing, and a port nothing fixes is only wrong when
+somebody asks for a container. They are what `wilanis-deploy` verifies, as a missing variable is what `start`
+verifies.
+
+### Runtime behaviour
+
+Nothing the engine, the embedder, `start`, `rehearse`, `fuzz`, `regress` or `run` does changes. Two functions
+are new and one grows:
+
+- **`listensOf(scope, profile): { operation: string; port: number | null }[]`**, new,
+  `packages/runtime/src/manifest.ts`, beside `manifestOf`. For every startup step that runs under the
+  profile (RFC 0013) whose operation's port document declares `listens`: the number is the step's
+  `in.<input>` when that is a literal number, else the granting plugin's `settings.<setting>` when that is a
+  literal number, else `default`, else `null`. The order is `serve.ts:201`'s, and the test that proves they
+  agree is named under *Tests*. It never runs a handler and never reads the environment.
+- **`manifestOf`** fills the three new fields: `node` from the tree's `package.json` (which
+  `packages/runtime/src/project.ts` already reads), `connections[].endpoint` through the kind's dotted path,
+  and `profiles.<name>.listens` from `listensOf`. It stays pure, sorted and free of the clock and the
+  environment, as RFC 0026 promised.
+- **`planOf(manifest, options): Plan`**, new, `packages/deploy/src/plan.ts`, the package's one export
+  besides the renderers. Pure over a manifest object -- it never loads a tree, so it is tested from a
+  committed manifest fixture and a third-party manifest works. `options.profiles` is the profiles asked for
+  and `options.image` the reference, both supplied by the command the way RFC 0026 has `manifestOf` take
+  `runtime` and `root` -- the command reads the tree's `package.json` for the version and the plan stays pure
+  over the manifest. One workload per profile, sorted by profile name, each with the profile's `command`
+  (`["wilanis", "start", ".", "--profile", "<name>"]`, and without the flag for the unnamed profile RFC 0026
+  keys as `""`), `listens`, `holds`, `needs`, `replicas: 1` and `probe` (the first `listens` port, else
+  `null`). `requires` is every connection reached by any asked profile whose row has a non-null `endpoint`,
+  sorted by path, with `reachedBy`. It throws the two refusals of the *Guide*: a profile whose `holds` is
+  empty, and a `listens` whose port is `null`.
+
+`@wilanis/deploy` (`packages/deploy/`, bin `wilanis-deploy`, modelled on `@wilanis/view`: a tool over a
+loaded tree, not a plugin) holds `plan.ts` and one renderer per target, each a pure function from a plan to
+a list of `{ path, contents }`:
+
+- `image.ts` → `Dockerfile` and `.dockerignore`. `FROM node:<major of the plan's node, else 22>-alpine`,
+  `WORKDIR /app`, `COPY package.json package-lock.json ./`, `RUN npm ci --omit=dev`, `COPY . .`,
+  `USER node`, `EXPOSE` per distinct listened port, `CMD` the first workload's command. One image serves
+  every workload; a workload that is not the first overrides the command, which is why the image is built
+  once and the `Dockerfile` names no profile of its own.
+- `compose.ts` → `compose.yaml` and `.env.example`, the YAML of the *Guide*, emitted with the `yaml`
+  package rather than by string-building, so the output parses by construction.
+- `helm.ts` → `values.yaml` for `charts/wilanis-tree`, likewise.
+- `plan` is the plan itself, to stdout.
+
+`write.ts` owns the files: each carries the two-line generated header; a file on disk whose first line is
+not that header is never overwritten without `--force`; `--check` writes nothing and exits 1 naming what
+would change. `cli.ts` parses `wilanis-deploy <root> --profile <name> [--profile <name>]... [--target
+image,compose,helm,plan] [-o <dir>] [--check] [--force]`, loads and checks the tree as `wilanis manifest`
+does (a tree with refusals prints them and exits 1 with nothing written), builds the manifest through
+`manifestOf`, and renders. `--target` defaults to `image,compose`; `-o` defaults to `<root>/deploy`.
+`--profile` is required and may be repeated: RFC 0026's reasoning for a default (`0026:395-398`) is that the
+common question about a tree is what it *is*, which needs no argument; the common question about a
+deployment is where it runs, which the asker always knows.
+
+**The chart**, `charts/wilanis-tree/`, hand-written and versioned here: `Chart.yaml` (`apiVersion: v2`,
+`dependencies` naming each upstream chart with a pinned `version` and a `condition`), `values.yaml` (the
+shape the tool writes, with every switch off), `templates/` (one Deployment and one Service per entry of
+`workloads`, a Secret only when the operator passes `secret.create`, and `NOTES.txt` printing `requires`),
+and `values-local.yaml` (what the example's demo turns on, and the hosts it wires). The pod's security
+context is what RFC 0020's deployment half asks for and this RFC can give without a rule: `runAsNonRoot`,
+`readOnlyRootFilesystem`, an `emptyDir` at `/tmp` for the file blob registry, and no capabilities. The
+dependencies:
+
+| Switch | Chart | For |
+|---|---|---|
+| `postgresql` | CloudNativePG: the operator chart as the dependency, one `Cluster` resource in our templates behind the switch; a CNCF project whose images pull without an account | RFC 0002's engine (M02), and RFC 0009's broker, which is a table in the same connection (`0009:49-51`) -- so the chart ships no broker |
+| `minio` | the MinIO project's own chart | the S3 API of RFC 0005 (M05) |
+| `jaeger` | the Jaeger chart, OTLP in | RFC 0006's collector (M06) |
+
+Each is off by default and pinned by version, and none is provisioned by the chart for production: a
+production connection names a host the operator runs, and the switches exist so that the roadmap's demos
+stand up on a laptop. An upstream chart is chosen for images that pull without a vendor account, which is
+why the widely-used Bitnami charts are not among them.
+
+**`scripts/cluster.sh`**: `up` creates a `kind` cluster with a host port mapped to a NodePort, packs the
+workspace with `npm pack`, installs those tarballs into a staging copy of `example/`, builds the image,
+loads it into the cluster, installs the chart with the generated values and `values-local.yaml`, waits for
+readiness and prints the URL; `down` deletes the cluster. It is the only thing that needs `docker`, `kind`,
+`kubectl` and `helm`, and it says which is missing rather than failing in the middle.
+
+### Discoverability
+
+- `wilanis describe @http/server.port.json` prints, for an operation that declares `listens`:
+  `listen  (holds until stopped; listens on in.port, else @http settings.port, else 8080)`.
+- `wilanis describe @connections/monitor-api.connection.json` prints `endpoint  https://.../api/v1
+  (baseUrl, by @http/http.connection-kind.json)`; a connection of a kind that declares none prints nothing
+  extra, as today.
+- `wilanis manifest` carries `node`, `connections[].endpoint` and `profiles.<name>.listens`; the `jq` lines
+  of RFC 0026 answer the deployment questions without this package installed.
+- `wilanis-deploy --help` lists the targets, the flags and what each target writes. `wilanis --help` is
+  unchanged: the runtime carries no opinion about containers, so it advertises no deploy command, exactly as
+  it advertises no viewer.
+- The viewer: the port page shows the `listens` line under an operation marked `holds`, and the connection
+  page shows the endpoint -- both through `viewOf`, from the documents, with no new endpoint and no
+  dependency on this package.
+- `README.md` gains a short *Ship it* section: the one command, the Compose line, and the cluster script.
+- `charts/wilanis-tree/README.md` says what the chart expects (an image, a Secret, the values the tool
+  writes) and what each switch stands up.
+
+### Plugin contract
+
+None. `PluginModule` in `packages/core/src/plugin.ts` is untouched: a plugin says that an operation listens,
+and where its port comes from, in the port document it already ships, and says which setting is an address
+in the connection kind it already ships. No hook, no member, no code. This is the rule of the house applied
+to deployment: what the DSL names, a reader can open -- so the deploy tool knows `holds`, `listens` and
+`endpoint`, and never knows `@http`.
 
 ## Compatibility
 
-Adds a command, a chart directory and scripts; no schema changes.
+Two additive, optional keys on two core schemas: every document written before this RFC validates and means
+what it meant: a port whose operations declare no `listens`, and a connection kind with no `endpoint`,
+behave exactly as today. Three
+additive fields on RFC 0026's manifest, by the procedure that RFC set out for exactly this: a field is
+added, never removed or retyped, and `format` stays 1. One new package, one new chart directory, one new
+script, one new CI job, one new schema for a command's output.
+
+One behaviour changes for a plugin author, and only for one who opts in: a port document that declares
+`listens` without `holds`, or a connection kind whose `endpoint` names nothing, is refused where it was
+previously accepted -- but no document in this repository or any tree written before this RFC declares
+either, so nothing existing is refused. `@http` and `@auth` gain their declarations in the step that lands
+the rules, and the test that proves `listensOf` agrees with `serve.ts:201` is what keeps the two from
+drifting.
+
+IR v1 is unaffected: no lowered form carries a port, an endpoint or a plan. `ir` in the manifest follows
+RFC 0008 as before.
+
+## Tests
+
+**Sabotage**, in `packages/runtime/test/example.test.ts` beside the other plugin-document rules (copies of
+the example hand `@wilanis/access` in as a `ResolvedInclude`):
+
+- give `@http/server.port.json`'s `listen` a `listens` and remove `holds` → L0nn;
+- point `listens.input` at `route` (a field `listen` does not accept) → L0nn; at a string field → L0nn;
+- give `@http/http.connection-kind.json` `"endpoint": "url"` → C0nn; `"endpoint": "headers"` (declared, not
+  a string) → C0nn;
+- the example unchanged, with the three declarations in place → no refusal.
+
+**The manifest**, in `packages/runtime/test/manifest.test.ts` (RFC 0026's file):
+
+- `node` is `>=22` for the example and `null` for a tree whose `package.json` declares no `engines`;
+- `connections[]` for `monitor-api.connection.json` has `endpoint` equal to its `baseUrl`, for
+  `employees.connection.json` `null`, and for the production stand-in the template text when a tree writes
+  `{{secrets.*}}` there;
+- `profiles.production.listens` is one row, `@http/server.port.json#listen` on 8080, and `profiles.live.listens`
+  the same, with `watch` absent from both because `@reload/watch.port.json#watch` declares no `listens`;
+- with `port` removed from the `@http` settings, the port is `8080` (the declared default); with a `"in": {
+  "port": 9090 }` on the step, `9090`; with `"port": "{{secrets.port}}"` in the settings, `null`;
+- **the two agree**: a test in `packages/plugin-http/test` starts the example three ways -- the step's
+  `in.port`, the plugin setting, neither -- and asserts the socket's port equals what `listensOf` answered
+  for the same tree. This is the test that keeps `serve.ts:201` and `server.port.json` from drifting.
+
+**The plan**, in `packages/deploy/test/plan.test.ts`, over a committed manifest fixture
+(`test/fixtures/monitor.manifest.json`, written by `wilanis manifest example` and checked in, so the package
+tests without loading a tree):
+
+- golden: the plan of the *Guide*, field for field;
+- determinism: two calls answer equal strings, and a fixture whose arrays are reversed answers the same;
+- two profiles asked for → two workloads, sorted, and `requires` entries carry both in `reachedBy`;
+- a profile whose `holds` is empty → throws, naming the profile;
+- a `listens` whose port is `null` → throws, naming the operation and both places a number may be written;
+- no value of any environment variable set for the test appears in the plan.
+
+**The renderers**, in `packages/deploy/test/render.test.ts`, parsing the output with `yaml`:
+
+- compose: one service per workload, the command, `ports`, `env_file`, `read_only`, the healthcheck's port;
+  `.env.example` holds every variable name, an `=` and nothing after it, and no value;
+- values: `workloads` matches the plan, `secret.keys` matches the variables, every dependency switch is
+  `false`, `requires` carries the endpoint;
+- Dockerfile: the `FROM` tag is the major of the plan's `node` (and 22 when it is `null`), `USER node` is
+  present, one `EXPOSE` per distinct port, and no variable's value appears;
+- every rendered file's first line is the generated header.
+
+**The writer**, in `packages/deploy/test/write.test.ts`, against a temp directory:
+
+- a clean directory → the files are written, and `--check` then reports nothing and exits 0;
+- a changed port → `--check` exits 1 naming `compose.yaml`, and writes nothing;
+- a file whose header was removed → not overwritten, and the refusal names `--force`; with `--force`, it is;
+- `--target plan` writes no file and prints JSON that validates against `plan.schema.json` with Ajv;
+- after every target has written into `example/deploy/`, `wilanis check example` still passes -- the
+  regression that would catch a target writing a `.json` into a tree.
+
+**The command**, in `packages/deploy/test/cli.test.ts`: `--profile` absent → exits 1 with the usage;
+`--profile staging` → exits 1 with RFC 0013's message; a sabotaged copy that fails `check` → exits 1 with
+the refusals and nothing written.
+
+**The chart and the cluster**: `helm lint charts/wilanis-tree` and `helm template` against the example's
+generated values, in the `cluster` workflow, which also runs `scripts/cluster.sh up`, curls `GET /monitor`
+for a 200, and runs `down`. The fast `test` job runs `npx wilanis-deploy example --profile production
+--target image,compose,helm --check`, which needs no cluster and fails when the checked-in files have gone
+stale.
+
+## Implementation plan
+
+1. **`listens` and `endpoint`.** The two schema keys and their `model.ts` interfaces; `checkConnectionKind`
+   and the loop in `checker.ts`; L0nn ×2 and C0nn; the three plugin documents; `describe` for both lines;
+   the sabotage tests. (`area:core`, `area:compiler`, `area:plugin-http`, `area:plugin-auth`)
+2. **The manifest's three fields.** `listensOf`, `node`, `connections[].endpoint`; `manifest.schema.json`;
+   the manifest tests and the agreement test in `packages/plugin-http/test`. Blocked on RFC 0026 steps 1
+   and 2. (`area:runtime`, `area:plugin-http`)
+3. **`packages/deploy`.** The package, `plan.schema.json`, `planOf`, the two deploy-time refusals, the
+   `plan` target, the CLI, the manifest fixture, the plan and CLI tests. Blocked on step 2.
+   (`area:deploy`)
+4. **`image` and `compose`.** The two renderers, `write.ts` with the header, `--check` and `--force`; the
+   render and writer tests; `--check` in the CI `test` job. (`area:deploy`)
+5. **The chart.** `charts/wilanis-tree/` with its templates, `values.yaml`, pinned dependencies and
+   `NOTES.txt`; the `helm` target; `helm lint` and `helm template` in CI; the chart's README.
+   (`area:deploy`, `area:process`)
+6. **The local cluster.** `scripts/cluster.sh`, the `cluster` workflow, the smoke curl; the README's *Ship
+   it*; the `templates/CLAUDE.md` sentence. (`area:process`; the README and the template sentence are a
+   `good first issue` once the script works)
+
+Steps 1 and 2 are what M10 needs first and what RFC 0026's manifest is incomplete without; steps 3 and 4
+give the demo its image; steps 5 and 6 give it the cluster. Nothing here blocks another RFC: RFC 0005,
+RFC 0006, RFC 0009 and RFC 0022 each add a switch to the chart of step 5 when they land, in their own
+plans.
 
 ## Drawbacks and alternatives
 
-Upstream charts change under us, and a generated Dockerfile that is wrong is a support burden the project
-must carry. Serverless was considered and set aside: a function-per-trigger deployment has no process to
-`hold` a listener or a scheduler in, so it would change what a startup list means; it returns only if a
-future RFC shows the tree can be split that way without changing its meaning. Provider-specific recipes
-(Fly, Render, Cloud Run, ECS) are out: they cost money to test and add nothing the chart does not.
+- **Two keys on core schemas for a tool that is not the runtime.** `listens` and `endpoint` describe the
+  world a plugin reaches, which is the core's business; but they are read today only by a deploy tool, and
+  that is a coupling worth naming. The alternative is a deploy tool that special-cases `@http` and
+  `@auth` -- three lines of code that would need a fourth for every plugin that ever listens or dials, and
+  that would make "who implements a thing is never a code detail" false of the one tool an operator uses.
+  Declared on the document, the fact is also in `describe`, in the viewer and in the manifest, where a
+  person who never deploys still benefits from it. If the maintainer prefers the coupling, *Open questions*
+  says what changes.
+- **The Helm chart is hand-written, so it is not derived from the tree.** A generated chart is a template
+  that generates a template: the tool would emit Go template expressions, which no YAML emitter can produce
+  safely and no test can parse. Splitting it -- the chart written once, its values derived -- puts the
+  generated half in pure data and the reviewed half under `helm lint`, and means a fix to the chart reaches
+  every tree without regenerating anything. The cost is that a tree with an unusual need edits values rather
+  than templates, and that the chart must stay general enough for every tree. It is one Deployment, one
+  Service and one Secret; it can.
+- **Upstream charts change under us.** Each is pinned by version and off by default, so a change upstream
+  breaks the demo and never a deployment. The cost is a pin that ages; renewing it is a pull request the
+  `cluster` workflow proves.
+- **A generated Dockerfile that is wrong is a support burden.** It is fifteen lines, it is tested field by
+  field, and `--check` fails CI when it drifts from the tree. A tree that needs more -- a native module, a
+  second stage, a distroless base -- edits it and loses the header, and the tool then refuses to touch it,
+  which is the right outcome: the generated recipe is a floor, not a cage.
+- **Serverless.** A function per trigger has no process to `hold` a listener, a watcher or a consumer in, so
+  a startup list would stop meaning what it means and RFC 0013's profile would stop being one place. This
+  RFC's plan makes the question answerable rather than closed: a future target would have to say what
+  becomes of `holds`, and if it can, it is a renderer and nothing else changes.
+- **Provider recipes (Fly, Render, Cloud Run, ECS).** Out, as the stub said: each costs money to test and
+  adds nothing the plan does not say. Anyone who wants one renders `--target plan` and writes fifty lines.
+  That is the point of publishing the plan as a schema.
+- **Plain Kubernetes manifests, with no Helm.** A reasonable fourth target and a small one, deliberately not
+  shipped: two ways to install one thing is a support question, and `helm template | kubectl apply` installs
+  the same objects for anyone who wants no release state in the cluster.
+- **One image for every workload.** A tree's profiles share their documents and their `node_modules`; only
+  the command differs. One image is one build, one scan and one tag to promote. The cost is that a worker
+  image carries the http plugin it never starts, which is a few megabytes and no attack surface the process
+  does not already have -- the code is loaded either way, and RFC 0016's `permits` is what narrows what it
+  may reach.
+- **Readiness is a socket, not a route.** A socket says exactly what the startup list already promised, and
+  it needs no grant. It says nothing about a dependency that fell over after start, which a real health
+  route would; a tree that wants that declares the trigger and writes an `httpGet` over the generated
+  `probe` value, which is one line in a file the operator owns. The default costs nothing and claims nothing false.
+- **`replicas: 1`.** Until RFC 0005 lands, a tree may keep sessions and blobs on the instance's disk, and a
+  second replica would sign a user in on one and out on the other. Defaulting to one and saying why in the
+  values file is honest; defaulting to two would be a bug the operator finds in production. The plan does
+  not detect disk state, and *Open questions* says when it might.
+- **`requires` is derived from what a kind declares, so a kind that declares nothing is invisible.** A
+  connection whose kind says no `endpoint` is either self-contained (the example's directories) or a kind
+  whose author has not yet added the line. The list is therefore a floor, and `NOTES.txt` says so rather
+  than claiming completeness.
+- **`deploy/` inside the tree.** It puts build output beside documents, which the project has avoided
+  everywhere else. It is also where a reader looks, it is `-o`-able for anyone who disagrees, and it holds
+  no `.json`, so the loader never sees it. The alternative, a sibling directory, makes the Docker build
+  context the parent of the tree for no gain.
 
 ## Open questions
 
-- Does `wilanis image` belong in the runtime, or in a separate `@wilanis/deploy` package so the runtime
-  carries no opinion about containers?
-- One chart with switches, or one chart per dependency composed by an umbrella chart?
-- Which PostgreSQL operator, and whether the chart provisions the database or expects one.
+**Before `accepted`:**
+
+- **Do `listens` and `endpoint` belong on the core schemas?** This draft says yes, for the reasons under
+  *Drawbacks*: the alternative is a deploy tool that knows plugins by name. If the maintainer prefers the
+  coupling, step 1 disappears, `planOf` gains a table of `{ plugin → port setting, kind → endpoint setting }`
+  the package maintains, and the manifest's `profiles.<name>.listens` becomes the deploy tool's own
+  derivation rather than a manifest field -- a smaller diff and a worse document.
+- **Does the chart ship from this repository, or its own?** This draft keeps `charts/wilanis-tree/` here, so
+  the cluster script, the chart and the tool that writes its values move together and CI proves all three at
+  once. A separate repository would let the chart version independently of the packages, at the cost of a
+  second release process before there is a first.
+
+**Settled here, so the reasoning survives:**
+
+- **`wilanis image` does not belong in the runtime** (the stub's first question). The runtime carries no
+  opinion about containers, exactly as it carries none about the viewer: `@wilanis/deploy` is a tool over a
+  manifest, with its own `bin`, its own schema and its own tests, and the runtime's usage text does not grow
+  a line.
+- **One chart, with its dependencies as switches** (the stub's second question). An umbrella whose subcharts
+  are the upstream ones, each pinned and each `condition`-gated, is one thing to install and one thing to
+  review; one chart per dependency composed by a fourth chart is the same graph with three more `Chart.yaml`
+  files to keep in step.
+- **CloudNativePG, and the chart provisions nothing for production** (the stub's third question). The
+  switches exist so the roadmap's demos stand up on a laptop; a production database is the operator's, named
+  by a connection, and the chart never claims to own one. RFC 0009's broker is a table in that same
+  connection (`0009:49-51`), so the stub's queue chart is not needed and is gone.
+- **`--profile` is required**, against RFC 0026's default-to-everything, because a deployment is of one
+  place and the asker knows which.
+
+**During implementation:**
+
+- Whether the plan grows `volumes` once RFC 0005 lands -- a profile that still reaches a file store or a
+  local blob directory -- and whether `planOf` should then refuse `replicas > 1` for it, or only warn.
+- The exact default image reference (`<name>:<package.json version>` here) and whether `-o` outside the tree
+  should suppress the build context rewrite.
+- Whether `charts/wilanis-tree` is published to an OCI registry at 1.0, and under which name.
