@@ -24,7 +24,11 @@ export function said(when: string): VSaid[] | undefined {
   return chain(node).map((part, index) => ({ lead: lead(index), parts: clause(part, false) }));
 }
 
-const VERB: Record<string, [string, string]> = {
+/** Every operator that compares two values, so a new one in the grammar is a type error here and not a crash. */
+type Compared = Exclude<expr.BinaryOp, '&&' | '||'>;
+
+const VERB: Record<Compared, [string, string]> = {
+  in: ['is among', 'is not among'],
   '==': ['is', 'is not'],
   '!=': ['is not', 'is'],
   '<': ['is below', 'is at least'],
