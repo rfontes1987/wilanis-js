@@ -74,9 +74,10 @@ A commit message says what changed and why, in the imperative, in plain words. N
 no tool or session references. A pull request names the issue it serves and ticks the template's
 boxes. Discussion of *whether* to do something belongs on the RFC, not on the pull request that does it.
 
-**A change under `fitness/` is a change of decision.** That directory holds the decisions about this
-repository's code -- one file each, a claim with why it holds and when to retire it (RFC 0027). A commit
-touching it carries one more line, in the maintainer's own words:
+**A change to a `fitness/*.fitness.ts` file is a change of decision.** Each one is a decision about this
+repository's code -- a claim with why it holds and when to retire it (RFC 0027). A commit touching one
+carries one more line, in the maintainer's own words. The rest of the directory is not a decision and needs
+no line: `lib/` reads the repository and judges nothing, `README.md` describes, `run.test.ts` registers.
 
 ```
 Decision: retires fitness/the-engine-imports-nothing.fitness.ts because RFC 00NN moves sources into the engine.

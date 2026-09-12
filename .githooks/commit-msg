@@ -1,10 +1,12 @@
 #!/bin/sh
-# A commit that changes a decision says so. Every commit touching fitness/ carries a line
+# A commit that changes a decision says so. Every commit touching a fitness/*.fitness.ts file carries a line
 #
 #   Decision: (adds|reconfigures|retires) fitness/<file> because ...
 #
-# written by the maintainer in their own words: fitness/ holds the decisions about this repository's code, and
-# a decision that changes silently is the one thing RFC 0027 exists to prevent. The line is the one exception
+# written by the maintainer in their own words: one *.fitness.ts file is one decision about this repository's
+# code, and a decision that changes silently is the one thing RFC 0027 exists to prevent. `lib/` reads the
+# repository and judges nothing, `README.md` describes, `run.test.ts` registers: none of them is a decision,
+# and the sentence above could not be written truthfully about a change to one. The line is the one exception
 # to CLAUDE.md's "no generated trailers" -- no tool adds it.
 #
 # `git commit --no-verify` bypasses this, as it bypasses any hook; the `decision` job in CI is what binds.
@@ -15,7 +17,7 @@ message_file="$1"
 
 # What this commit stages. A merge or a rebase stages nothing, so there is nothing to judge.
 staged=$(git diff --cached --name-only 2>/dev/null) || exit 0
-echo "$staged" | grep -q '^fitness/' || exit 0
+echo "$staged" | grep -qE '^fitness/[^/]+\.fitness\.ts$' || exit 0
 
 # A comment line is not part of the message git keeps.
 if grep -v '^#' "$message_file" | grep -Eq '^Decision: (adds|reconfigures|retires) fitness/'; then
@@ -25,15 +27,15 @@ fi
 cat >&2 <<'MSG'
 refused: this commit changes a decision, and does not say so.
 
-fitness/ holds the decisions about this repository's code. A commit that touches it carries one line, in
+A fitness/*.fitness.ts file is one decision about this repository's code. A commit that touches one carries a line, in
 your own words, saying which of adds, reconfigures or retires, which file, and why:
 
   Decision: adds fitness/the-engine-imports-nothing.fitness.ts because the engine's orthogonality is the
   rule I would least like to lose quietly.
 
-The files this commit stages under fitness/:
+The decisions this commit stages:
 MSG
-echo "$staged" | grep '^fitness/' | sed 's/^/  /' >&2
+echo "$staged" | grep -E '^fitness/[^/]+\.fitness\.ts$' | sed 's/^/  /' >&2
 cat >&2 <<'MSG'
 
 A fitness function that bites is a design signal: the edit usually goes to the code, not to fitness/.
