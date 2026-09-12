@@ -1,1 +1,8 @@
 blank_issues_enabled: false
+contact_links:
+  - name: Question, idea, or a plugin you built
+    url: https://github.com/wilanis/wilanis-js/discussions
+    about: Issues track RFCs and their tasks. Anything else starts as a discussion.
+  - name: Report a vulnerability
+    url: https://github.com/wilanis/wilanis-js/security/advisories/new
+    about: Privately, never as an issue. SECURITY.md says what to expect.
