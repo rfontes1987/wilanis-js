@@ -189,6 +189,7 @@ what a tree starts.
 | [`@wilanis/plugin-reload`](packages/plugin-reload) | Serve the tree again when it changes, without closing the port |
 | [`@wilanis/plugin-auth`](packages/plugin-auth) | The guard: tokens, sessions with typed attributes, one-time challenges |
 | [`@wilanis/plugin-storage`](packages/plugin-storage) | Records of a shape behind one port; an engine plugin says how they are kept |
+| [`@wilanis/plugin-storage-memory`](packages/plugin-storage-memory) | An engine for that port: records in a Map, for as long as the process runs |
 | [`@wilanis/view`](packages/view) | The viewer. Read-only: it grants nothing and runs nothing |
 | [`@wilanis/access`](libraries/access) | Not code but a tree to include: sign-in, sessions and policies, in pure JSON |
 

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/connection-kind.schema.json",
+  "label": "Records in memory",
+  "description": "A store kept in a Map that lives exactly as long as the process. It has no settings at all: no URL, no pool, nothing to configure and so nothing to misconfigure. A tree that names it keeps its records until it stops.",
+  "settings": {
+    "fields": {}
+  },
+  "storage": true
+}

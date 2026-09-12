@@ -20,6 +20,15 @@ const ORDER = ['engine', 'core', 'compiler', 'runtime', 'view'];
 /** What a plugin may import of the workspace, whatever its own manifest names. */
 const PLUGIN_MAY_IMPORT = ['@wilanis/core', '@wilanis/engine'];
 
+/**
+ * The plugins that are a contract rather than an implementation of one: one plugin says what may be asked,
+ * and others answer it. A plugin may import the contract it implements, and a contract imports no
+ * implementation, so the arrow still points one way. RFC 0002 introduces the first -- @storage says what a
+ * store is, and an engine is a plugin that keeps one. Like ORDER, this is a list rather than a decision:
+ * naming the next contract here is not a change of what the claim holds.
+ */
+const CONTRACT_PLUGINS = ['@wilanis/plugin-storage'];
+
 /** Declared once at the workspace root, so no package names it and every test may import it. */
 const ROOT_DEV = ['vitest'];
 
@@ -83,8 +92,10 @@ function againstOrder(pkg: Package, reach: Reach): string[] {
   const { named, file } = reach;
   if (!named.startsWith('@wilanis/') || named === pkg.name) return [];
   const isPlugin = pkg.name.startsWith('@wilanis/plugin-');
-  if (isPlugin && reach.dir === 'src' && !PLUGIN_MAY_IMPORT.includes(named)) {
-    return [`${file} imports ${named}; a plugin imports only ${PLUGIN_MAY_IMPORT.join(' and ')}`];
+  const allowed = [...PLUGIN_MAY_IMPORT, ...CONTRACT_PLUGINS];
+  if (isPlugin && reach.dir === 'src' && !allowed.includes(named)) {
+    const may = `${PLUGIN_MAY_IMPORT.join(' and ')}, and a contract it implements (${CONTRACT_PLUGINS.join(', ')})`;
+    return [`${file} imports ${named}; a plugin imports only ${may}`];
   }
   const here = ORDER.indexOf(pkg.name.replace('@wilanis/', ''));
   const there = ORDER.indexOf(named.replace('@wilanis/', ''));
@@ -124,7 +135,16 @@ export const sabotage = [
       { dependencies: ['@wilanis/runtime'] },
     ),
     violation:
-      'packages/plugin-http/src/index.ts imports @wilanis/runtime; a plugin imports only @wilanis/core and @wilanis/engine',
+      'packages/plugin-http/src/index.ts imports @wilanis/runtime; a plugin imports only @wilanis/core and @wilanis/engine, and a contract it implements (@wilanis/plugin-storage)',
+  },
+  {
+    input: reaching(
+      '@wilanis/plugin-blob',
+      { file: 'packages/plugin-blob/src/index.ts', dir: 'src', named: '@wilanis/plugin-http' },
+      { dependencies: ['@wilanis/plugin-http'] },
+    ),
+    violation:
+      'packages/plugin-blob/src/index.ts imports @wilanis/plugin-http; a plugin imports only @wilanis/core and @wilanis/engine, and a contract it implements (@wilanis/plugin-storage)',
   },
   {
     input: reaching(

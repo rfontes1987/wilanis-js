@@ -26,6 +26,9 @@
       "path": "packages/plugin-storage"
     },
     {
+      "path": "packages/plugin-storage-memory"
+    },
+    {
       "path": "packages/plugin-auth"
     },
     {

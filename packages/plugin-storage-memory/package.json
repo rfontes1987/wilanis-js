@@ -1,16 +1,16 @@
 {
-  "name": "@wilanis/plugin-storage",
+  "name": "@wilanis/plugin-storage-memory",
   "version": "0.1.0",
-  "description": "The @storage plugin for wilanis: records of a shape behind one generic port. It says what a store is and what may be asked of one; an engine plugin says how one is kept.",
+  "description": "The @storage-memory engine for wilanis: an @storage store kept in memory, for development, tests and the trees under libraries/.",
   "type": "module",
   "license": "Apache-2.0",
   "author": "Rafael Fontes <rfontes1987@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/wilanis/wilanis-js.git",
-    "directory": "packages/plugin-storage"
+    "directory": "packages/plugin-storage-memory"
   },
-  "homepage": "https://github.com/wilanis/wilanis-js/tree/main/packages/plugin-storage#readme",
+  "homepage": "https://github.com/wilanis/wilanis-js/tree/main/packages/plugin-storage-memory#readme",
   "bugs": "https://github.com/wilanis/wilanis-js/issues",
   "keywords": [
     "wilanis",
@@ -18,17 +18,13 @@
     "json-schema",
     "declarative",
     "storage",
-    "records",
+    "memory",
     "plugin"
   ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./suite": {
-      "types": "./dist/suite.d.ts",
-      "default": "./dist/suite.js"
     }
   },
   "files": [
@@ -42,17 +38,17 @@
   },
   "dependencies": {
     "@wilanis/core": "0.1.0",
-    "@wilanis/engine": "0.1.0"
+    "@wilanis/engine": "0.1.0",
+    "@wilanis/plugin-storage": "0.1.0"
+  },
+  "devDependencies": {
+    "@wilanis/compiler": "0.1.0",
+    "@wilanis/runtime": "0.1.0"
   },
   "publishConfig": {
     "access": "public"
   },
   "engines": {
     "node": ">=22"
-  },
-  "devDependencies": {
-    "@wilanis/compiler": "0.1.0",
-    "@wilanis/plugin-storage-memory": "0.1.0",
-    "@wilanis/runtime": "0.1.0"
   }
 }

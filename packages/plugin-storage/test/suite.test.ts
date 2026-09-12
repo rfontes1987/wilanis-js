@@ -3,12 +3,12 @@
  * engine here is a test double of this package, and @wilanis/plugin-storage-memory runs the same cases
  * against the real thing.
  */
+import { MemoryEngine } from '@wilanis/plugin-storage-memory';
 import { describe, it } from 'vitest';
 import { cases } from '../src/suite.js';
-import { FakeEngine } from './fake-engine.js';
 
 const subject = {
-  engine: new FakeEngine(),
+  engine: new MemoryEngine(),
   connection: {
     connection: '@connections/records.connection.json',
     kind: '@fake/fake.connection-kind.json',
