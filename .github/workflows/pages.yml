@@ -1,0 +1,62 @@
+name: pages
+
+# What wilanis.dev serves: the example, drawn by the viewer, with nothing running behind it.
+# `wilanis-view --static` writes the page and every answer it would otherwise ask a server for, so the site is
+# files on a CDN: no tree is loaded, no document is run, and no path outside this repository is named. A
+# document the viewer cannot draw fails this job rather than the page. The demo sits at /example/ so the root
+# is free for whatever the site becomes.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and a newer main wins.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: write the site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: the example, written out as files
+        run: npx wilanis-view example --static _site/example
+      - name: the domain, and a root that points at the demo
+        run: |
+          echo 'wilanis.dev' > _site/CNAME
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>wilanis</title>
+          <meta http-equiv="refresh" content="0; url=/example/">
+          <link rel="canonical" href="https://wilanis.dev/example/">
+          <p><a href="/example/">The example, drawn by the viewer.</a>
+          HTML
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: publish
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

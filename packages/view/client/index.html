@@ -127,9 +127,12 @@
   const PALETTE = ['#6cb6ff', '#f0b350', '#7bd88f', '#c792ea', '#ff8a65', '#4ecdc4', '#f78c6c', '#82aaff', '#e57fb3', '#b5d66a', '#ffd166', '#64d3ff'];
 
   // ---- data --------------------------------------------------------------------------------------
-  async function api(path) { const r = await fetch(path, { cache: 'no-store' }); const j = await r.json(); if (!r.ok) throw Object.assign(new Error(j.error || r.statusText), { body: j }); return j; }
+  let STATIC = false;
+  async function api(path) { const r = await fetch(STATIC ? staticFile(path) : path, { cache: 'no-store' }); const j = await r.json().catch(() => ({})); if (!r.ok) throw Object.assign(new Error(j.error || r.statusText || 'not found'), { body: j }); return j; }
   /** A reference made canonical: a project alias expanded (@shapes/X → @features/monitor/shapes/X); anything else as written. */
   const canon = (ref) => { const m = /^(@[a-z][a-z0-9-]*)(\/.*)?$/.exec(String(ref)); if (!m || !state.index) return ref; const t = state.index.aliases[m[1]]; return t === undefined ? ref : t.replace(/\/$/, '') + (m[2] || ''); };
+  /** The file a route is answered by when the tree was written out: no server, so no query strings. The index carries the version. */
+  const staticFile = (path) => { const [route, query] = path.split('?'); const asked = query ? new URLSearchParams(query).get('path') || '' : ''; if (route === '/api/doc') return 'docs/' + String(canon(asked)).replace(/^@/, ''); if (route === '/api/schema') return 'schemas/' + asked; return 'index.json'; };
   const docAt = (path) => state.index && state.index.docs.find(d => d.path === canon(path));
   const isDocPath = (s) => !!docAt(s);
   const SCHEMA_REL = /^(?:node\/)?[a-z-]+\.schema\.json$/;
@@ -183,7 +186,8 @@
       $('status').textContent = idx.project ? `${idx.docs.length} documents` + (idx.refusals.length ? ` / ${idx.refusals.length} refusal(s)` : '') : '';
     } catch (e) { $('status').textContent = 'server unreachable'; }
   }
-  setInterval(async () => { try { const v = await api('/api/version'); if (v.version !== state.version) await refresh(false); } catch { $('status').textContent = 'server unreachable'; } }, 1500);
+  /** While a server is behind the page, notice the tree changed and draw it again. A written-out tree never does. */
+  const watch = () => setInterval(async () => { try { const v = await api('/api/version'); if (v.version !== state.version) await refresh(false); } catch { $('status').textContent = 'server unreachable'; } }, 1500);
 
   // ---- dom helpers ---------------------------------------------------------------------------------
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -925,7 +929,11 @@
   }
 
   // ---- start ------------------------------------------------------------------------------------------
-  (async () => { await refresh(true); await route(); })();
+  (async () => {
+    STATIC = await fetch('index.json', { cache: 'no-store' }).then(r => r.ok).catch(() => false);
+    await refresh(true); await route();
+    if (!STATIC) watch();
+  })();
 })();
 </script>
 </body>

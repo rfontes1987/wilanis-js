@@ -29,7 +29,8 @@ export interface ViewServer {
   close(): Promise<void>;
 }
 
-const PAGE = fileURLToPath(new URL('../client/index.html', import.meta.url));
+/** The page itself: one static file, served here and copied into a static site. */
+export const PAGE = fileURLToPath(new URL('../client/index.html', import.meta.url));
 
 /** The file of a schema in the installed @wilanis/core, or undefined when rel names none. */
 function schemaFile(rel: string): string | undefined {
