@@ -1,6 +1,6 @@
 # RFC 0026: The application manifest
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:runtime` (`manifest.ts`, the `manifest` command, `packages/runtime/schemas/manifest.schema.json`,
   the version a plugin and an include are resolved with), `area:core` (one optional field on `ResolvedInclude`),
   `area:view` (one endpoint and one link on the project page). Nothing in the engine, the compiler or a plugin.
@@ -203,8 +203,10 @@ not the process.
 
 **A tree that does not pass.** `manifest` loads and checks first, as `start` does; a tree with refusals prints
 them as `check` does and exits 1 with no manifest, because the reach of a tree with an unresolved reference
-means nothing. A tree with no declared profile has one block, `profiles: { "": {...} }`, the unnamed profile of
-RFC 0013.
+means nothing. A tree with no declared profile has one block, `profiles: { "": {...} }`: `Judge.profiles()`
+(`packages/compiler/src/check/judge.ts:156`) answers `[undefined]` there, and the manifest writes that one
+profile under the empty-string key, because a JSON object has no key for nothing. A tree that declares
+profiles never has an empty key, so a reader tells the two cases apart by the key alone.
 
 **What a reader does with it.**
 
@@ -258,7 +260,8 @@ None. The manifest is derived from a tree that passed; an inconsistency in it is
   over a `LoadResult` that passed `checkTree`; `options.profile` narrows the blocks; `options.runtime` and
   `options.root` are the two strings the command supplies (the runtime package's version, as RFC 0019's
   `diagnosticsOf` takes it; the root as given). It reads the registry, `Scope`, and `reachOf(scope, profile)` from
-  the compiler (RFC 0013) for every profile of `Judge.profiles()`, never `process.env`, never the clock. Every
+  the compiler (RFC 0013) for every profile of `Judge.profiles()`, whose `undefined` -- the unnamed profile --
+  is written under the key `""`; never `process.env`, never the clock. Every
   array is sorted: rows by `path` (or `name`, `variable`, `operation`, `label` in order of appearance for
   `startup`, which keeps its declared order because the order is meaning), object maps by key. `format` is the
   literal `1`. `ir` is RFC 0008's segment of `SCHEMA_BASE` (`packages/core/src/model.ts:48`): `v1` while the base
@@ -387,15 +390,26 @@ Step 1 may land before RFC 0013; RFC 0024 waits for steps 1 and 2.
 
 ## Open questions
 
-Before `accepted`:
+Decided before `accepted`:
 
-- **Whether `manifest` prints every profile by default**, or requires `--profile`. This RFC recommends every
-  profile: the document is the tree's, and a profile is one of its parts; RFC 0024 narrows with the flag.
-- **Whether trigger and connection `settings` are printed as written.** This RFC recommends yes, for the reasons
-  under *Drawbacks*; the alternative is a manifest RFC 0024 cannot build an image from.
-- **Whether `documents` is in the first version.** This RFC recommends yes: it is what `ls` prints, it is the
-  first question an agent asks, and dropping it later is a `format` bump while adding it later is not; so the
-  question is only whether it is worth its length now.
+- **`manifest` prints every profile by default.** The document is the tree's, and a profile is one of its
+  parts; a command that demanded `--profile` would make the common question -- what is this tree -- the one
+  that needs an argument the asker does not yet have. RFC 0024 narrows with the flag, which is the reader who
+  wants one deployment, not the default.
+- **Trigger and connection `settings` are printed as written**, for the reasons under *Drawbacks*: the
+  alternative is a manifest RFC 0024 cannot build an image from, since the port `listen` opens and the health
+  route are settings and nothing else says them. A secret's value never appears; a template stays
+  `{{secrets.*}}` text and `secrets` lists the keys beside it.
+- **`documents` is in the first version.** It is `ls` as data and the first question an agent asks; and the
+  cost is asymmetric -- dropping it later is a `format` bump, adding it later is not -- so the version that
+  might be wrong is the one that leaves it out. A reader who wants less filters.
+
+Settled while reviewing this draft, so the reasoning survives:
+
+- **The unnamed profile is the key `""`.** `Judge.profiles()`
+  (`packages/compiler/src/check/judge.ts:156`) answers `[undefined]` for a tree that declares none, and JSON
+  has no key for nothing. The *Guide* and the *Reference* now say the mapping rather than leaving a reader to
+  find it in the compiler.
 
 During implementation:
 
