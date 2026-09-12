@@ -1,6 +1,6 @@
 # RFC 0013: A deployment model: profiles, environments and what a tree needs to run
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:core` (three additive keys on `project.schema.json`; `ProjectDoc`; `Scope.connectionFor`),
   `area:compiler` (`reach.ts`, the walk from a profile to what it reaches; four rules in `check/project.ts`),
   `area:runtime` (the active profile, what `start` verifies and in which order, `describe`), `area:view` (the
@@ -381,16 +381,19 @@ Step 1 is what RFC 0016 and RFC 0026 wait for; steps 2 to 5 may land in any orde
 
 ## Open questions
 
-Before `accepted`:
+None before `accepted`.
 
-- Whether `default` is wanted at all, or the laptop sets `WILANIS_PROFILE` once. This RFC recommends
-  `default` for the reason above.
-- Whether a stand-in may also be named directly by a document, or exists only on the right of a
-  `connections` entry. This RFC allows both and refuses neither; a rule that a stand-in is named nowhere else
-  would be cheap to add if a tree gets confusing.
+**Settled here, so the reasoning survives.**
 
-During implementation:
+- **`default` stays.** One profile may carry `"default": true`, and it is what the laptop runs: the README's one
+  command keeps working, a new tree needs no variable set before its first `start`, and production still names its
+  profile, since the chart always does. Setting `WILANIS_PROFILE` in every shell was rejected as a paper cut that
+  would teach nobody anything. *Drawbacks*, first item.
+- **A stand-in may also be named directly.** A stand-in is an ordinary connection document: a data graph may name it
+  as its `connection` and a profile may name it on the right of a `connections` entry, and neither use refuses the
+  other. A rule that a stand-in is named nowhere else is cheap to add if a tree gets confusing, and is not added until
+  one does.
 
-- The exact wording of `describe project.json`, and whether `reaches` groups by port or by connection.
-- Whether `reachOf` walks a policy that no trigger attaches. This RFC says no: the reach is what runs, and an
-  unattached policy runs nowhere.
+**Left to implementation, deliberately:** the exact wording of `describe project.json`, and whether `reaches` groups
+by port or by connection; and whether `reachOf` walks a policy that no trigger attaches, which this RFC says it does
+not, since the reach is what runs and an unattached policy runs nowhere.
