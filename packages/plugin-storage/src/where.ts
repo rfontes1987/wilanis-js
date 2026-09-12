@@ -8,7 +8,7 @@
  * is a shape or a list may only be tested with `has`: what lies inside one is not this grammar's business.
  *
  * What is judged here is what the port promises at run time -- an unknown field, an unknown operator, a test a
- * field's type does not admit. Judging a filter before anything runs is RFC 0003's X206 to X208.
+ * field's type does not admit. Judging a filter before anything runs is RFC 0003's business, in the X band.
  */
 import type { ObjField, Type } from '@wilanis/core';
 
@@ -75,6 +75,7 @@ function testOf(field: string, op: string, value: unknown, type: Type): Test {
   const bad = unfit(op, type);
   if (bad) throw new Error(`where: on '${field}', ${bad}`);
   if (LISTS.has(op) && !Array.isArray(value)) throw new Error(`where: '${field}.${op}' takes a list`);
+  if (op === 'has' && typeof value !== 'boolean') throw new Error(`where: '${field}.has' takes a boolean`);
   return { op, value };
 }
 

@@ -1,6 +1,6 @@
 # Working on wilanis
 
-This is the `@wilanis/*` workspace: eight npm packages, one example project, and a test directory beside each package that has one. Read this
+This is the `@wilanis/*` workspace: nine npm packages, one example project, and a test directory beside each package that has one. Read this
 before changing anything; it says where things live and which direction dependencies may point.
 
 ## Layout
@@ -14,6 +14,7 @@ packages/plugin-http/  @wilanis/plugin-http  index.ts codecs.ts throttle.ts, doc
 packages/plugin-blob/  @wilanis/plugin-blob  index.ts, docs/                        → core, engine
 packages/plugin-reload/ @wilanis/plugin-reload  index.ts, docs/                     → core, engine
 packages/plugin-auth/  @wilanis/plugin-auth  index.ts store.ts, docs/               → core, engine   (the guard: tokens, sessions, challenges, directories)
+packages/plugin-storage/ @wilanis/plugin-storage  index.ts engine.ts store.ts where.ts handlers.ts suite.ts, docs/   → core, engine   (records behind one port; an engine plugin keeps them)
 packages/view/         @wilanis/view       model.ts serve.ts cli.ts, client/index.html, bin/   → core, compiler, runtime
 libraries/access/      @wilanis/access     a tree to include: features/access (sign-in, sessions, policies, otp), features/access-dev (its own binding), connections/, project.json, test/
 example/               a consumer project: JSON documents + package.json; includes @wilanis/access and binds its identity port in features/directories
@@ -33,12 +34,15 @@ branch solver behind `rehearse`), `packages/plugin-http/test` (end to end agains
 `packages/plugin-blob/test` (the file store, the CSV parser, the operations), `packages/plugin-reload/test`
 (the watcher, and what it does with a tree that refuses), `packages/plugin-auth/test` (sign-in against a directory
 and a fake OIDC issuer, the policies over the example's writes, the session across calls and a refresh, the
-one-time code on the command line, the plugin's X rules), `libraries/access/test` (the access tree alone, and
+one-time code on the command line, the plugin's X rules), `packages/plugin-storage/test` (the shipped documents
+through the real checker, the `where` grammar, the engine table both ways round and through a copy of the
+environment, the handlers driven as the kernel drives them, and the shared suite over a fake engine),
+`libraries/access/test` (the access tree alone, and
 every A rule sabotaged),
 `packages/view/test` (the view model of the example, and the server). The compiler has no test directory of
 its own: every checker rule is exercised through the example and its sabotaged variants in
-`packages/runtime/test/example.test.ts`. The runtime and the view depend on the http plugin, and the http
-plugin on the runtime, only as devDependencies, for tests.
+`packages/runtime/test/example.test.ts`. The runtime and the view depend on the http plugin, the http
+plugin on the runtime, and the storage plugin on the compiler and the runtime, only as devDependencies, for tests.
 
 ## Commands
 

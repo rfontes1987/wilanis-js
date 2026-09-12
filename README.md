@@ -188,6 +188,7 @@ what a tree starts.
 | [`@wilanis/plugin-blob`](packages/plugin-blob) | Stored files read as CSV rows or text, and written back |
 | [`@wilanis/plugin-reload`](packages/plugin-reload) | Serve the tree again when it changes, without closing the port |
 | [`@wilanis/plugin-auth`](packages/plugin-auth) | The guard: tokens, sessions with typed attributes, one-time challenges |
+| [`@wilanis/plugin-storage`](packages/plugin-storage) | Records of a shape behind one port; an engine plugin says how they are kept |
 | [`@wilanis/view`](packages/view) | The viewer. Read-only: it grants nothing and runs nothing |
 | [`@wilanis/access`](libraries/access) | Not code but a tree to include: sign-in, sessions and policies, in pure JSON |
 

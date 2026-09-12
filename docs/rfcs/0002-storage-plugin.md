@@ -493,8 +493,13 @@ engines(ctx.env).register('@storage-postgres/postgres.connection-kind.json', mak
 ```
 
 `engines(env)` is exported by `@wilanis/plugin-storage` and is the whole of the contract between the
-two: a table kept in a `WeakMap` keyed by `env`, exactly as `throttleFor` keeps a throttle, so nothing
-is global and a reload starts clean. `@storage`'s handler looks the connection's `kind` up in it and
+two: a table kept in a `WeakMap` keyed by `env.connections`, so nothing is global and a reload starts
+clean. It is keyed by that member and not by `env` itself because the embedder hands a handler a copy,
+`{ ...env, blobs }`, whenever a run carries a blob scope -- the http listener does on every request --
+so a table keyed by the object would be found by `postLoad` and missed by the first request.
+`connections` is built once for the tree by `buildEnv` and carried by every copy, which makes it the
+name of the environment where the object is not. (`throttleFor` in `@http` keys on `env` and has the
+same flaw; it is not repeated here.) `@storage`'s handler looks the connection's `kind` up in it and
 fails the node with a message naming the missing package where no engine registered -- which X203
 has already refused at check time, so the run-time message is for a plugin that failed to load, not
 for a tree that is wrong.
@@ -619,8 +624,11 @@ questions.
   types `get` with a number, and `describe` prints where each variable comes from.
 - `rules.test.ts`: one sabotage per rule, X201 to X207, each breaking the small tree and expecting the
   code, as `packages/plugin-auth/test` does for X101-X103. X207 needs two stores over one connection.
-- `suite.ts`: the port's behaviour as a suite a package exports and an engine's tests import, so
-  "this is an engine" has one meaning that is executable. Not a test file itself.
+- `src/suite.ts`, published as `@wilanis/plugin-storage/suite`: the port's behaviour as a suite a package
+  exports and an engine's tests import, so "this is an engine" has one meaning that is executable. It lives
+  under `src/` and not `test/` because an engine is a separate package and `files` ships `dist` and `docs`
+  alone; it asserts with `node:assert/strict` and names no test framework, so vitest stays out of a runtime
+  package. Not a test file itself.
 - `engines.test.ts`: the registration table, both ways round. A tree whose `project.json` names the
   engine *before* `@storage` works exactly as one that names it after, and a tree that names no engine
   fails the node with the message that says which package is missing. This pins the ordering claim

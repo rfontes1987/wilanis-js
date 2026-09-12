@@ -31,6 +31,17 @@ describe('finding the engine that keeps the records', () => {
     expect(engines(other).kinds).toEqual([]);
   });
 
+  it('a copy of the environment reaches the table the engine registered in', () => {
+    // The embedder hands a handler `{ ...env, blobs }` whenever a run carries a blob scope, as the http listener
+    // does on every request; an engine registered in postLoad on the tree's env must still be found through it.
+    const env = { connections: {}, plugins: {} };
+    const engine = new FakeEngine();
+    engines(env).register(KIND, engine);
+    expect(engines({ ...env, blobs: {} }).for(KIND)).toBe(engine);
+    engines({ ...env, blobs: {} }).register('@other/other.connection-kind.json', engine);
+    expect(engines(env).kinds).toEqual([KIND, '@other/other.connection-kind.json']);
+  });
+
   it('a kind nothing registered for has no engine, whatever else did', () => {
     const env = {};
     engines(env).register(KIND, new FakeEngine());
