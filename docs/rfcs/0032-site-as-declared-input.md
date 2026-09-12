@@ -1,6 +1,6 @@
 # RFC 0032: The site as a declared input: what the compiler tells an operation about where it was called
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:core` (one key on a contract field in `common.schema.json`; `ObjField.provided`; one shape the
   `@std` plugin grants), `area:compiler` (the literal written at lowering; two rules), `area:runtime` (`describe`, the
   `@std` document, one method on the handler environment), `area:view` (the node panel marks the field). Nothing in the engine.
@@ -234,7 +234,8 @@ sees the site; nothing is generated for it, since it is a literal and not a read
   compiler would write, so a reader sees what the handler is handed without running anything.
 - RFC 0006's span rows carry `wilanis.graph` and `wilanis.node`. Carrying the same `file` and `at` instead, or beside
   them, would let a log line a plugin wrote from its site, the span the runtime emitted for the node, and a refusal the
-  checker printed be joined on one address. That is RFC 0006's to adopt, and this RFC gives it the strings.
+  checker printed be joined on one address. RFC 0006 adopts it at this RFC's acceptance: every node span carries
+  `wilanis.at`, and its graph span's `wilanis.graph` is the `file`.
 - `packages/runtime/templates/CLAUDE.md`, the sentence on `in`: "a field the port marks `provided` is written by the
   compiler; never give it."
 
@@ -319,16 +320,18 @@ Each step one pull request and one sub-issue of the tracking issue. Steps 1 and 
 
 ## Open questions
 
-**Before `accepted`:**
-
-1. **`@std/Site.shape.json` or a core type.** *Drawbacks*, last item, recommends the `@std` shape and says the cost. The
-   maintainer decides.
-2. **Whether RFC 0025's `complete` asks for its site.** This RFC makes it possible and takes no position; if RFC 0025's
-   owners want the node's `description` handed to the model as context, it is one field on `complete`'s contract and
-   one sentence in its port document saying what the model is told.
+None before `accepted`.
 
 **Settled here, so the reasoning survives.**
 
+- **The shape is `@std/Site.shape.json`.** A document a reader opens, `describe` prints and the viewer links, as every
+  shape a plugin grants is; two field names the compiler's `siteOf` must match, held together by the first test.
+  *Drawbacks*, last item.
+- **`complete` does not ask for its site.** RFC 0025's promise stands as accepted: a model is told `instructions` and
+  `input`, and a node's description is written for readers. The first consumers are RFC 0002's `raw` and a log
+  adapter; if a tree later wants a model told what a node is for, it is one field on `complete` and one sentence in
+  its port document, added by RFC 0025's owners then.
+- **RFC 0006 carries the address.** *Discoverability*: `wilanis.at` on every node span, `wilanis.graph` as the file.
 - **A declared input, not the report and not the context.** *Drawbacks*, first three items.
 - **Only operations that ask.** *Drawbacks*, third item.
 - **One word, `site`.** A second provided value -- the profile in force, the tree's version from RFC 0026's manifest --

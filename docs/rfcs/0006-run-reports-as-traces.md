@@ -209,9 +209,14 @@ reports and yields spans:
 | the operation | `<port>#<operation>` | from its report | `wilanis.port`, `wilanis.operation` |
 | a binding | `binding <binding path>#<op>` | from the nested report | `wilanis.binding` |
 | a graph (nested report) | `<graph path>` | from `report.status` | `wilanis.graph` |
-| a `run` node | `<node id> <handler>` | `ok` / `refused: <reason>` / `failed` / `cancelled` / `seeded` | `wilanis.node`, `wilanis.effect` (true when the operation is not `pure`), `wilanis.connection` when `in.connection` is a string, `http.response.status_code` when the handler is `@http/http.port.json#request` and `out.status` is a number |
-| a `switch` | `<node id> switch → <selected>` | ok | `wilanis.selected`, `wilanis.rule` (the label of the rule that fired, or `else`) |
-| a `map` | `<node id> map ×<n>` | from the node | one child span per element, named `<node id>.<index>` |
+| a `run` node | `<node id> <handler>` | `ok` / `refused: <reason>` / `failed` / `cancelled` / `seeded` | `wilanis.node`, `wilanis.at`, `wilanis.effect` (true when the operation is not `pure`), `wilanis.connection` when `in.connection` is a string, `http.response.status_code` when the handler is `@http/http.port.json#request` and `out.status` is a number |
+| a `switch` | `<node id> switch → <selected>` | ok | `wilanis.at`, `wilanis.selected`, `wilanis.rule` (the label of the rule that fired, or `else`) |
+| a `map` | `<node id> map ×<n>` | from the node | `wilanis.at`; one child span per element, named `<node id>.<index>` |
+
+Every node span carries `wilanis.at`, `nodes/<id>`, and its graph span's `wilanis.graph` is the file: together they are
+the address a refusal prints as `file` and `at`, and the site RFC 0032 hands an operation that asks for it, so a log
+line a plugin wrote, the span the runtime emitted and a refusal the checker printed join on one pair of strings.
+Adopted at RFC 0032's acceptance; it lands with `traceOf` (step 4).
 
 A cancelled node has no duration and is emitted as a zero-length span with status `cancelled`, so a reader
 sees the branches not taken; the `full` level keeps them, the `summary` level drops them.

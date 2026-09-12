@@ -37,7 +37,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0029](0029-named-reads.md) | `reads`: a document names each read it takes from the request | accepted |
 | [0030](0030-cache.md) | `cache`: one word on a node, a graph or an operation, lowered to the nodes it stands for | accepted |
 | [0031](0031-intent-triggers.md) | Intents: a sentence fires a route, under the route's own policies | accepted |
-| [0032](0032-site-as-declared-input.md) | The site as a declared input: what the compiler tells an operation about where it was called | draft |
+| [0032](0032-site-as-declared-input.md) | The site as a declared input: what the compiler tells an operation about where it was called | accepted |
 
 Which milestone first shows an RFC is said once, in [`../roadmap.md`](../roadmap.md); the tracking issue
 carries it as GitHub's milestone. Where this list and the outside assessment that seeded it differ, the
