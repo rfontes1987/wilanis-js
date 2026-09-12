@@ -519,7 +519,7 @@ the printed lines and the exit code for a clean plan, a refused step, `--apply`,
   hard-wired to `@storage` in `cli.ts` would name a plugin in the runtime, which names none today. A
   `@storage/storage.port.json#migrate` operation reached from a command-line trigger keeps the contract untouched
   and puts the migration in the tree, where `map` and `describe` see it -- but every feature with a store would carry
-  a trigger, a domain operation and a delegation for it (X211 keeps one feature from naming another's store), an
+  a trigger, a domain operation and a delegation for it (X213 keeps one feature from naming another's store), an
   operator would run one command per store, and the answer would be the trigger kind's JSON where a plan wants
   columns and a summary line. The hook composes every plugin's plan into one printout, and it is the one route:
   `@storage` grants no `migrate` operation, so no graph and no trigger can reach a schema change (*Open questions*,
