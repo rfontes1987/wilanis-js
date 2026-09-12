@@ -1,6 +1,6 @@
 # RFC 0024: Deployment: one plan, a Compose file and a Helm chart
 
-- **Status:** draft
+- **Status:** accepted
 - **Areas:** `area:core` (one additive key on `port.schema.json`, one on `connection-kind.schema.json`;
   `Operation` and `ConnectionKindDoc`), `area:compiler` (two rules in `check/contracts.ts`, and the first
   judgement of a connection kind document), `area:runtime` (three fields on RFC 0026's manifest and the one
@@ -393,6 +393,56 @@ does, and one of them gains an input `@http` never had:
 | `@http/http.connection-kind.json` | `endpoint: "baseUrl"` | the host an http connection dials |
 | `@auth/oidc.connection-kind.json` | `endpoint: "issuer"` | the issuer an OIDC connection dials |
 
+**When an operation declares `listens`.** The test is one question, and it is not `holds`: *does something
+outside the process connect to it?* If yes, the operation binds an address and declares `listens`. If the
+process is the one dialling, nothing is declared on the operation -- what it dials is a connection, and that
+connection's kind declares `endpoint`. The two keys this RFC adds are the two directions of the same fact:
+
+| The process | Says it | On | Written by |
+|---|---|---|---|
+| accepts what connects to it | `listens` | the operation, in its port document | the plugin granting the port |
+| dials out | `endpoint` | the connection kind | the plugin granting the kind |
+
+`holds` is necessary and not sufficient: every listener holds, and most things that hold never listen. Every
+`holds` operation in the workspace and in the accepted RFCs, judged by that question:
+
+| Operation | Binds | Declares |
+|---|---|---|
+| `@http/server.port.json#listen` | a TCP socket | `listens`, with `port` and `host` |
+| `@reload/watch.port.json#watch` | nothing -- it watches the filesystem | nothing |
+| `@otel/exporter.port.json#export` (RFC 0006) | nothing -- it dials the collector | nothing; see the gap below |
+| `@queue/queue.port.json#consume` (RFC 0009) | nothing -- it dials the broker | nothing; the broker is a connection, and its kind declares `endpoint` |
+| the scheduler (RFC 0010) | nothing -- a timer | nothing |
+
+So exactly one operation in this workspace declares `listens` today, and a second would be a plugin that
+grants a second server: a gRPC listener, an admin or metrics port, a webhook receiver on a port of its own,
+an SMTP listener. Each declares both parts of its address the same way, and each is then a row in the
+manifest, a port on the plan, a `ports:` entry in Compose and a `containerPort` in the chart with no
+renderer learning its name.
+
+Within `listens`, `port` is required and `host` is not, because a listener that cannot choose an interface
+is a real thing -- a Unix socket has a path, not an address. An operation binding TCP declares both.
+
+**The gap this leaves, named rather than hidden.** RFC 0006's collector endpoint is a *plugin setting*
+(`@otel` `settings.endpoint`), not a connection, so `requires` will not list it and an operator reading the
+plan will not see that the tree dials a collector. The fix is one of two, and neither is this RFC's: the
+collector becomes a connection of a kind that declares `endpoint`, which is what every other outbound thing
+in the tree already is; or `requires` grows a row for a plugin setting that names a host. The first is the
+one that fits, and RFC 0006's step that lands `@otel` is where it should be decided.
+
+**Where the address is deliberately *not* sayable.** `wilanis start` gains no `--host` and no `--port`. The
+address is a fact of the tree, and a flag would be a fourth place it comes from -- one the manifest cannot
+see, which would break the single property every target here rests on: that the tree says where its process
+binds. RFC 0013's precedence exists for choosing a *profile*; the profile then says the address, and
+`WILANIS_PROFILE` on the process is as far as the environment reaches.
+
+The viewer is the other side of that line and stays where it is: `packages/view/src/serve.ts:121` is
+already `opts.host ?? '127.0.0.1'`, with `wilanis-view [--host 127.0.0.1]` in its usage. It is a tool over a
+tree, not an operation of one -- it grants nothing and is named by no document -- so it declares no
+`listens` and keeps its flags. It is worth reading the asymmetry it exposes, though: the viewer, a
+development tool, binds loopback unless told otherwise, and the tree's own server binds every interface
+because it has never been able to do anything else.
+
 `packages/plugin-http/src/serve.ts` resolves the host as it resolves the port -- `input.host ??
 settings.host` -- and binds with it only when one is fixed: `host ? server.listen(port, host, ready) :
 server.listen(port, ready)`. A tree that writes no host binds what it binds today, byte for byte. The
@@ -731,14 +781,15 @@ plans.
 
 ## Open questions
 
-**Before `accepted`:**
-
-- **Does the chart ship from this repository, or its own?** This draft keeps `charts/wilanis-tree/` here, so
-  the cluster script, the chart and the tool that writes its values move together and CI proves all three at
-  once. A separate repository would let the chart version independently of the packages, at the cost of a
-  second release process before there is a first.
+**None before `accepted`.**
 
 **Settled here, so the reasoning survives:**
+
+- **The chart ships from this repository**, `charts/wilanis-tree/`, so the cluster script, the chart and the
+  tool that writes its values move together and one CI job proves all three. A repository of its own would
+  let the chart version independently of the packages, and cost a second release process before there is a
+  first; it stays available later, when the chart has a reason to move at its own pace. Publishing it to an
+  OCI registry at 1.0 is a separate question, left below.
 
 - **`listens` and `endpoint` stay on the core schemas.** The alternative was a deploy tool holding a table of
   `{ plugin → port setting, kind → endpoint setting }`, which would have made "who implements a thing is
@@ -769,6 +820,12 @@ plans.
 
 **During implementation:**
 
+- **Whether `wilanis new project` scaffolds `"host": "127.0.0.1"` on a new tree's default profile.** The
+  default stays every interface -- changing it would break every deployment written before this RFC, and
+  would force every container to write `0.0.0.0` to get past the renderers' refusal. But a *new* tree could
+  be scaffolded loopback and lose the line when it is deployed, which the refusal already teaches. It would
+  make a tree on a café network private by default without a compatibility break anywhere. Recommended;
+  it is a product decision about defaults and so the maintainer's.
 - Whether the plan grows `volumes` once RFC 0005 lands -- a profile that still reaches a file store or a
   local blob directory -- and whether `planOf` should then refuse `replicas > 1` for it, or only warn.
 - The exact default image reference (`<name>:<package.json version>` here) and whether `-o` outside the tree
