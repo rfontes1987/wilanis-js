@@ -36,6 +36,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0028](0028-principles-hold.md) | The principles hold: four sentences of `CLAUDE.md` that nothing held, and the two claims not to write | implemented |
 | [0029](0029-named-reads.md) | `reads`: a document names each read it takes from the request | accepted |
 | [0030](0030-cache.md) | `cache`: one word on a node, a graph or an operation, lowered to the nodes it stands for | accepted |
+| [0031](0031-intent-triggers.md) | Intent triggers: a model fills a trigger's input from what a person said | draft |
 
 Which milestone first shows an RFC is said once, in [`../roadmap.md`](../roadmap.md); the tracking issue
 carries it as GitHub's milestone. Where this list and the outside assessment that seeded it differ, the
