@@ -303,7 +303,7 @@ them, so a key of another scope is absent." `newKey` takes none: a key is global
 `identity` (RFC 0002) answers one whatever the scope.
 
 The port document's description gains the paragraph *Scopes*, beside RFC 0002's *The `where` grammar*: a `where`
-never names a scope column, since it is not a field of the shape (X206 refuses it as one that is not), and a `patch`
+never names a scope column, since it is not a field of the shape (X208 refuses it as one that is not), and a `patch`
 never changes one.
 
 `@storage-memory` and `@storage-postgres` grant what they grant; how each keeps a scope is under *Runtime
@@ -326,14 +326,14 @@ and comes back as `request.session.attributes`, the one carrier.
 ### Checker rules
 
 Codes are placeholders (`C0nn`, `A0n1`, `X1n1`, `X2n1`); the implementing pull request takes the next free code of
-each family as the tree stands when it lands -- the storage plugin's X band continues RFC 0003's, which ends at X211,
+each family as the tree stands when it lands -- the storage plugin's X band continues RFC 0003's, which ends at X213,
 and the auth plugin's continues its own, which ends at X103 -- and no number here should be read as reserved.
-Existing codes named in this RFC (P005, A001, A005, A006, B008, L002, L005, R001, T004, X204, X206) were checked
+Existing codes named in this RFC (P005, A001, A005, A006, B008, L002, L005, R001, T004, X204, X208) were checked
 against the source or the RFC that adds them.
 
 **Three judges, as RFC 0003 draws the line.** The compiler judges the store document against what it names and the
 triggers against what they reach -- C and A. The storage plugin judges every call site of `@storage/store.port.json`
--- X2n1 -- because which operation takes `scope` is the plugin's semantics, judged where X206 to X209 judge `where`
+-- X2n1 -- because which operation takes `scope` is the plugin's semantics, judged where X208 to X211 judge `where`
 and `changes`. The guard's plugin judges every write to a session attribute a scope reads -- X1n1 -- because only
 `@auth` knows which of its operations write a session, and that the attributes `issue` opened a session with are the
 ones the guard hands back. None computes what another has: the storage plugin reads the store through
@@ -375,7 +375,7 @@ whose kind gives the guard nothing, so a scheduled trigger (RFC 0010) or a queue
 headers (RFC 0009) cannot reach a scoped collection: a job over scoped rows reads a view, behind a policy the kind
 can satisfy, or is fired per tenant by something that knows the tenant. **X103** already refuses a session write
 naming an attribute the shape does not declare, so X1n1 only has to refuse the one it does declare and a store scopes
-by; and `token.port.json#issue` is not a session write in X103's sense, so the sign-in's one write stands. **X206**
+by; and `token.port.json#issue` is not a session write in X103's sense, so the sign-in's one write stands. **X208**
 refuses a `where` naming a scope column, since it is not a field of the shape; **X204** has already settled which
 collection a call names before the compiler reads its `scoped`.
 
@@ -508,7 +508,7 @@ answer the codes), in a new `sabotage-scoping.test.ts`, once the example keeps i
 | B008 | a startup step naming `@monitor/domain/monitor.port.json#count` over `entries`: the message names the store's read |
 | X2n1 | `"scope": { "tenant": "{{tenant}}" }` written on `asked` in `get-record.graph.json` (the M12 demo: "the agent added the filter by hand"); on the `find` over `every-entry`; on a `newKey` |
 | X1n1 | `"values": { "theme": "{{in.theme}}", "tenant": "globex" }` in `write-theme.graph.json`; `"keys": ["tenant"]` on a `session.port.json#remove`; the same through a binding delegation |
-| X206 | `"where": { "tenant": "acme" }` on the `find` over `entries` |
+| X208 | `"where": { "tenant": "acme" }` on the `find` over `entries` |
 | none | the example as written: `codes(EXAMPLE)` is empty; `describe` of the store prints the lines above |
 
 Runtime, in `packages/plugin-storage/test/suite.ts`, run by both engines (`plugin-storage-memory/test/engine.test.ts`,

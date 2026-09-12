@@ -90,7 +90,7 @@ A data graph reads the store the way RFC 0002 shows, with the filter it declares
 Misspell the field and `wilanis check` answers, instead of the handler at run time:
 
 ```
-X206  @features/monitor/data/list-rows.graph.json#nodes/asked/in/where/methd
+X208  @features/monitor/data/list-rows.graph.json#nodes/asked/in/where/methd
     'methd' is not a field of @monitor/domain/Entry.shape.json (fields: id, url, method, ua)
     → wilanis describe @monitor/domain/Entry.shape.json
 ```
@@ -235,14 +235,14 @@ settled which shape the collection holds, so every rule below reads that shape.
 
 | Code | Where it lives | Refuses when | Hint |
 |---|---|---|---|
-| X206 | `rules.ts` | a key of `where` (at any nesting under `all`, `any`, `not`), or an `order` entry's `by`, is neither a field of the shape nor a combinator | `wilanis describe <shape>` |
-| X207 | `rules.ts` | a `where` value -- a literal, or a read typed where it comes from -- is not assignable to the field's type (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`), or is not a list of it (`in`, `notIn`), or is not a boolean (`has`), or is not a string (`contains`, `startsWith`) | `<field> is <type>` |
-| X208 | `rules.ts` | a `where` operator is one the field's type does not admit under RFC 0002's **The `where` grammar**: `contains` or `startsWith` on a non-string, an ordering on a boolean, anything but `has` on a field that is a shape or a list, or an operator the grammar does not name | `see The where grammar in @storage/store.port.json` |
-| X209 | `rules.ts` | a `patch` whose `changes` is a literal object names the key, a field the shape lacks, or gives a value not assignable to the field's type; a `changes` that is one read is judged as an object against the shape with every field optional | `a key identifies; it is never patched` / `wilanis describe <shape>` |
-| X210 | `rules.ts` | `ensure` is run by a graph node, or delegated to by a binding operation that no startup step reaches under any profile | `name the domain operation in project.json → startup; ensure runs once, before the port opens` |
-| X211 | `rules.ts` | a graph or binding of one feature names a store of another | `reach another feature's records through its domain port` |
+| X208 | `rules.ts` | a key of `where` (at any nesting under `all`, `any`, `not`), or an `order` entry's `by`, is neither a field of the shape nor a combinator | `wilanis describe <shape>` |
+| X209 | `rules.ts` | a `where` value -- a literal, or a read typed where it comes from -- is not assignable to the field's type (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`), or is not a list of it (`in`, `notIn`), or is not a boolean (`has`), or is not a string (`contains`, `startsWith`) | `<field> is <type>` |
+| X210 | `rules.ts` | a `where` operator is one the field's type does not admit under RFC 0002's **The `where` grammar**: `contains` or `startsWith` on a non-string, an ordering on a boolean, anything but `has` on a field that is a shape or a list, or an operator the grammar does not name | `see The where grammar in @storage/store.port.json` |
+| X211 | `rules.ts` | a `patch` whose `changes` is a literal object names the key, a field the shape lacks, or gives a value not assignable to the field's type; a `changes` that is one read is judged as an object against the shape with every field optional | `a key identifies; it is never patched` / `wilanis describe <shape>` |
+| X212 | `rules.ts` | `ensure` is run by a graph node, or delegated to by a binding operation that no startup step reaches under any profile | `name the domain operation in project.json → startup; ensure runs once, before the port opens` |
+| X213 | `rules.ts` | a graph or binding of one feature names a store of another | `reach another feature's records through its domain port` |
 
-X211 is the plugin's rather than L005's because a store is never in `exports`: `feature.schema.json` says
+X213 is the plugin's rather than L005's because a store is never in `exports`: `feature.schema.json` says
 exports are ports and core shapes, and this RFC keeps it so. A collection is an implementation detail of
 one feature; another feature asks the domain port.
 
@@ -331,15 +331,15 @@ tests edit that store. In `packages/runtime/test/sabotage-storage.test.ts`, with
 In `packages/plugin-storage/test/rules.test.ts`, extending RFC 0002's small tree and its `check` through
 `checkTree`:
 
-- X206: `where: { methd: "GET" }`; `where: { any: [{ nope: 1 }] }`; `order: [{ by: "nope" }]`.
-- X207: `where: { method: 7 }`; `where: { method: "{{in.count}}" }` with `count: number`;
+- X208: `where: { methd: "GET" }`; `where: { any: [{ nope: 1 }] }`; `order: [{ by: "nope" }]`.
+- X209: `where: { method: 7 }`; `where: { method: "{{in.count}}" }` with `count: number`;
   `where: { method: { in: "GET" } }`; `where: { ua: { has: "yes" } }`.
-- X208: `where: { url: { lt: "a" } }` on an optional field; `where: { method: { contains: 1 } }` on a number
+- X210: `where: { url: { lt: "a" } }` on an optional field; `where: { method: { contains: 1 } }` on a number
   field; `where: { method: { like: "G%" } }`.
-- X209: `changes: { id: "other" }`; `changes: { nope: 1 }`; `changes: { url: 7 }`; `changes: "{{in.changes}}"`
+- X211: `changes: { id: "other" }`; `changes: { nope: 1 }`; `changes: { url: 7 }`; `changes: "{{in.changes}}"`
   where `changes` is an edge shape with a field the record shape lacks.
-- X210: `ensure` in a graph node; a binding delegating to `ensure` that no startup step reaches.
-- X211: a graph of feature `b` naming feature `a`'s store.
+- X212: `ensure` in a graph node; a binding delegating to `ensure` that no startup step reaches.
+- X213: a graph of feature `b` naming feature `a`'s store.
 
 In `packages/plugin-storage/test/ensure.test.ts`: against the memory engine, `ensure` answers zeros, `put`
 answers `violated` on a broken `unique` and `remove` answers `referencedBy` on a referenced record, each
@@ -356,8 +356,8 @@ the column; adding a field with a default to a table with rows fills them; chang
 1. Extend `store.schema.json`, `StoreDoc` and the validate baseline; the template row. `good first issue`
    once RFC 0002 has landed.
 2. Extend `checkStore` with the C rules; `sabotage-storage.test.ts`.
-3. `rules.ts`: X206 to X208 over `where` and `order`, with `assignable`, `typeAt` and `valueRead`.
-4. X209 over `changes`; X210 and X211.
+3. `rules.ts`: X208 to X210 over `where` and `order`, with `assignable`, `typeAt` and `valueRead`.
+4. X211 over `changes`; X212 and X213.
 5. Widen `put`'s and `remove`'s `returns` in `@storage/store.port.json` (RFC 0002's table) with `violated`
    and `referencedBy`, so a constraint is answered rather than thrown; the narrowing tests for the branches.
 6. `ensure`: the memory engine's `unique` and `refs`, then the PostgreSQL comparison, additions and `drift`;
