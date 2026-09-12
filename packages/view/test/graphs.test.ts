@@ -109,6 +109,15 @@ describe('the view model of a graph', () => {
     expect(edge(seen, { from: 'asked', fromPort: 'body', to: 'route/1', toPort: 'body' })).toBeUndefined();
   });
 
+  it('says a membership rule in words, so every operator of the grammar draws', async () => {
+    // 'recorder' in principal.roles used to crash the view: the page 500'd on the graph behind every write
+    const seen = await view('@features/access/domain/require-recorder.graph.json');
+    const rule = seen.graph!.nodes.find(node =>
+      node.says?.some(line => line.parts.some(part => part.text === ' is among ')),
+    );
+    expect(rule?.label).toBe('if principal exists and "recorder" is among principal \u203a roles');
+  });
+
   it('shows the out node as the fields it answers, fed by each candidate in order', async () => {
     const seen = await view(GET_ROW);
     const out = seen.graph!.nodes.find(node => node.id === 'out')!;
