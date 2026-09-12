@@ -97,7 +97,9 @@ every branch settled -- 37 branch(es), 15 decision(s), 15 graph(s).
 ```
 
 A rule that no input can satisfy is reported as `NEVER RUN`: dead logic, or a hole in your routing, found
-without writing a test.
+without writing a test. `wilanis fuzz` writes runs out as scenarios, files of their own, and `wilanis regress`
+replays them and compares node by node, so an edit that changes what the service does says so before it
+ships.
 
 ## Why this suits code a model writes
 
@@ -136,6 +138,8 @@ npx wilanis start example          # serve it on :8080
 | **Graph** | A data flow: nodes that run an operation, route on a condition, or fan out over a list. A node runs when its inputs are ready. |
 | **Trigger** | An entry point: an HTTP route, a command, whatever a plugin offers. It names the operation to fire and the policies that gate it. |
 | **Policy** | A gate on a trigger. It allows by answering, or refuses with a reason. A trigger with no policies is public. |
+| **Connection** | Where an effect goes and how it is paced: an address, credentials read from secrets, a throttle. A graph names the connection, never the address. |
+| **Profile** | Which binding meets which port, chosen per environment, so the same documents run against a fake or the real thing. |
 | **Feature** | A directory of three: `edge/`, `domain/`, `data/`. The directory is the layer, and the checker reads it off the path. |
 | **Plugin** | An npm package that ships JSON documents and one handler per operation. It is the only place code lives. |
 
@@ -168,7 +172,7 @@ frozen.
 
 [`docs/roadmap.md`](docs/roadmap.md) is the plan, and each milestone is a demo: entries in a real database,
 sessions shared across instances, a request drawn as a trace, work moved off the request, one command that
-deploys it, an agent repairing a broken tree. Each draws on RFCs under [`docs/rfcs/`](docs/rfcs/README.md),
+deploys it, tenants that cannot leak into each other, an agent repairing a broken tree. Each draws on RFCs under [`docs/rfcs/`](docs/rfcs/README.md),
 written and accepted before anything is built.
 
 ## Contributing
