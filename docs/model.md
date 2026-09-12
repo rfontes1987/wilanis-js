@@ -155,7 +155,7 @@ fixes it. The families, each judged in its own module under `packages/compiler/s
 | `T` | triggers |
 | `S` | scenarios |
 | `A` | access: policies, credentials, what a policy proves |
-| `C` | connections and settings |
+| `C` | connections, settings and stores |
 | `X` | a plugin's own rules, from its `check` hook |
 
 ## project.json
