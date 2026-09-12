@@ -1,6 +1,6 @@
 # Working on wilanis
 
-This is the `@wilanis/*` workspace: nine npm packages, one example project, and a test directory beside each package that has one. Read this
+This is the `@wilanis/*` workspace: ten npm packages, one example project, and a test directory beside each package that has one. Read this
 before changing anything; it says where things live and which direction dependencies may point.
 
 ## Layout

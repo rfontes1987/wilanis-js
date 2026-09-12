@@ -13,7 +13,6 @@ import { engines } from '@wilanis/plugin-storage';
 import { MemoryEngine } from './engine.js';
 
 export { MemoryEngine } from './engine.js';
-export { compare, matches, ordered, paged } from './match.js';
 
 const ROOT = '@storage-memory';
 const KIND = `${ROOT}/memory.connection-kind.json`;

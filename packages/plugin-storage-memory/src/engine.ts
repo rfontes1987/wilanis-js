@@ -34,9 +34,19 @@ export class MemoryEngine implements Engine {
     return kept;
   }
 
-  /** A copy, so what a graph does with a record it was given cannot reach what is kept. */
+  /**
+   * A deep copy, so what a graph does with a record it was given cannot reach what is kept, and what a caller
+   * does with the record it handed over cannot either. A shallow copy would share every nested object, which
+   * is a store that changes without being written to; records are the JSON a shape describes, so cloning one
+   * is defined for everything a collection can hold.
+   */
   private static copy(record: Record_ | undefined): Record_ | undefined {
-    return record && { ...record };
+    return record && MemoryEngine.kept(record);
+  }
+
+  /** The same copy, of a record there certainly is one of. */
+  private static kept(record: Record_): Record_ {
+    return structuredClone(record) as Record_;
   }
 
   /** The record kept under that key, or `record` absent where the collection holds none. */
@@ -47,7 +57,7 @@ export class MemoryEngine implements Engine {
   /** Every record the filter matches, in the order asked for and cut to the page asked for. */
   async find(at: At, query: Query) {
     const matching = [...this.records(at).values()].filter(record => matches(query.where, record));
-    return paged(ordered(matching, query.order), query.limit, query.offset).map(record => ({ ...record }));
+    return paged(ordered(matching, query.order), query.limit, query.offset).map(record => MemoryEngine.kept(record));
   }
 
   /** How many records the filter matches. */
@@ -60,8 +70,8 @@ export class MemoryEngine implements Engine {
     const kept = this.records(at);
     const key = String(record[at.key]);
     if (!replace && kept.has(key)) return { conflict: true };
-    kept.set(key, { ...record });
-    return { record: { ...record }, conflict: false };
+    kept.set(key, MemoryEngine.kept(record));
+    return { record: MemoryEngine.kept(record), conflict: false };
   }
 
   /** The record after the change, or `record` absent where the collection holds none under that key. */
@@ -69,9 +79,9 @@ export class MemoryEngine implements Engine {
     const kept = this.records(at);
     const before = kept.get(String(key));
     if (!before) return {};
-    const after = { ...before, ...changes };
+    const after = MemoryEngine.kept({ ...before, ...changes });
     kept.set(String(key), after);
-    return { record: { ...after } };
+    return { record: MemoryEngine.kept(after) };
   }
 
   /** The record that was removed, or `record` absent where there was none. */
