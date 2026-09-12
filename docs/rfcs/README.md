@@ -29,7 +29,7 @@ accepted. Statuses: draft, accepted, implemented, withdrawn.
 | [0021](0021-higher-level-constructs.md) | Higher-level constructs: state machines and resources | accepted |
 | [0022](0022-storage-engines.md) | More storage engines: SQLite, MySQL, and declared capabilities | accepted |
 | [0023](0023-adapters.md) | Adapters: search, email, payment | accepted |
-| [0024](0024-cloud-deployment.md) | Kubernetes deployment: a Helm chart and a local cluster | stub |
+| [0024](0024-cloud-deployment.md) | Deployment: one plan, a Compose file and a Helm chart | draft |
 | [0025](0025-ai-provider-integrations.md) | AI model calls as an effect | accepted |
 | [0026](0026-application-manifest.md) | The application manifest | accepted |
 | [0027](0027-fitness-functions.md) | Fitness functions: decisions about the code, held by the tests that record them | implemented |
