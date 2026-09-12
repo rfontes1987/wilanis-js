@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/plugin.schema.json",
+  "label": "Storage",
+  "description": "Records of a shape, kept behind a connection. A feature declares a store -- which shapes it persists, under which collection names, keyed by which field -- and its data graphs read and write those records through store.port.json, naming the store and the collection and nothing else: the collection is where the record type is written down. This plugin says what may be asked of a store; how one is kept is an engine plugin's business, and @storage speaks no engine's language and carries no driver. Every operation is an effect: it lives in a data graph and is listed in the feature's effects.",
+  "grants": {
+    "ports": [
+      "@storage/store.port.json",
+      "@storage/storage.port.json"
+    ],
+    "shapes": [
+      "@storage/Order.shape.json"
+    ]
+  }
+}

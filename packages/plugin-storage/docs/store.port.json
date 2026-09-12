@@ -1,0 +1,226 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wilanis/wilanis-js/main/packages/core/schemas/port.schema.json",
+  "label": "Records of a store",
+  "description": "What may be asked of the records a store keeps. Every operation names the store and the collection and nothing else: the collection declares the shape, so $T is the record's type and $K is its key's, both read from the store document rather than repeated here. None is pure -- each one reads or writes what outlives the run -- so each lives in a data graph and is listed in the feature's effects.",
+  "operations": {
+    "get": {
+      "description": "One record by its key. Answers record absent where the collection holds none under it, so a graph routes on has(record) rather than on a failure.",
+      "accepts": {
+        "store": {
+          "type": "string",
+          "static": true,
+          "resolves": {
+            "$T": "collections[collection].of",
+            "$K": "collections[collection].of{key}.type"
+          },
+          "description": "the path of the store document these records are kept by"
+        },
+        "collection": {
+          "type": "string",
+          "static": true,
+          "description": "the collection of that store, by the name it declares"
+        },
+        "key": {
+          "type": "$K",
+          "description": "the value of the collection's key field"
+        }
+      },
+      "returns": {
+        "fields": {
+          "record": {
+            "type": "$T",
+            "required": false,
+            "description": "absent where there is none"
+          }
+        }
+      }
+    },
+    "find": {
+      "description": "Every record the filter matches, in the order asked for. A find with no where answers the whole collection, which is what a small one is for; a large one is paged with limit and offset.",
+      "accepts": {
+        "store": {
+          "type": "string",
+          "static": true,
+          "resolves": {
+            "$T": "collections[collection].of"
+          },
+          "description": "the path of the store document these records are kept by"
+        },
+        "collection": {
+          "type": "string",
+          "static": true,
+          "description": "the collection of that store, by the name it declares"
+        },
+        "where": {
+          "type": "unknown",
+          "required": false,
+          "description": "which records match. An object whose keys are fields of the collection's shape: a literal or a read (\"{{in.method}}\") means equality, and an object means a predicate, with one or more of eq, ne, lt, lte, gt, gte (the field's type), in, notIn (a list of it), has (boolean: present or absent, for an optional field), contains, startsWith (strings). Three combinators sit beside field names: all, any (lists of filters) and not (one filter). A field that is a shape or a list may only be tested with has. Nothing else is a filter. Absent: every record."
+        },
+        "order": {
+          "type": "@storage/Order.shape.json[]",
+          "required": false,
+          "description": "order by the first, then by the second where the first ties. Absent: the engine's own order, which is not promised to be stable"
+        },
+        "limit": {
+          "type": "number",
+          "required": false,
+          "description": "at most this many records"
+        },
+        "offset": {
+          "type": "number",
+          "required": false,
+          "description": "skip this many first; it means nothing without an order"
+        }
+      },
+      "returns": "$T[]"
+    },
+    "count": {
+      "description": "How many records the filter matches, without carrying any of them back.",
+      "accepts": {
+        "store": {
+          "type": "string",
+          "static": true,
+          "description": "the path of the store document these records are kept by"
+        },
+        "collection": {
+          "type": "string",
+          "static": true,
+          "description": "the collection of that store, by the name it declares"
+        },
+        "where": {
+          "type": "unknown",
+          "required": false,
+          "description": "which records match. An object whose keys are fields of the collection's shape: a literal or a read (\"{{in.method}}\") means equality, and an object means a predicate, with one or more of eq, ne, lt, lte, gt, gte (the field's type), in, notIn (a list of it), has (boolean: present or absent, for an optional field), contains, startsWith (strings). Three combinators sit beside field names: all, any (lists of filters) and not (one filter). A field that is a shape or a list may only be tested with has. Nothing else is a filter. Absent: every record."
+        }
+      },
+      "returns": "number"
+    },
+    "put": {
+      "description": "Write one whole record under its own key. The one verb that writes: with replace (the default) it is the upsert the name suggests, and with \"replace\": false it writes nothing where a record of that key exists and answers conflict, so a graph routes on that rather than on a failure. Nothing is filled in silently -- a new record's key comes from newKey.",
+      "accepts": {
+        "store": {
+          "type": "string",
+          "static": true,
+          "resolves": {
+            "$T": "collections[collection].of"
+          },
+          "description": "the path of the store document these records are kept by"
+        },
+        "collection": {
+          "type": "string",
+          "static": true,
+          "description": "the collection of that store, by the name it declares"
+        },
+        "record": {
+          "type": "$T",
+          "description": "the record as it is to be stored, the key field included"
+        },
+        "replace": {
+          "type": "boolean",
+          "required": false,
+          "description": "replace a record already under that key. Absent: it does"
+        }
+      },
+      "returns": {
+        "fields": {
+          "record": {
+            "type": "$T",
+            "required": false,
+            "description": "the record as stored; absent where a conflict stopped the write"
+          },
+          "conflict": {
+            "type": "boolean",
+            "description": "a record of that key existed and replace was false, so nothing was written"
+          }
+        }
+      }
+    },
+    "patch": {
+      "description": "Change some fields of one record, leaving the rest as they are. It never removes a field -- absence is written by put -- and it never touches the key. Answers record absent where the collection holds none under that key.",
+      "accepts": {
+        "store": {
+          "type": "string",
+          "static": true,
+          "resolves": {
+            "$T": "collections[collection].of",
+            "$K": "collections[collection].of{key}.type"
+          },
+          "description": "the path of the store document these records are kept by"
+        },
+        "collection": {
+          "type": "string",
+          "static": true,
+          "description": "the collection of that store, by the name it declares"
+        },
+        "key": {
+          "type": "$K",
+          "description": "the value of the collection's key field"
+        },
+        "changes": {
+          "type": "unknown",
+          "description": "an object whose keys are fields of the shape other than the key, each a value of that field's type"
+        }
+      },
+      "returns": {
+        "fields": {
+          "record": {
+            "type": "$T",
+            "required": false,
+            "description": "absent where there is none"
+          }
+        }
+      }
+    },
+    "remove": {
+      "description": "Remove one record by its key, and answer the record that was removed -- absent where the collection held none under it.",
+      "accepts": {
+        "store": {
+          "type": "string",
+          "static": true,
+          "resolves": {
+            "$T": "collections[collection].of",
+            "$K": "collections[collection].of{key}.type"
+          },
+          "description": "the path of the store document these records are kept by"
+        },
+        "collection": {
+          "type": "string",
+          "static": true,
+          "description": "the collection of that store, by the name it declares"
+        },
+        "key": {
+          "type": "$K",
+          "description": "the value of the collection's key field"
+        }
+      },
+      "returns": {
+        "fields": {
+          "record": {
+            "type": "$T",
+            "required": false,
+            "description": "absent where there is none"
+          }
+        }
+      }
+    },
+    "newKey": {
+      "description": "A fresh key no record of the collection has, of whatever type the collection's key field is. A graph asks for one before it puts a new record, so that what identifies a record is written by a node a reader can see.",
+      "accepts": {
+        "store": {
+          "type": "string",
+          "static": true,
+          "resolves": {
+            "$K": "collections[collection].of{key}.type"
+          },
+          "description": "the path of the store document these records are kept by"
+        },
+        "collection": {
+          "type": "string",
+          "static": true,
+          "description": "the collection of that store, by the name it declares"
+        }
+      },
+      "returns": "$K"
+    }
+  }
+}

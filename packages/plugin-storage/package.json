@@ -1,0 +1,57 @@
+{
+  "name": "@wilanis/plugin-storage",
+  "version": "0.1.0",
+  "description": "The @storage plugin for wilanis: records of a shape behind one generic port. It says what a store is and what may be asked of one; an engine plugin says how one is kept.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Rafael Fontes <rfontes1987@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wilanis/wilanis-js.git",
+    "directory": "packages/plugin-storage"
+  },
+  "homepage": "https://github.com/wilanis/wilanis-js/tree/main/packages/plugin-storage#readme",
+  "bugs": "https://github.com/wilanis/wilanis-js/issues",
+  "keywords": [
+    "wilanis",
+    "dataflow",
+    "json-schema",
+    "declarative",
+    "storage",
+    "records",
+    "plugin"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./suite": {
+      "types": "./dist/suite.d.ts",
+      "default": "./dist/suite.js"
+    }
+  },
+  "files": [
+    "dist",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@wilanis/core": "0.1.0",
+    "@wilanis/engine": "0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@wilanis/compiler": "0.1.0",
+    "@wilanis/runtime": "0.1.0"
+  }
+}
