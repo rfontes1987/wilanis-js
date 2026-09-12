@@ -3,7 +3,7 @@
 - **Status:** draft
 - **Areas:** `area:core` (one key on a contract field in `common.schema.json`; `ObjField.provided`; one shape the
   `@std` plugin grants), `area:compiler` (the literal written at lowering; two rules), `area:runtime` (`describe`, the
-  `@std` document), `area:view` (the node panel marks the field). Nothing in the engine.
+  `@std` document, one method on the handler environment), `area:view` (the node panel marks the field). Nothing in the engine.
 - **Schemas:** `common.schema.json`'s `field` gains `provided` (additive)
 - **Packages:** none new
 - **Tracking issue:** #298
@@ -16,9 +16,11 @@
 
 A native port operation can say that one of the fields it accepts is written by the compiler rather than by an author:
 `"provided": "site"`. Where the operation is called -- a `run` or `map` node, a binding operation, a startup step --
-the compiler lowers the field as a literal holding the calling document's path, the node's id, its label and
-description, the feature and the layer the document is under. The author writes nothing there, and a document that
-does is refused. The handler reads it from its inputs like any other value; the report shows it under the node's `in`;
+the compiler lowers the field as a literal of two strings: the calling document's path and the position within it,
+the `file` and `at` every refusal already carries. The author writes nothing there, and a document that does is
+refused. Everything else a handler might want of its site -- the node's label and description, the feature, the layer
+-- it reads from the tree when it wants it, through one method the handler environment gains, and nothing of it is
+copied into the spec. The handler reads it from its inputs like any other value; the report shows it under the node's `in`;
 the checker types it; stubs, rehearsal and `regress` see a literal that is the same on every run. Nothing reaches a
 handler that a reader cannot find under the node's `in`, and no operation receives it that did not ask.
 
@@ -62,7 +64,8 @@ provided value other than the site (`provided` takes one word, and a second is a
 **The words.** A **site** is where a native operation is called: a `run` or `map` node of a graph, an operation of a
 binding, or a step of `project.json → startup`. A **provided field** is a field of a native contract the compiler
 writes at every site: the author never gives it, the checker refuses one who does, and the handler finds it under its
-inputs. `site` is the one word `provided` takes.
+inputs. `site` is the one word `provided` takes. A site is a pointer, not a copy: a `file` and an `at` path, the
+address every refusal prints, and a handler that wants the words behind it opens the document.
 
 **What an author sees.** Nothing new to write. A port that asks for its site declares it once, in the port document; a
 reader of `wilanis describe` sees the field marked `(provided)`; a graph that calls the operation gives every other
@@ -107,12 +110,13 @@ A copy of the example gains the plugin and one node in `features/monitor/data/cr
 ```json
 "noted": { "status": "done", "handler": "@note/note.port.json#record",
   "in": { "text": "https://example.test/", 
-          "site": { "file": "@features/monitor/data/create-record.graph.json", "node": "noted",
-                    "label": "Note the record",
-                    "description": "Every record made through this graph is noted, so the test can see which site made it.",
-                    "feature": "monitor", "layer": "data" } },
+          "site": { "file": "@features/monitor/data/create-record.graph.json", "at": "nodes/noted" } },
   "out": true }
 ```
+
+Two strings, and the fixture's handler shows what they open: it calls `env.document(site.file)`, follows `at` to the
+node, and keeps its `label` beside the text; `layerOf(site.file)` from core says `data`, and the feature is the path's
+second segment. Nothing the handler read was carried in the spec, so editing the node's description changes no run.
 
 Write `site` at the node, `"in": { "text": "...", "site": { "file": "elsewhere" } }`, and the checker refuses:
 
@@ -160,11 +164,15 @@ compiler writes it for every field marked `provided: site`; nothing else does." 
 | Field | Type | Description |
 |---|---|---|
 | `file` | string | "the calling document, canonical: a graph, a binding, or `@project.json` for a startup step" |
-| `node` | string | "the node id in a graph; the operation name in a binding; `startup/<index>` for a step" |
-| `label` | string, optional | "the node's, the binding operation's or the step's `label`, when written" |
-| `description` | string, optional | "the same document's `description`, when written" |
-| `feature` | string, optional | "the feature the document is under; absent for a startup step" |
-| `layer` | string, optional, enum `edge` · `domain` · `data` | "the document's layer, as `layerOf` in `packages/core/src/model.ts` reads it; absent where the document has none" |
+| `at` | string | "the position within it, as a refusal writes it: `nodes/<id>` for a graph node, `operations/<name>` for a binding operation, `startup/<index>` for a step" |
+
+The node is addressed by its id and not its index: ids are what the DSL, the report and the engine's `nodePath` use,
+and inserting a node shifts every index after it. `at` is the refusal's own grammar (`Refusal.at` in
+`packages/core/src/registry.ts`), so a message RFC 0019 shapes can print a site as it prints a refusal.
+
+**What a handler derives, when it wants to.** The layer from `layerOf(site.file)` and the feature from the path's
+segments, both core's; the node's `label`, `description` and anything else the document says through
+`env.document(site.file)` and `at`. None of it is in the spec; all of it is one call away.
 
 Nothing in `placement.ts`, the template or `wilanis new` changes: no document kind is added.
 
@@ -194,10 +202,14 @@ a provided field is neither static nor read; it is written by the compiler after
 operation's contract (`hit.op.accepts`) has a field with `provided: 'site'`, `lowerGraph`, `lowerBindingOp` and
 `holdsSpec` add `{ value: <site> }` under that name, beside the author's sources. The value is built by `siteOf` in
 `packages/compiler/src/sites.ts` -- the module RFC 0007 adds for its `sitesOf`, or a module of that name if this RFC
-lands first -- from the document and the node: `file` is the canonical path the scope already knows; `node`, `label`
-and `description` are read off the node document (a binding operation's, a startup step's); `feature` and `layer`
-from `layerOf` and the feature directory the loader recorded. The engine is unchanged: `KSource`'s `{ value }` arm
+lands first -- from the document and the position: `file` is the canonical path the scope already knows; `at` is `nodes/<id>`,
+`operations/<name>` or `startup/<index>`, the same string a refusal against that node would carry. The engine is unchanged: `KSource`'s `{ value }` arm
 already exists, and the engine never learns what the value means.
+
+**The environment.** The handler environment (`env`: today `connections`, `plugins`, `canon`, `resolveType`) gains
+`document(path: string): Doc | undefined`, "the loaded document at a canonical path, as the tree now stands", filled
+by the runtime from the registry beside `resolveType`, which already reads it. A handler that wants the words behind
+its site calls it; one that only logs the site does not.
 
 **The report.** `in.site` appears on the node as any input does. Nothing in it is secret; `redact.ts` has nothing to do.
 At trace level `full` (RFC 0006) it is in `wilanis.in` like every input; at `summary` it is not, like every input.
@@ -206,7 +218,7 @@ At trace level `full` (RFC 0006) it is in `wilanis.in` like every input; at `sum
 sees the site; nothing is generated for it, since it is a literal and not a read. `regress` diffs it as any literal.
 
 **`start`.** A startup step that names a native `holds` operation with a provided field receives `{ file:
-"@project.json", node: "startup/<index>", label, description }` and no feature or layer.
+"@project.json", at: "startup/<index>" }`.
 
 ### Discoverability
 
@@ -220,7 +232,8 @@ sees the site; nothing is generated for it, since it is a literal and not a read
 
 ### Plugin contract
 
-`PluginModule` and `HandlerArgs` are unchanged. A handler reads `inputs.site`. `RunContext` is unchanged.
+`PluginModule` and `HandlerArgs` are unchanged. The handler environment gains `document(path)`. A handler reads
+`inputs.site` and, when it wants more, `env.document(inputs.site.file)`. `RunContext` is unchanged.
 
 ## Compatibility
 
@@ -235,13 +248,14 @@ tree that names no operation declaring `provided` never sees it.
   refused by the schema; `Site.shape.json` validates as a shape.
 - `packages/core/test/types.test.ts`: `ObjField.provided` filled from the field.
 - `packages/runtime/test/example.test.ts`, over a copy of the example with the fixture plugin under
-  `test/fixtures/plugin-note/` and the `noted` node: the run's report has `in.site` equal to the object above; the
-  handler received it (the fixture keeps what it was handed); G0n1 when the node writes `site`; L0n1 when
+  `test/fixtures/plugin-note/` and the `noted` node: the run's report has `in.site` equal to the two strings above; the
+  handler received it, opened the graph through `env.document` and kept the node's label (the fixture keeps what it
+  was handed and what it read); G0n1 when the node writes `site`; L0n1 when
   `monitor.port.json#record` marks a field `provided`, when `note.port.json#record`'s `site` is typed `string`, marked
   `secret`, or `required: false`; the copy unbroken, `codes(...)` empty. A binding operation calling `record` and a
   startup step naming a fixture `holds` operation that declares a site each receive the site their row above says.
-- `packages/runtime/test/tools.test.ts`, where `regress` is exercised: two runs diff clean at `noted`; renaming the
-  graph file diffs at `noted` and nowhere else; `describe @note/note.port.json` prints `(provided)`.
+- `packages/runtime/test/tools.test.ts`, where `regress` is exercised: two runs diff clean at `noted`; editing the node's
+  description diffs nothing; renaming the graph file diffs at `noted` and nowhere else; `describe @note/note.port.json` prints `(provided)`.
 - `packages/view/test/view.test.ts`: the node panel shows `site` marked `provided`.
 
 ## Implementation plan
@@ -272,15 +286,20 @@ Each step one pull request and one sub-issue of the tracking issue. Steps 1 and 
 - **Not always.** Providing the site to every native handler would put it in every node's `in` in every report, for the
   many operations that have no use for it, and would make a plugin's dependence on it undeclared. An operation that
   wants its site says so in its contract, where `describe` prints it and a reviewer sees it.
-- **A literal in the lowered spec, repeated.** Every site of a declaring operation carries its own object in the IR,
-  a few hundred bytes each. The alternative, a source arm the engine resolves (`{ site: true }`), would teach the engine
-  a fact about documents, which it has never had. The bytes are cheaper.
-- **`regress` churns on a rename.** Moving a graph or renaming a node changes `in.site` at every declaring node in it,
-  and the baseline diffs. That is a true change of what the handler was handed, and the diff names the node; the cost
-  is one re-baseline per rename, only for trees with declaring operations.
-- **Prose in a handler's hands.** `label` and `description` are the author's sentences, and a plugin may log them or,
-  as RFC 0025 might, hand them to a model. They are literals in a document; no reader's data reaches them; and they are
-  exactly what a reader opening the tree sees. Nothing new is exposed.
+- **A pointer, not a copy.** The first draft carried the node's label, description, feature and layer in the literal.
+  The maintainer asked why, when a file and a position find all of it: copying prose into the IR meant an edit to a
+  description changed the lowered spec and diffed the `regress` baseline, for a run that did nothing differently. Two
+  strings cost nothing and change only when the site itself moves. The price is one method on the environment so
+  "acquired if needed" is true, and a handler that wants the words makes a call.
+- **A literal in the lowered spec, repeated.** Every site of a declaring operation carries its two strings in the IR.
+  The alternative, a source arm the engine resolves (`{ site: true }`), would teach the engine a fact about documents,
+  which it has never had. The strings are cheaper.
+- **`regress` churns on a rename, and on nothing else.** Moving a graph or renaming a node changes `in.site` at every
+  declaring node in it, and the baseline diffs; that is a true change of what the handler was handed, and the diff
+  names the node. Editing a label or a description changes no spec.
+- **Prose in a handler's hands, by its own request.** A plugin that opens the document reads the author's sentences and
+  may log them or, as RFC 0025 might, hand them to a model. They are literals a reader opening the tree sees; no
+  reader's data reaches them. Nothing new is exposed, and nothing is handed to a handler that did not go and read it.
 - **Not provenance of who.** A site says where, never who or for whom. RFC 0015's scope is a read of what the guard
   established, carried by the compiler; this is a fact of the document, carried by the compiler. Both use the same
   mechanism and neither replaces the other.
@@ -307,6 +326,6 @@ Each step one pull request and one sub-issue of the tracking issue. Steps 1 and 
 - **One word, `site`.** A second provided value -- the profile in force, the tree's version from RFC 0026's manifest --
   is a later RFC that adds a word to the enum and a row to the table; this one adds the mechanism and its one use.
 
-**Left to implementation, deliberately:** the exact `node` string for a binding operation and a startup step beyond
+**Left to implementation, deliberately:** the exact `at` string for a binding operation and a startup step beyond
 what the table says; how the viewer greys a provided field; and whether `siteOf` lives in RFC 0007's `sites.ts` or a
 module of its own, which depends on which lands first.
